@@ -1,11 +1,36 @@
+# TextEncoder capacity increased from:
+#   n_channels: 256
+#   filter_channels: 1024
+#   filter_channels_dp: 384
+#   n_heads: 4
+#   n_layers: 8
+# TextEncoder model size was around from 7.20 M params
+
+# Constraint: n_channels must be divisible by n_heads (256 % 4 == 0).
+
+# Moderate settings, if needed: 
+#   n_channels: 256
+#   filter_channels: 1024
+#   filter_channels_dp: 384
+#   n_heads: 4
+#   n_layers: 8
+# resulting in a size of 16.56 M params
+
+# Higher settings, if needed: 
+#   n_channels: 320
+#   filter_channels: 1280 
+#   filter_channels_dp: 512
+#   n_heads: 8
+#   n_layers: 10
+# resulting in a size of 31.72M params.
 encoder_type: RoPE Encoder
 encoder_params:
   n_feats: ${model.n_feats}
-  n_channels: 192
-  filter_channels: 768
-  filter_channels_dp: 256
-  n_heads: 2
-  n_layers: 6
+  n_channels: 320
+  filter_channels: 1280
+  filter_channels_dp: 512
+  n_heads: 8
+  n_layers: 10
   kernel_size: 3
   p_dropout: 0.1
   spk_emb_dim: 64
