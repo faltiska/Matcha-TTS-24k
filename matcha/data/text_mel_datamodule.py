@@ -42,6 +42,9 @@ class TextMelDataModule(LightningDataModule):
         data_statistics,
         seed,
         load_durations,
+        use_f0: bool = True,
+        f0_fmin: float = 50.0,
+        f0_fmax: float = 1100.0,
     ):
         super().__init__()
 
@@ -72,6 +75,9 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.data_statistics,
             self.hparams.seed,
             self.hparams.load_durations,
+            self.hparams.use_f0,
+            self.hparams.f0_fmin,
+            self.hparams.f0_fmax,
         )
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
@@ -88,6 +94,9 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.data_statistics,
             self.hparams.seed,
             self.hparams.load_durations,
+            self.hparams.use_f0,
+            self.hparams.f0_fmin,
+            self.hparams.f0_fmax,
         )
 
     def train_dataloader(self):
@@ -140,6 +149,9 @@ class TextMelDataset(torch.utils.data.Dataset):
         data_parameters=None,
         seed=None,
         load_durations=False,
+        use_f0=True,
+        f0_fmin=50.0,
+        f0_fmax=1100.0,
     ):
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.n_spks = n_spks
@@ -153,6 +165,9 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.f_min = f_min
         self.f_max = f_max
         self.load_durations = load_durations
+        self.use_f0 = use_f0
+        self.f0_fmin = f0_fmin
+        self.f0_fmax = f0_fmax
 
         if data_parameters is not None:
             self.data_parameters = data_parameters
@@ -177,7 +192,21 @@ class TextMelDataset(torch.utils.data.Dataset):
 
         durations = self.get_durations(filepath, text) if self.load_durations else None
 
-        return {"x": text, "y": mel, "spk": spk, "filepath": filepath, "x_text": cleaned_text, "durations": durations}
+        sample = {
+            "x": text,
+            "y": mel,
+            "spk": spk,
+            "filepath": filepath,
+            "x_text": cleaned_text,
+            "durations": durations,
+        }
+        if self.use_f0:
+            f0 = self.get_f0(filepath, expected_len=mel.shape[-1])
+            f0_mask = (f0 > 0).float()
+            sample["f0"] = f0
+            sample["f0_mask"] = f0_mask
+
+        return sample
 
     def get_durations(self, filepath, text):
         filepath = Path(filepath)
@@ -213,6 +242,43 @@ class TextMelDataset(torch.utils.data.Dataset):
         mel = normalize(mel, self.data_parameters["mel_mean"], self.data_parameters["mel_std"])
         return mel
 
+    def get_f0(self, filepath, expected_len):
+        """
+        Estimate F0 using torchaudio YIN and align to mel length.
+
+        Returns:
+            torch.Tensor: shape (1, expected_len)
+        """
+        audio, sr = ta.load(filepath)
+        assert sr == self.sample_rate
+        # Ensure mono
+        if audio.dim() == 2 and audio.size(0) > 1:
+            audio = audio[:1, :]
+
+        frame_time = self.hop_length / float(self.sample_rate)
+        # choose a small odd median smoothing window (in frames) to avoid exceeding available frames
+        win_len = int(min(5, max(1, int(expected_len))))
+        if win_len % 2 == 0:
+            win_len = max(1, win_len - 1)
+        # detect_pitch_frequency returns (channels, frames)
+        f0 = ta.functional.detect_pitch_frequency(
+            audio,
+            self.sample_rate,
+            frame_time=frame_time,
+            win_length=win_len,
+            freq_low=self.f0_fmin,
+            freq_high=self.f0_fmax,
+        )[0]
+
+        T = f0.shape[-1]
+        if T < expected_len:
+            pad = torch.zeros(expected_len - T, dtype=f0.dtype)
+            f0 = torch.cat([f0, pad], dim=-1)
+        elif T > expected_len:
+            f0 = f0[:expected_len]
+
+        return f0.unsqueeze(0)
+
     def get_text(self, text, add_blank=True):
         text_norm, cleaned_text = text_to_sequence(text, self.cleaners)
         if self.add_blank:
@@ -242,6 +308,8 @@ class TextMelBatchCollate:
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
         x = torch.zeros((B, x_max_length), dtype=torch.long)
         durations = torch.zeros((B, x_max_length), dtype=torch.long)
+        f0 = torch.zeros((B, 1, y_max_length), dtype=torch.float32)
+        f0_mask = torch.zeros((B, 1, y_max_length), dtype=torch.float32)
 
         y_lengths, x_lengths = [], []
         spks = []
@@ -257,6 +325,11 @@ class TextMelBatchCollate:
             x_texts.append(item["x_text"])
             if item["durations"] is not None:
                 durations[i, : item["durations"].shape[-1]] = item["durations"]
+            if "f0" in item and item["f0"] is not None:
+                f_len = y_.shape[-1]
+                # item["f0"] is (1, T)
+                f0[i, :, :f_len] = item["f0"]
+                f0_mask[i, :, :f_len] = item["f0_mask"]
 
         y_lengths = torch.tensor(y_lengths, dtype=torch.long)
         x_lengths = torch.tensor(x_lengths, dtype=torch.long)
@@ -271,4 +344,6 @@ class TextMelBatchCollate:
             "filepaths": filepaths,
             "x_texts": x_texts,
             "durations": durations if not torch.eq(durations, 0).all() else None,
+            "f0": f0,
+            "f0_mask": f0_mask,
         }

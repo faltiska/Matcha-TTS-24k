@@ -4,6 +4,7 @@ defaults:
   - decoder: default.yaml
   - cfm: default.yaml
   - optimizer: adamw.yaml
+  - pitch: default
 
 _target_: matcha.models.matcha_tts.MatchaTTS
 n_vocab: 178
@@ -15,3 +16,6 @@ data_statistics: ${data.data_statistics}
 out_size: null # Must be divisible by 4
 prior_loss: true
 use_precomputed_durations: ${data.load_durations}
+# Pitch conditioning (F0)
+use_pitch: true
+lambda_pitch: 0.05

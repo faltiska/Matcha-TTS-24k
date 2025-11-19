@@ -58,7 +58,11 @@ class BaseLightningClass(LightningModule, ABC):
         y, y_lengths = batch["y"], batch["y_lengths"]
         spks = batch["spks"]
 
-        dur_loss, prior_loss, diff_loss, *_ = self(
+        # Optional pitch features
+        f0 = batch.get("f0", None)
+        f0_mask = batch.get("f0_mask", None)
+
+        outputs = self(
             x=x,
             x_lengths=x_lengths,
             y=y,
@@ -66,18 +70,30 @@ class BaseLightningClass(LightningModule, ABC):
             spks=spks,
             out_size=self.out_size,
             durations=batch["durations"],
+            f0=f0,
+            f0_mask=f0_mask,
         )
-        return {
+
+        dur_loss, prior_loss, diff_loss = outputs[0], outputs[1], outputs[2]
+        # If model returns pitch loss as the 5th element, pick it up; else default to 0
+        pitch_loss = outputs[4] if len(outputs) >= 5 else torch.tensor(0.0, device=dur_loss.device)
+
+        loss_dict = {
             "dur_loss": dur_loss,
             "prior_loss": prior_loss,
             "diff_loss": diff_loss,
         }
+        if getattr(self, "use_pitch", False):
+            loss_dict["pitch_loss"] = pitch_loss
+
+        return loss_dict
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
 
     def training_step(self, batch: Any, batch_idx: int):
         loss_dict = self.get_losses(batch)
+        bs = batch["x"].shape[0]
         self.log(
             "step",
             float(self.global_step),
@@ -85,6 +101,7 @@ class BaseLightningClass(LightningModule, ABC):
             prog_bar=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
 
         self.log(
@@ -94,6 +111,7 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
         self.log(
             "sub_loss/train_prior_loss",
@@ -102,6 +120,7 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
         self.log(
             "sub_loss/train_diff_loss",
@@ -110,7 +129,18 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
+        if "pitch_loss" in loss_dict:
+            self.log(
+                "sub_loss/train_pitch_loss",
+                loss_dict["pitch_loss"],
+                on_step=True,
+                on_epoch=True,
+                logger=True,
+                sync_dist=True,
+                batch_size=bs,
+            )
 
         total_loss = sum(loss_dict.values())
         self.log(
@@ -121,12 +151,14 @@ class BaseLightningClass(LightningModule, ABC):
             logger=True,
             prog_bar=True,
             sync_dist=True,
+            batch_size=bs,
         )
 
         return {"loss": total_loss, "log": loss_dict}
 
     def validation_step(self, batch: Any, batch_idx: int):
         loss_dict = self.get_losses(batch)
+        bs = batch["x"].shape[0]
         self.log(
             "sub_loss/val_dur_loss",
             loss_dict["dur_loss"],
@@ -134,6 +166,7 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
         self.log(
             "sub_loss/val_prior_loss",
@@ -142,6 +175,7 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
         self.log(
             "sub_loss/val_diff_loss",
@@ -150,7 +184,18 @@ class BaseLightningClass(LightningModule, ABC):
             on_epoch=True,
             logger=True,
             sync_dist=True,
+            batch_size=bs,
         )
+        if "pitch_loss" in loss_dict:
+            self.log(
+                "sub_loss/val_pitch_loss",
+                loss_dict["pitch_loss"],
+                on_step=True,
+                on_epoch=True,
+                logger=True,
+                sync_dist=True,
+                batch_size=bs,
+            )
 
         total_loss = sum(loss_dict.values())
         self.log(
@@ -161,6 +206,7 @@ class BaseLightningClass(LightningModule, ABC):
             logger=True,
             prog_bar=True,
             sync_dist=True,
+            batch_size=bs,
         )
 
         return total_loss

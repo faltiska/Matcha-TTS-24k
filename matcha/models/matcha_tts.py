@@ -36,6 +36,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         scheduler=None,
         prior_loss=True,
         use_precomputed_durations=False,
+        use_pitch=False,
+        lambda_pitch=0.2,
+        pitch=None,
     ):
         super().__init__()
 
@@ -48,6 +51,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.out_size = out_size
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
+        self.use_pitch = use_pitch
+        self.lambda_pitch = lambda_pitch
+        # Accept and store optional nested config group (Hydra) to avoid unexpected kwarg errors
+        self.pitch = pitch
 
         if n_spks > 1:
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -69,6 +76,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             n_spks=n_spks,
             spk_emb_dim=spk_emb_dim,
         )
+
+        if self.use_pitch:
+            self.f0_proj = torch.nn.Conv1d(1, self.n_feats, 1)
+            torch.nn.init.zeros_(self.f0_proj.weight)
+            if self.f0_proj.bias is not None:
+                torch.nn.init.zeros_(self.f0_proj.bias)
+            self.f0_scale = torch.nn.Parameter(torch.tensor(0.1))
 
         self.update_data_statistics(data_statistics)
 
@@ -116,7 +130,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks = self.spk_emb(spks.long())
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask, p_log = self.encoder(x, x_lengths, spks)
 
         w = torch.exp(logw) * x_mask
         w_ceil = torch.ceil(w) * length_scale
@@ -134,6 +148,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         mu_y = mu_y.transpose(1, 2)
         encoder_outputs = mu_y[:, :, :y_max_length]
 
+        if self.use_pitch:
+            p_log_y = torch.matmul(attn.squeeze(1).transpose(1, 2), p_log.transpose(1, 2)).transpose(1, 2)
+            mu_y = mu_y + self.f0_scale * self.f0_proj(p_log_y) * y_mask
+
         # Generate sample tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, temperature, spks)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
@@ -150,7 +168,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             "rtf": rtf,
         }
 
-    def forward(self, x, x_lengths, y, y_lengths, spks=None, out_size=None, cond=None, durations=None):
+    def forward(self, x, x_lengths, y, y_lengths, spks=None, out_size=None, cond=None, durations=None, f0=None, f0_mask=None):
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -176,7 +194,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks = self.spk_emb(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask, p_log = self.encoder(x, x_lengths, spks)
         y_max_length = y.shape[-1]
 
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
@@ -213,6 +231,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             ).to(y_lengths)
             attn_cut = torch.zeros(attn.shape[0], attn.shape[1], out_size, dtype=attn.dtype, device=attn.device)
             y_cut = torch.zeros(y.shape[0], self.n_feats, out_size, dtype=y.dtype, device=y.device)
+            if f0 is not None:
+                f0_cut = torch.zeros(y.shape[0], 1, out_size, dtype=f0.dtype, device=f0.device)
+                f0_mask_cut = torch.zeros_like(f0_cut)
 
             y_cut_lengths = []
             for i, (y_, out_offset_) in enumerate(zip(y, out_offset)):
@@ -221,6 +242,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 cut_lower, cut_upper = out_offset_, out_offset_ + y_cut_length
                 y_cut[i, :, :y_cut_length] = y_[:, cut_lower:cut_upper]
                 attn_cut[i, :, :y_cut_length] = attn[i, :, cut_lower:cut_upper]
+                if f0 is not None:
+                    f0_cut[i, :, :y_cut_length] = f0[i, :, cut_lower:cut_upper]
+                    f0_mask_cut[i, :, :y_cut_length] = f0_mask[i, :, cut_lower:cut_upper]
 
             y_cut_lengths = torch.LongTensor(y_cut_lengths)
             y_cut_mask = sequence_mask(y_cut_lengths).unsqueeze(1).to(y_mask)
@@ -228,10 +252,22 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             attn = attn_cut
             y = y_cut
             y_mask = y_cut_mask
+            if f0 is not None:
+                f0 = f0_cut
+                f0_mask = f0_mask_cut
 
         # Align encoded text with mel-spectrogram and get mu_y segment
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
+        if self.use_pitch and f0 is not None:
+            mu_y = mu_y + self.f0_scale * self.f0_proj(torch.log(f0 + 1e-3)) * y_mask
+
+        # Compute pitch loss
+        pitch_loss = torch.tensor(0.0, device=y.device)
+        if self.use_pitch and (f0 is not None) and (f0_mask is not None):
+            p_log_y = torch.matmul(attn.squeeze(1).transpose(1, 2), p_log.transpose(1, 2)).transpose(1, 2)
+            pitch_mask = f0_mask * y_mask
+            pitch_loss = torch.sum((p_log_y - torch.log(f0 + 1e-8)) ** 2 * pitch_mask) / (torch.sum(pitch_mask) + 1e-8)
 
         # Compute loss of the decoder
         diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks, cond=cond)
@@ -242,4 +278,4 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        return dur_loss, prior_loss, diff_loss, attn
+        return dur_loss, prior_loss, diff_loss, attn, (self.lambda_pitch * pitch_loss if self.use_pitch else torch.tensor(0.0, device=y.device))

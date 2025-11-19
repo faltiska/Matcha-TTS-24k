@@ -48,7 +48,13 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         L.seed_everything(cfg.seed, workers=True)
 
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")  # pylint: disable=protected-access
-    datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
+    # Inject centralized pitch (F0) config from model.* into the datamodule constructor
+    datamodule: LightningDataModule = hydra.utils.instantiate(
+        cfg.data,
+        use_f0=cfg.model.use_pitch,
+        f0_fmin=cfg.model.pitch.f0_fmin,
+        f0_fmax=cfg.model.pitch.f0_fmax,
+    )
 
     log.info(f"Instantiating model <{cfg.model._target_}>")  # pylint: disable=protected-access
     model: LightningModule = hydra.utils.instantiate(cfg.model)

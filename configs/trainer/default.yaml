@@ -7,6 +7,9 @@ max_epochs: 4000
 accelerator: gpu
 devices: [0]
 
+# log more frequently than the number of batches per epoch
+log_every_n_steps: 5
+
 # mixed precision for better speed (changed from 16-mixed)
 precision: bf16-mixed
 
