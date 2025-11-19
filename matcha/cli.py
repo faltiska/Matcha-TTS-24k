@@ -11,10 +11,7 @@ import numpy as np
 import soundfile as sf
 import torch
 
-from matcha.hifigan.config import v1
-from matcha.hifigan.denoiser import Denoiser
-from matcha.hifigan.env import AttrDict
-from matcha.hifigan.models import Generator as HiFiGAN
+from matcha.vocos.models import load_vocoder
 from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, text_to_sequence
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
@@ -24,16 +21,11 @@ MATCHA_URLS = {
     "matcha_vctk": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_vctk.ckpt",
 }
 
-VOCODER_URLS = {
-    "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",  # Old url: https://drive.google.com/file/d/14NENd4equCBLyyCSke114Mv6YR_j_uFs/view?usp=drive_link
-    "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",  # Old url: https://drive.google.com/file/d/1qpgI41wNXFcH-iKq1Y42JlBC9j0je8PW/view?usp=drive_link
-}
-
 MULTISPEAKER_MODEL = {
-    "matcha_vctk": {"vocoder": "hifigan_univ_v1", "speaking_rate": 0.85, "spk": 0, "spk_range": (0, 107)}
+    "matcha_vctk": {"speaking_rate": 0.85, "spk": 0, "spk_range": (0, 107)}
 }
 
-SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "hifigan_T2_v1", "speaking_rate": 0.95, "spk": None}}
+SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"speaking_rate": 0.95, "spk": None}}
 
 
 def plot_spectrogram_to_numpy(spectrogram, filename):
@@ -78,33 +70,7 @@ def assert_required_models_available(args):
         model_path = save_dir / f"{args.model}.ckpt"
         assert_model_downloaded(model_path, MATCHA_URLS[args.model])
 
-    vocoder_path = save_dir / f"{args.vocoder}"
-    assert_model_downloaded(vocoder_path, VOCODER_URLS[args.vocoder])
-    return {"matcha": model_path, "vocoder": vocoder_path}
-
-
-def load_hifigan(checkpoint_path, device):
-    h = AttrDict(v1)
-    hifigan = HiFiGAN(h).to(device)
-    hifigan.load_state_dict(torch.load(checkpoint_path, map_location=device)["generator"])
-    _ = hifigan.eval()
-    hifigan.remove_weight_norm()
-    return hifigan
-
-
-def load_vocoder(vocoder_name, checkpoint_path, device):
-    print(f"[!] Loading {vocoder_name}!")
-    vocoder = None
-    if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
-        vocoder = load_hifigan(checkpoint_path, device)
-    else:
-        raise NotImplementedError(
-            f"Vocoder {vocoder_name} not implemented! define a load_<<vocoder_name>> method for it"
-        )
-
-    denoiser = Denoiser(vocoder, mode="zeros")
-    print(f"[+] {vocoder_name} loaded!")
-    return vocoder, denoiser
+    return model_path
 
 
 def load_matcha(model_name, checkpoint_path, device):
@@ -116,11 +82,8 @@ def load_matcha(model_name, checkpoint_path, device):
     return model
 
 
-def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
+def to_waveform(mel, vocoder):
     audio = vocoder(mel).clamp(-1, 1)
-    if denoiser is not None:
-        audio = denoiser(audio.squeeze(), strength=denoiser_strength).cpu().squeeze()
-
     return audio.cpu().squeeze()
 
 
@@ -148,10 +111,6 @@ def validate_args(args):
         if args.model in MULTISPEAKER_MODEL:
             args = validate_args_for_multispeaker_model(args)
     else:
-        # When using a custom model
-        if args.vocoder != "hifigan_univ_v1":
-            warn_ = "[-] Using custom model checkpoint! I would suggest passing --vocoder hifigan_univ_v1, unless the custom model is trained on LJ Speech."
-            warnings.warn(warn_, UserWarning)
         if args.speaking_rate is None:
             args.speaking_rate = 1.0
 
@@ -163,13 +122,6 @@ def validate_args(args):
 
 
 def validate_args_for_multispeaker_model(args):
-    if args.vocoder is not None:
-        if args.vocoder != MULTISPEAKER_MODEL[args.model]["vocoder"]:
-            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {MULTISPEAKER_MODEL[args.model]['vocoder']}"
-            warnings.warn(warn_, UserWarning)
-    else:
-        args.vocoder = MULTISPEAKER_MODEL[args.model]["vocoder"]
-
     if args.speaking_rate is None:
         args.speaking_rate = MULTISPEAKER_MODEL[args.model]["speaking_rate"]
 
@@ -188,13 +140,6 @@ def validate_args_for_multispeaker_model(args):
 
 
 def validate_args_for_single_speaker_model(args):
-    if args.vocoder is not None:
-        if args.vocoder != SINGLESPEAKER_MODEL[args.model]["vocoder"]:
-            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {SINGLESPEAKER_MODEL[args.model]['vocoder']}"
-            warnings.warn(warn_, UserWarning)
-    else:
-        args.vocoder = SINGLESPEAKER_MODEL[args.model]["vocoder"]
-
     if args.speaking_rate is None:
         args.speaking_rate = SINGLESPEAKER_MODEL[args.model]["speaking_rate"]
 
@@ -226,13 +171,6 @@ def cli():
         help="Path to the custom model checkpoint",
     )
 
-    parser.add_argument(
-        "--vocoder",
-        type=str,
-        default=None,
-        help="Vocoder to use (default: will use the one suggested with the pretrained model))",
-        choices=VOCODER_URLS.keys(),
-    )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
     parser.add_argument("--spk", type=int, default=None, help="Speaker ID")
@@ -251,12 +189,6 @@ def cli():
     parser.add_argument("--steps", type=int, default=10, help="Number of ODE steps  (default: 10)")
     parser.add_argument("--cpu", action="store_true", help="Use CPU for inference (default: use GPU if available)")
     parser.add_argument(
-        "--denoiser_strength",
-        type=float,
-        default=0.00025,
-        help="Strength of the vocoder bias denoiser (default: 0.00025)",
-    )
-    parser.add_argument(
         "--output_folder",
         type=str,
         default=os.getcwd(),
@@ -272,23 +204,23 @@ def cli():
     args = validate_args(args)
     device = get_device(args)
     print_config(args)
-    paths = assert_required_models_available(args)
+    path = assert_required_models_available(args)
 
     if args.checkpoint_path is not None:
         print(f"[🍵] Loading custom model from {args.checkpoint_path}")
-        paths["matcha"] = args.checkpoint_path
+        path = args.checkpoint_path
         args.model = "custom_model"
 
-    model = load_matcha(args.model, paths["matcha"], device)
-    vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
+    model = load_matcha(args.model, path, device)
+    vocoder = load_vocoder(device)
 
     texts = get_texts(args)
 
     spk = torch.tensor([args.spk], device=device, dtype=torch.long) if args.spk is not None else None
     if len(texts) == 1 or not args.batched:
-        unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk)
+        unbatched_synthesis(args, device, model, vocoder, texts, spk)
     else:
-        batched_synthesis(args, device, model, vocoder, denoiser, texts, spk)
+        batched_synthesis(args, device, model, vocoder, texts, spk)
 
 
 class BatchedSynthesisDataset(torch.utils.data.Dataset):
@@ -315,7 +247,7 @@ def batched_collate_fn(batch):
     return {"x": x, "x_lengths": x_lengths}
 
 
-def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
+def batched_synthesis(args, device, model, vocoder, texts, spk):
     total_rtf = []
     total_rtf_w = []
     processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
@@ -338,7 +270,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             length_scale=args.speaking_rate,
         )
 
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        output["waveform"] = to_waveform(output["mel"], vocoder)
         t = (dt.datetime.now() - start_t).total_seconds()
         rtf_w = t * 22050 / (output["waveform"].shape[-1])
         print(f"[🍵-Batch: {i}] Matcha-TTS RTF: {output['rtf']:.4f}")
@@ -358,7 +290,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
 
 
-def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
+def unbatched_synthesis(args, device, model, vocoder, texts, spk):
     total_rtf = []
     total_rtf_w = []
     for i, text in enumerate(texts):
@@ -379,8 +311,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             spks=spk,
             length_scale=args.speaking_rate,
         )
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
-        # RTF with HiFiGAN
+        output["waveform"] = to_waveform(output["mel"], vocoder)
         t = (dt.datetime.now() - start_t).total_seconds()
         rtf_w = t * 22050 / (output["waveform"].shape[-1])
         print(f"[🍵-{i}] Matcha-TTS RTF: {output['rtf']:.4f}")
@@ -400,7 +331,6 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 def print_config(args):
     print("[!] Configurations: ")
     print(f"\t- Model: {args.model}")
-    print(f"\t- Vocoder: {args.vocoder}")
     print(f"\t- Temperature: {args.temperature}")
     print(f"\t- Speaking rate: {args.speaking_rate}")
     print(f"\t- Number of ODE steps: {args.steps}")

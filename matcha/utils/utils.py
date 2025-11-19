@@ -215,6 +215,12 @@ def get_user_data_dir(appname="matcha_tts"):
 
 
 def assert_model_downloaded(checkpoint_path, url, use_wget=True):
+    # Handle HuggingFace URLs specially - they're downloaded by the vocos library
+    if url.startswith("hf://"):
+        log.debug(f"[+] HuggingFace model will be downloaded by the vocos library: {url}")
+        print(f"[+] HuggingFace model will be downloaded by the vocos library: {url}")
+        return
+    
     if Path(checkpoint_path).exists():
         log.debug(f"[+] Model already present at {checkpoint_path}!")
         print(f"[+] Model already present at {checkpoint_path}!")

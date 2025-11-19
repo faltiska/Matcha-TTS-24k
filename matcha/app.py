@@ -8,7 +8,6 @@ import torch
 
 from matcha.cli import (
     MATCHA_URLS,
-    VOCODER_URLS,
     assert_model_downloaded,
     get_device,
     load_matcha,
@@ -23,7 +22,6 @@ LOCATION = Path(get_user_data_dir())
 args = Namespace(
     cpu=False,
     model="matcha_vctk",
-    vocoder="hifigan_univ_v1",
     spk=0,
 )
 
@@ -34,47 +32,38 @@ def MATCHA_TTS_LOC(x):
     return LOCATION / f"{x}.ckpt"
 
 
-def VOCODER_LOC(x):
-    return LOCATION / f"{x}"
-
-
 LOGO_URL = "https://shivammehta25.github.io/Matcha-TTS/images/logo.png"
 RADIO_OPTIONS = {
     "Multi Speaker (VCTK)": {
-        "model": "matcha_vctk",
-        "vocoder": "hifigan_univ_v1",
+        "model": "matcha_vctk"
     },
     "Single Speaker (LJ Speech)": {
-        "model": "matcha_ljspeech",
-        "vocoder": "hifigan_T2_v1",
+        "model": "matcha_ljspeech"
     },
 }
 
 # Ensure all the required models are downloaded
 assert_model_downloaded(MATCHA_TTS_LOC("matcha_ljspeech"), MATCHA_URLS["matcha_ljspeech"])
-assert_model_downloaded(VOCODER_LOC("hifigan_T2_v1"), VOCODER_URLS["hifigan_T2_v1"])
 assert_model_downloaded(MATCHA_TTS_LOC("matcha_vctk"), MATCHA_URLS["matcha_vctk"])
-assert_model_downloaded(VOCODER_LOC("hifigan_univ_v1"), VOCODER_URLS["hifigan_univ_v1"])
 
 device = get_device(args)
 
 # Load default model
 model = load_matcha(args.model, MATCHA_TTS_LOC(args.model), device)
-vocoder, denoiser = load_vocoder(args.vocoder, VOCODER_LOC(args.vocoder), device)
+vocoder = load_vocoder(device)
 
-
-def load_model(model_name, vocoder_name):
+def load_model(model_name):
     model = load_matcha(model_name, MATCHA_TTS_LOC(model_name), device)
-    vocoder, denoiser = load_vocoder(vocoder_name, VOCODER_LOC(vocoder_name), device)
-    return model, vocoder, denoiser
+    vocoder = load_vocoder(device)
+    return model, vocoder
 
 
 def load_model_ui(model_type, textbox):
-    model_name, vocoder_name = RADIO_OPTIONS[model_type]["model"], RADIO_OPTIONS[model_type]["vocoder"]
+    model_name = RADIO_OPTIONS[model_type]["model"]
 
-    global model, vocoder, denoiser, CURRENTLY_LOADED_MODEL  # pylint: disable=global-statement
+    global model, vocoder, CURRENTLY_LOADED_MODEL  # pylint: disable=global-statement
     if CURRENTLY_LOADED_MODEL != model_name:
-        model, vocoder, denoiser = load_model(model_name, vocoder_name)
+        model, vocoder = load_model(model_name)
         CURRENTLY_LOADED_MODEL = model_name
 
     if model_name == "matcha_ljspeech":
@@ -115,7 +104,7 @@ def synthesise_mel(text, text_length, n_timesteps, temperature, length_scale, sp
         spks=spk,
         length_scale=length_scale,
     )
-    output["waveform"] = to_waveform(output["mel"], vocoder, denoiser)
+    output["waveform"] = to_waveform(output["mel"], vocoder)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:
         sf.write(fp.name, output["waveform"], 22050, "PCM_24")
 
@@ -125,8 +114,8 @@ def synthesise_mel(text, text_length, n_timesteps, temperature, length_scale, sp
 def multispeaker_example_cacher(text, n_timesteps, mel_temp, length_scale, spk):
     global CURRENTLY_LOADED_MODEL  # pylint: disable=global-statement
     if CURRENTLY_LOADED_MODEL != "matcha_vctk":
-        global model, vocoder, denoiser  # pylint: disable=global-statement
-        model, vocoder, denoiser = load_model("matcha_vctk", "hifigan_univ_v1")
+        global model, vocoder  # pylint: disable=global-statement
+        model, vocoder = load_model("matcha_vctk")
         CURRENTLY_LOADED_MODEL = "matcha_vctk"
 
     phones, text, text_lengths = process_text_gradio(text)
@@ -137,8 +126,8 @@ def multispeaker_example_cacher(text, n_timesteps, mel_temp, length_scale, spk):
 def ljspeech_example_cacher(text, n_timesteps, mel_temp, length_scale, spk=-1):
     global CURRENTLY_LOADED_MODEL  # pylint: disable=global-statement
     if CURRENTLY_LOADED_MODEL != "matcha_ljspeech":
-        global model, vocoder, denoiser  # pylint: disable=global-statement
-        model, vocoder, denoiser = load_model("matcha_ljspeech", "hifigan_T2_v1")
+        global model, vocoder  # pylint: disable=global-statement
+        model, vocoder = load_model("matcha_ljspeech")
         CURRENTLY_LOADED_MODEL = "matcha_ljspeech"
 
     phones, text, text_lengths = process_text_gradio(text)
