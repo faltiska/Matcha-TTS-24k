@@ -18,4 +18,13 @@ prior_loss: true
 use_precomputed_durations: ${data.load_durations}
 # Pitch conditioning (F0)
 use_pitch: true
-lambda_pitch: 0.05
+# lambda_pitch says how much the pitch loss contributes to the total loss.
+# Generally it is between 0.1 and 0.3
+# Having a value more than 0.5 can start to over-emphasize pitch and hurt timbre/clarity.
+# Loss values per train epoch:
+# - diff = 1.1
+# - dur = 0.1
+# - pitch = 0.01 (with a lambda of 0.05)
+# - prior loss .9
+lambda_pitch: 0.1
+
