@@ -26,5 +26,5 @@ use_pitch: true
 # - dur = 0.1
 # - pitch = 0.01 (with a lambda of 0.05)
 # - prior loss .9
-lambda_pitch: 0.1
+lambda_pitch: 0.2
 
