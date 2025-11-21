@@ -146,7 +146,7 @@ valid_filelist_path: data/filelists/ljs_audio_text_val_filelist.txt
 5. Generate normalisation statistics with the yaml file of dataset configuration
 
 ```bash
-matcha-data-stats -i corpus-small.yaml
+matcha-data-stats -i your-corpus.yaml
 # Output:
 #{'mel_mean': -5.53662231756592, 'mel_std': 2.1161014277038574}
 ```
@@ -171,7 +171,7 @@ python matcha/train.py trainer.precision=bf16-mixed
 then monitor it with:
 ```bash
 uv pip install tensorflow
-tensorboard --logdir=logs/train/corpus-small/runs/2025-11-16_12-55-43/tensorboard/version_0
+tensorboard --logdir=logs/train/your-corpus/runs/2025-11-16_12-55-43/tensorboard/version_0
 ```
 
 ```bash
@@ -217,10 +217,10 @@ Note:
 matcha-tts --text "<INPUT TEXT>" --checkpoint_path <PATH TO CHECKPOINT>
 
 matcha-tts --text "It was a dark and stormy night; the rain fell in torrents, except at occasional intervals, when it was checked by a violent gust of wind that swept up the streets (for it is in London that our scene lies), rattling along the housetops, and fiercely agitating the scanty flame of the lamps that struggled against the darkness." \
---checkpoint_path logs/train/corpus-small/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_univ_v1 --steps 50
+--checkpoint_path logs/train/your-corpus/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_univ_v1 --steps 50
 
 matcha-tts --text "It was a dark and stormy night; the rain fell in torrents, except at occasional intervals, when it was checked by a violent gust of wind that swept up the streets (for it is in London that our scene lies), rattling along the housetops, and fiercely agitating the scanty flame of the lamps that struggled against the darkness." \
---checkpoint_path logs/train/corpus-small/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_T2_v1 --steps 50
+--checkpoint_path logs/train/your-corpus/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_T2_v1 --steps 50
 ```
 
 ## ONNX support
@@ -348,6 +348,17 @@ Other source code we would like to acknowledge:
 - [Grad-TTS](https://github.com/huawei-noah/Speech-Backbones/tree/main/Grad-TTS): For the monotonic alignment search source code
 - [torchdyn](https://github.com/DiffEqML/torchdyn): Useful for trying other ODE solvers during research and development
 - [labml.ai](https://nn.labml.ai/transformers/rope/index.html): For the RoPE implementation
+
+## Configuring the trainer
+When you run `python matcha/train.py`, Hydra loads configs in this order:
+1. __`configs/train.yaml`__ (the main default config)
+    - Sets `data: your-corpus` → loads `configs/data/your-corpus.yaml`
+    - Sets `model: matcha` → loads `configs/model/matcha.yaml`
+    - Sets `experiment: null` → no experiment config loaded
+
+2. __Experiment configs__ (optional override)
+    - If you run `python matcha/train.py experiment=ljspeech`, it loads `configs/experiment/ljspeech.yaml`
+    - This can override other configs (e.g., the ljspeech experiment overrides the data to use ljspeech.yaml instead)
 
 
 ## Improvements
