@@ -45,7 +45,7 @@ train: True
 test: True
 
 # simply provide checkpoint path to resume training
-ckpt_path: null
+ckpt_path: logs/train/corpus-small/runs/2025-11-20_20-21-12/checkpoints/checkpoint_epoch=399.ckpt
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 1234

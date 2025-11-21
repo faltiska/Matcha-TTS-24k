@@ -42,6 +42,9 @@ class TextMelDataModule(LightningDataModule):
         data_statistics,
         seed,
         load_durations,
+        use_cached_mels: bool = False,
+        mel_dir: Optional[str] = None,
+        persistent_workers: bool = True,
         use_f0: bool = True,
         f0_fmin: float = 50.0,
         f0_fmax: float = 1100.0,
@@ -78,6 +81,8 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.use_f0,
             self.hparams.f0_fmin,
             self.hparams.f0_fmax,
+            self.hparams.use_cached_mels,
+            self.hparams.mel_dir,
         )
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
@@ -97,6 +102,8 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.use_f0,
             self.hparams.f0_fmin,
             self.hparams.f0_fmax,
+            self.hparams.use_cached_mels,
+            self.hparams.mel_dir,
         )
 
     def train_dataloader(self):
@@ -107,6 +114,7 @@ class TextMelDataModule(LightningDataModule):
             pin_memory=self.hparams.pin_memory,
             shuffle=True,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
         )
 
     def val_dataloader(self):
@@ -117,6 +125,7 @@ class TextMelDataModule(LightningDataModule):
             pin_memory=self.hparams.pin_memory,
             shuffle=False,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
         )
 
     def teardown(self, stage: Optional[str] = None):
@@ -152,6 +161,8 @@ class TextMelDataset(torch.utils.data.Dataset):
         use_f0=True,
         f0_fmin=50.0,
         f0_fmax=1100.0,
+        use_cached_mels=False,
+        mel_dir=None,
     ):
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.n_spks = n_spks
@@ -168,6 +179,8 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.use_f0 = use_f0
         self.f0_fmin = f0_fmin
         self.f0_fmax = f0_fmax
+        self.use_cached_mels = use_cached_mels
+        self.mel_dir = mel_dir
 
         if data_parameters is not None:
             self.data_parameters = data_parameters
@@ -226,6 +239,15 @@ class TextMelDataset(torch.utils.data.Dataset):
         return durs
 
     def get_mel(self, filepath):
+        # Try loading cached, already-normalized mel if enabled
+        if getattr(self, "use_cached_mels", False) and self.mel_dir is not None:
+            name = Path(filepath).stem
+            npy_path = Path(self.mel_dir) / f"{name}.npy"
+            if npy_path.exists():
+                arr = np.load(npy_path).astype(np.float32)
+                mel = torch.from_numpy(arr).float()
+                return mel
+
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
         mel = mel_spectrogram(

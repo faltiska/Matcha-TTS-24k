@@ -192,6 +192,26 @@ python matcha/train.py experiment=ljspeech_min_memory
 python matcha/train.py experiment=ljspeech trainer.devices=[0,1]
 ```
 
+### Optional: Precompute mel spectrogram cache
+
+You can speed up training by precomputing and caching normalized mel-spectrograms. This avoids recomputing mels every epoch and reduces data-loading overhead.
+
+1) Generate the mel cache:
+```bash
+python -m matcha.utils.precompute_mels -i configs/data/your-corpus.yaml
+```
+
+2) Enable cached mels and persistent workers in your data config (your-corpus.yaml):
+```yaml
+persistent_workers: true
+use_cached_mels: true
+mel_dir: data/your-corpus/mels
+```
+
+Note:
+- The cache is only valid if mel parameters (sr, n_fft, n_mels, hop, win, fmin, fmax, center) and normalization stats match your training config.
+- Cached mels are saved already normalized using the provided mean/std.
+
 7. Synthesise from the custom trained model
 ```bash
 matcha-tts --text "<INPUT TEXT>" --checkpoint_path <PATH TO CHECKPOINT>

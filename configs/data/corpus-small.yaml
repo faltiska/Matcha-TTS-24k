@@ -4,6 +4,7 @@ train_filelist_path: data/Corpus-small/train.csv
 valid_filelist_path: data/Corpus-small/validate.csv
 batch_size: 18
 num_workers: 16
+persistent_workers: true
 pin_memory: True
 cleaners: [english_cleaners2]
 add_blank: True
@@ -20,3 +21,7 @@ data_statistics:  # Computed for my dataset
   mel_std: 2.823194
 seed: ${seed}
 load_durations: false
+
+# Cached mel options (enable after running precompute script)
+use_cached_mels: true
+mel_dir: data/Corpus-small/mels
