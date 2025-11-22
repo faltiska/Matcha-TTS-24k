@@ -2,9 +2,9 @@
 
 import torch
 import torch.nn as nn
-from vocos import Vocos
+import bigvgan
 
-class VocosWrapper(nn.Module):
+class BigVGANWrapper(nn.Module):
     """
     Wrapper for Vocos vocoder to make it compatible with Matcha-TTS interface.
     Vocos is a mel-spectrogram vocoder that can be used as a drop-in replacement for HiFiGAN.
@@ -24,27 +24,24 @@ class VocosWrapper(nn.Module):
         Returns:
             audio: Audio waveform tensor of shape (batch, 1, samples)
         """
-
-        with torch.no_grad():
-            audio = self.model.decode(mel)
+        with torch.inference_mode():
+            audio = self.model(mel)
         
         return audio
 
-
-def load_vocoder(model_id, device):
+def load_vocoder(device):
     """
-    Load a pretrained Vocos model from HuggingFace  
+    Load the pretrained BigVGAN model from https://huggingface.co/nvidia/bigvgan_v2_22khz_80band_fmax8k_256x
     
     Args:
-        model_id: a hugging face model ID, e.g. "BSC-LT/vocos-mel-22khz" 
-                  (see https://huggingface.co/BSC-LT/vocos-mel-22khz)
         device: Device to load the model on (cpu/cuda)
     
     Returns:
-        VocosWrapper instance
+        BigVGANWrapper instance
     """
+
+    model = bigvgan.BigVGAN.from_pretrained('nvidia/bigvgan_v2_22khz_80band_fmax8k_256x', use_cuda_kernel=True)
+    model.remove_weight_norm()
+    model = model.eval().to(device)
     
-    vocos = Vocos.from_pretrained(model_id)
-    vocos = vocos.eval().to(device)
-    
-    return VocosWrapper(vocos)
+    return BigVGANWrapper(model)

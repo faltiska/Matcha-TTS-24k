@@ -43,3 +43,4 @@ gdown
 wget
 seaborn
 vocos @ git+https://github.com/langtech-bsc/vocos.git@matcha
+bigvgan
