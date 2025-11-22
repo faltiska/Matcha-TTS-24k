@@ -10,7 +10,7 @@ It then saves:
   - metadata.json with the parameters used
 
 Usage:
-  python -m matcha.utils.precompute_mels -i configs/data/corpus-small.yaml
+  python -m matcha.utils.precompute_corpus -i configs/data/corpus-small.yaml
 """
 
 import argparse
@@ -281,9 +281,9 @@ def main():
     failures = []
 
     mel_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[precompute_mels] Config: {cfg_path}")
-    print(f"[precompute_mels] Output: {mel_dir}")
-    print(f"[precompute_mels] Files: {total} (train+valid)")
+    print(f"[precompute_corpus] Config: {cfg_path}")
+    print(f"[precompute_corpus] Output: {mel_dir}")
+    print(f"[precompute_corpus] Files: {total} (train+valid)")
 
     # center must match training usage in TextMelDataset.get_mel (center=False)
     center = False
@@ -307,9 +307,9 @@ def main():
         )
         if success:
             ok += 1
-            print(f"\r[precompute_mels] {i}/{total} done.", end="", flush=True)
+            print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
         else:
-            print(f"[precompute_mels] ERROR: {msg}")
+            print(f"[precompute_corpus] ERROR: {msg}")
             failures.append((wav_path.as_posix(), msg))
 
     # Write metadata for traceability
@@ -338,7 +338,7 @@ def main():
             for wav_path, msg in failures:
                 f.write(f"{wav_path}\t{msg}\n")
 
-    print(f"\n[precompute_mels] Finished. ok={ok}, fail={len(failures)}.\nMetadata at {mel_dir/'metadata.json'}")
+    print(f"\n[precompute_corpus] Finished. ok={ok}, fail={len(failures)}.\nMetadata at {mel_dir/'metadata.json'}")
 
     # Compute F0 if f0_dir is specified
     if f0_dir is not None:

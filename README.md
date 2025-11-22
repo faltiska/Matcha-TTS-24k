@@ -366,7 +366,7 @@ When you run `python matcha/train.py`, Hydra loads configs in this order:
 Compared to the original MatchaTTS, I did the following:
 - I have increased the decoder model capacity
 - I have switched to an AdamW optimizer
-- I have switched from HiFiGAN to Vocos
+- I have added Vocos
 - I have increased the TextEncoder model size
 - I have added an F0 (pitch) extractor
 - I have implemented a corpus mel and pitch precomputation script.

@@ -31,7 +31,7 @@ class VocosWrapper(nn.Module):
         return audio
 
 
-def load_vocoder(model_id, device):
+def load_vocoder(model_id="BSC-LT/vocos-mel-22khz", device="cuda"):
     """
     Load a pretrained Vocos model from HuggingFace  
     
