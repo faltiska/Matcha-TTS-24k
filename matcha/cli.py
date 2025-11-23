@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 import torch
+from omegaconf import OmegaConf
 
 from matcha.hifigan.config import v1
 from matcha.hifigan.denoiser import Denoiser
@@ -21,6 +22,7 @@ from matcha.text import sequence_to_text, text_to_sequence
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
 from matcha.vocos.wrapper import load_vocoder as load_vocos
 from matcha.istftnet.wrapper import load_vocoder as load_istftnet
+from matcha.hifigan16k.wrapper import load_vocoder as load_hifigan16k
 
 MATCHA_URLS = {
     "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
@@ -28,10 +30,11 @@ MATCHA_URLS = {
 }
 
 VOCODER_URLS = {
-    "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",  # Old url: https://drive.google.com/file/d/14NENd4equCBLyyCSke114Mv6YR_j_uFs/view?usp=drive_link
-    "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",  # Old url: https://drive.google.com/file/d/1qpgI41wNXFcH-iKq1Y42JlBC9j0je8PW/view?usp=drive_link
+    "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
+    "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
+    "hifigan_16k": "speechbrain/tts-hifigan-libritts-16kHz",
     "vocos_mel_22khz": "BSC-LT/vocos-mel-22khz",
-    "iSTFTNet": "Uberduck/iSTFTNet",
+    "istftnet": "Uberduck/iSTFTNet",
 }
 
 MULTISPEAKER_MODEL = {
@@ -90,7 +93,7 @@ def ensure_vocoder_available(vocoder_name):
         vocoder_path = save_dir / f"{vocoder_name}"
         assert_model_downloaded(vocoder_path, vocoder_url)
         return vocoder_path
-    elif vocoder_name in ("vocos_mel_22khz", "iSTFTNet"):
+    elif vocoder_name in ("vocos_mel_22khz", "istftnet", "hifigan_16k"):
         return vocoder_url
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
@@ -110,11 +113,13 @@ def load_vocoder(vocoder_name, checkpoint_path_or_model_id, device):
         vocoder = load_hifigan(checkpoint_path_or_model_id, device)
         denoiser = Denoiser(vocoder, mode="zeros")
     elif vocoder_name == "vocos_mel_22khz":
-        vocoder = load_vocos(checkpoint_path_or_model_id, device)
+        vocoder = load_vocos(device=device)
         denoiser = None
-    elif vocoder_name == "iSTFTNet":
-        # Pass through model_id (from ensure_vocoder_available) and the selected device
-        vocoder = load_istftnet(model_id=checkpoint_path_or_model_id, device=device)
+    elif vocoder_name == "istftnet":
+        vocoder = load_istftnet(device=device)
+        denoiser = None
+    elif vocoder_name == "hifigan_16k":
+        vocoder = load_hifigan16k(device=device)
         denoiser = None
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
@@ -140,12 +145,12 @@ def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
     return audio.cpu().squeeze()
 
 
-def save_to_folder(filename: str, output: dict, folder: str):
+def save_to_folder(filename: str, output: dict, folder: str, sr: int = 22050):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
     plot_spectrogram_to_numpy(np.array(output["mel"].squeeze().float().cpu()), f"{filename}.png")
     np.save(folder / f"{filename}", output["mel"].cpu().numpy())
-    sf.write(folder / f"{filename}.wav", output["waveform"], 22050, "PCM_24")
+    sf.write(folder / f"{filename}.wav", output["waveform"], sr, "PCM_24")
     return folder.resolve() / f"{filename}.wav"
 
 
@@ -264,12 +269,29 @@ def cli():
     parser.add_argument(
         "--batch_size", type=int, default=32, help="Batch size only useful when --batched (default: 32)"
     )
+    parser.add_argument(
+        "--model_config",
+        type=str,
+        default="configs/model/matcha.yaml",
+        help="Path to model config (reads inference.sample_rate and inference.hop_length)",
+    )
 
     args = parser.parse_args()
 
     args = validate_args(args)
     device = get_device(args)
     print_config(args)
+
+    # Read inference-time audio params from model config
+    try:
+        cfg = OmegaConf.load(args.model_config) if args.model_config is not None else None
+        inf = cfg.get("inference", {}) if cfg is not None else {}
+        sr = int(inf.get("sample_rate", 22050))
+        hop_length = int(inf.get("hop_length", 256))
+    except Exception:
+        sr, hop_length = 22050, 256
+    print(f"\t- Inference sample rate: {sr}")
+    print(f"\t- Inference hop length: {hop_length}")
 
     # Always ensure vocoder is available (required for both custom and pretrained models)
     vocoder_path_or_id = ensure_vocoder_available(args.vocoder)
@@ -284,6 +306,12 @@ def cli():
         matcha_path = ensure_matcha_model_available(args)
 
     model = load_matcha(args.model, matcha_path, device)
+    # Attach inference-time audio params
+    setattr(model, "sample_rate", sr)
+    setattr(model, "hop_length", hop_length)
+    # Also expose on args for downstream functions
+    args.sr = sr
+    args.hop_length = hop_length
     vocoder, denoiser = load_vocoder(args.vocoder, vocoder_path_or_id, device)
 
     texts = get_texts(args)
@@ -344,7 +372,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * 22050 / (output["waveform"].shape[-1])
+        rtf_w = t * args.sr / (output["waveform"].shape[-1])
         print(f"[🍵-Batch: {i}] Matcha-TTS RTF: {output['rtf']:.4f}")
         print(f"[🍵-Batch: {i}] Matcha-TTS + VOCODER RTF: {rtf_w:.4f}")
         total_rtf.append(output["rtf"])
@@ -352,8 +380,8 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
         for j in range(output["mel"].shape[0]):
             base_name = f"utterance_{j:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{j:03d}"
             length = output["mel_lengths"][j]
-            new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * 256]}
-            location = save_to_folder(base_name, new_dict, args.output_folder)
+            new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * args.hop_length]}
+            location = save_to_folder(base_name, new_dict, args.output_folder, args.sr)
             print(f"[🍵-{j}] Waveform saved: {location}")
 
     print("".join(["="] * 100))
@@ -386,13 +414,13 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
         # RTF with HiFiGAN
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * 22050 / (output["waveform"].shape[-1])
+        rtf_w = t * args.sr / (output["waveform"].shape[-1])
         print(f"[🍵-{i}] Matcha-TTS RTF: {output['rtf']:.4f}")
         print(f"[🍵-{i}] Matcha-TTS + VOCODER RTF: {rtf_w:.4f}")
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, output, args.output_folder)
+        location = save_to_folder(base_name, output, args.output_folder, args.sr)
         print(f"[+] Waveform saved: {location}")
 
     print("".join(["="] * 100))

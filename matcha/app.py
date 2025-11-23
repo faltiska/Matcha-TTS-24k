@@ -5,6 +5,7 @@ from pathlib import Path
 import gradio as gr
 import soundfile as sf
 import torch
+from omegaconf import OmegaConf
 
 from matcha.cli import (
     MATCHA_URLS,
@@ -48,12 +49,27 @@ assert_model_downloaded(MATCHA_TTS_LOC("matcha_vctk"), MATCHA_URLS["matcha_vctk"
 
 device = get_device(args)
 
+# Read inference-time audio params from model config
+try:
+    _cfg = OmegaConf.load("configs/model/matcha.yaml")
+    _inf = _cfg.get("inference", {}) if _cfg is not None else {}
+    SR = int(_inf.get("sample_rate", 22050))
+    HOP = int(_inf.get("hop_length", 256))
+except Exception:
+    SR, HOP = 22050, 256
+
 # Load default model
 model = load_matcha(args.model, MATCHA_TTS_LOC(args.model), device)
+# Attach inference-time audio params for RTF math and I/O
+setattr(model, "sample_rate", SR)
+setattr(model, "hop_length", HOP)
 vocoder = load_vocoder(device)
 
 def load_model(model_name):
     model = load_matcha(model_name, MATCHA_TTS_LOC(model_name), device)
+    # Attach inference-time audio params for RTF math and I/O
+    setattr(model, "sample_rate", SR)
+    setattr(model, "hop_length", HOP)
     vocoder = load_vocoder(device)
     return model, vocoder
 
@@ -106,7 +122,7 @@ def synthesise_mel(text, text_length, n_timesteps, temperature, length_scale, sp
     )
     output["waveform"] = to_waveform(output["mel"], vocoder)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:
-        sf.write(fp.name, output["waveform"], 22050, "PCM_24")
+        sf.write(fp.name, output["waveform"], SR, "PCM_24")
 
     return fp.name, plot_tensor(output["mel"].squeeze().cpu().numpy())
 

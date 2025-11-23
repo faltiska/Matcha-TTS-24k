@@ -8,6 +8,7 @@ import numpy as np
 import onnxruntime as ort
 import soundfile as sf
 import torch
+from omegaconf import OmegaConf
 
 from matcha.cli import plot_spectrogram_to_numpy, process_text
 
@@ -21,7 +22,7 @@ def validate_args(args):
     return args
 
 
-def write_wavs(model, inputs, output_dir, external_vocoder=None):
+def write_wavs(model, inputs, output_dir, external_vocoder=None, sr=22050, hop_length=256):
     if external_vocoder is None:
         print("The provided model has the vocoder embedded in the graph.\nGenerating waveform directly")
         t0 = perf_counter()
@@ -39,7 +40,7 @@ def write_wavs(model, inputs, output_dir, external_vocoder=None):
         wavs = external_vocoder.run(None, vocoder_inputs)[0]
         vocoder_infer_secs = perf_counter() - vocoder_t0
         wavs = wavs.squeeze(1)
-        wav_lengths = mel_lengths * 256
+        wav_lengths = mel_lengths * hop_length
         infer_secs = mel_infer_secs + vocoder_infer_secs
 
     output_dir = Path(output_dir)
@@ -48,9 +49,9 @@ def write_wavs(model, inputs, output_dir, external_vocoder=None):
         output_filename = output_dir.joinpath(f"output_{i + 1}.wav")
         audio = wav[:wav_length]
         print(f"Writing audio to {output_filename}")
-        sf.write(output_filename, audio, 22050, "PCM_24")
+        sf.write(output_filename, audio, sr, "PCM_24")
 
-    wav_secs = wav_lengths.sum() / 22050
+    wav_secs = wav_lengths.sum() / sr
     print(f"Inference seconds: {infer_secs}")
     print(f"Generated wav seconds: {wav_secs}")
     rtf = infer_secs / wav_secs
@@ -63,7 +64,7 @@ def write_wavs(model, inputs, output_dir, external_vocoder=None):
     print(f"Overall RTF: {rtf}")
 
 
-def write_mels(model, inputs, output_dir):
+def write_mels(model, inputs, output_dir, sr=22050, hop_length=256):
     t0 = perf_counter()
     mels, mel_lengths = model.run(None, inputs)
     infer_secs = perf_counter() - t0
@@ -75,7 +76,7 @@ def write_mels(model, inputs, output_dir):
         plot_spectrogram_to_numpy(mel.squeeze(), output_stem.with_suffix(".png"))
         np.save(output_stem.with_suffix(".numpy"), mel)
 
-    wav_secs = (mel_lengths * 256).sum() / 22050
+    wav_secs = (mel_lengths * hop_length).sum() / sr
     print(f"Inference seconds: {infer_secs}")
     print(f"Generated wav seconds: {wav_secs}")
     rtf = infer_secs / wav_secs
@@ -115,8 +116,22 @@ def main():
         help="Output folder to save results (default: current dir)",
     )
 
+    parser.add_argument(
+        "--model-config",
+        type=str,
+        default="configs/model/matcha.yaml",
+        help="Path to model config (reads inference.sample_rate and inference.hop_length)",
+    )
     args = parser.parse_args()
     args = validate_args(args)
+    # Load inference-time audio params from model config
+    try:
+        cfg = OmegaConf.load(args.model_config) if args.model_config is not None else None
+        inf = cfg.get("inference", {}) if cfg is not None else {}
+        sr = int(inf.get("sample_rate", 22050))
+        hop_length = int(inf.get("hop_length", 256))
+    except Exception:
+        sr, hop_length = 22050, 256
 
     if args.gpu:
         providers = ["GPUExecutionProvider"]
@@ -154,14 +169,14 @@ def main():
 
     has_vocoder_embedded = model_outputs[0].name == "wav"
     if has_vocoder_embedded:
-        write_wavs(model, inputs, args.output_dir)
+        write_wavs(model, inputs, args.output_dir, sr=sr, hop_length=hop_length)
     elif args.vocoder:
         external_vocoder = ort.InferenceSession(args.vocoder, providers=providers)
-        write_wavs(model, inputs, args.output_dir, external_vocoder=external_vocoder)
+        write_wavs(model, inputs, args.output_dir, external_vocoder=external_vocoder, sr=sr, hop_length=hop_length)
     else:
         warn = "[!] A vocoder is not embedded in the graph nor an external vocoder is provided. The mel output will be written as numpy arrays to `*.npy` files in the output directory"
         warnings.warn(warn, UserWarning)
-        write_mels(model, inputs, args.output_dir)
+        write_mels(model, inputs, args.output_dir, sr=sr, hop_length=hop_length)
 
 
 if __name__ == "__main__":

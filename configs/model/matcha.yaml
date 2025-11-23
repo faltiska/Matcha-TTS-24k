@@ -28,3 +28,8 @@ use_pitch: true
 # - prior = 0.9
 lambda_pitch: 0.2
 
+# Inference-time audio params (used by CLI/app/onnx)
+# Keep defaults here; override per project if needed.
+inference:
+  sample_rate: 16000
+  hop_length: 256

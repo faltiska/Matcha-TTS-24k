@@ -39,6 +39,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         use_pitch=False,
         lambda_pitch=0.2,
         pitch=None,
+        inference=None,
     ):
         super().__init__()
 
@@ -55,6 +56,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.lambda_pitch = lambda_pitch
         # Accept and store optional nested config group (Hydra) to avoid unexpected kwarg errors
         self.pitch = pitch
+        self.inference = inference
 
         if n_spks > 1:
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -157,7 +159,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         t = (dt.datetime.now() - t).total_seconds()
-        rtf = t * 22050 / (decoder_outputs.shape[-1] * 256)
+        sr = getattr(self, "sample_rate", 22050)
+        hop = getattr(self, "hop_length", 256)
+        rtf = t * sr / (decoder_outputs.shape[-1] * hop)
 
         return {
             "encoder_outputs": encoder_outputs,
