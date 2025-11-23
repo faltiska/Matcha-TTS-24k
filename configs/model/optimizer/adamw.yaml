@@ -5,7 +5,7 @@ _partial_: true
 # reduced lr from 1e-4, because from epoch 2000 to 4000 I did not see any loss drop,
 # and I suspect I got stuck in a local minimum. I can also use an optimizer scheduler, 
 # to reduce the lr as the training progresses. 
-lr: 3e-5           
+lr: 1e-5           
 
 weight_decay: 1e-4
 betas: [0.9, 0.98]
