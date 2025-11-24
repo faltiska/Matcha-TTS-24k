@@ -32,7 +32,6 @@ MATCHA_URLS = {
 VOCODER_URLS = {
     "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
     "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
-    "hifigan_16k": "speechbrain/tts-hifigan-libritts-16kHz",
     "vocos_mel_22khz": "BSC-LT/vocos-mel-22khz",
     "istftnet": "Uberduck/iSTFTNet",
 }
@@ -93,7 +92,7 @@ def ensure_vocoder_available(vocoder_name):
         vocoder_path = save_dir / f"{vocoder_name}"
         assert_model_downloaded(vocoder_path, vocoder_url)
         return vocoder_path
-    elif vocoder_name in ("vocos_mel_22khz", "istftnet", "hifigan_16k"):
+    elif vocoder_name in ("vocos_mel_22khz", "istftnet"):
         return vocoder_url
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
@@ -117,9 +116,6 @@ def load_vocoder(vocoder_name, checkpoint_path_or_model_id, device):
         denoiser = None
     elif vocoder_name == "istftnet":
         vocoder = load_istftnet(device=device)
-        denoiser = None
-    elif vocoder_name == "hifigan_16k":
-        vocoder = load_hifigan16k(device=device)
         denoiser = None
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
