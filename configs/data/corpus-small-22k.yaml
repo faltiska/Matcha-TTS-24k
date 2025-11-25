@@ -1,0 +1,36 @@
+_target_: matcha.data.text_mel_datamodule.TextMelDataModule
+name: corpus-small-22k
+train_filelist_path: data/corpus-small-22k/train.csv
+valid_filelist_path: data/corpus-small-22k/validate.csv
+batch_size: 18
+num_workers: 16
+persistent_workers: true
+pin_memory: True
+cleaners: [english_cleaners2]
+add_blank: True
+n_spks: 1
+n_fft: 1024
+n_feats: 80
+sample_rate: 22050
+hop_length: 256
+win_length: 1024
+f_min: 0
+f_max: 8000 # I could use 11025 to improve the melodic quality, but it requires a vocoder trained with same value
+f0_fmin: 50.0
+f0_fmax: 1100.0
+seed: ${seed}
+load_durations: false
+
+data_statistics:
+  # Computed for my dataset with command:
+  #   matcha-data-stats -i corpus-small-22k-24k.yaml
+  mel_mean: -5.527719
+  mel_std: 2.823194
+  # Computed for my dataset with command:
+  #   python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-22k-24k.yaml
+  f0_mean: 0.0
+  f0_std: 1.0
+
+# Cached mel options (enable after running precompute script)
+mel_dir: data/corpus-small-22k/mels
+f0_dir: data/corpus-small-22k/f0

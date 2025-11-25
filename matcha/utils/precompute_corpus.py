@@ -22,8 +22,10 @@ import numpy as np
 import torch
 import torchaudio as ta
 
-from matcha.utils.audio import mel_spectrogram
 from matcha.utils.model import normalize
+
+# NEW: Import mel extractor factory
+from matcha.mel.extractors import get_mel_extractor
 
 
 def _load_yaml_config(path: Path) -> Dict[str, Any]:
@@ -64,19 +66,13 @@ def compute_and_save_mel(
     wav_path: Path,
     out_path: Path,
     sample_rate: int,
-    n_fft: int,
-    n_mels: int,
-    hop_length: int,
-    win_length: int,
-    f_min: float,
-    f_max: float,
     mel_mean: float,
     mel_std: float,
-    center: bool,
+    mel_extractor,  # <-- Now a function
 ) -> Tuple[bool, str, int]:
     """
-    Compute and save normalized mel spectrogram.
-    
+    Compute and save normalized mel spectrogram using a backend-agnostic extractor.
+
     Returns:
         Tuple of (success: bool, error_msg: str, mel_length: int)
     """
@@ -89,21 +85,7 @@ def compute_and_save_mel(
         return False, f"Sample rate mismatch for {wav_path} (found {sr}, expected {sample_rate})", 0
 
     try:
-        mel = (
-            mel_spectrogram(
-                audio,
-                n_fft,
-                n_mels,
-                sample_rate,
-                hop_length,
-                win_length,
-                f_min,
-                f_max,
-                center=center,  # must match training (TextMelDataset uses center=False)
-            )
-            .squeeze()
-            .cpu()
-        )
+        mel = mel_extractor(audio).squeeze().cpu()
         mel = normalize(mel, mel_mean, mel_std).cpu()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         arr = mel.numpy().astype(np.float32)
@@ -127,10 +109,10 @@ def compute_and_save_f0(
 ) -> Tuple[bool, str, int]:
     """
     Compute F0 exactly as TextMelDataset.get_f0() does, aligned to mel length.
-    
+
     Args:
         expected_len: The mel spectrogram length to align F0 to
-    
+
     Returns:
         Tuple of (success: bool, error_msg: str, frame_length: int)
     """
@@ -152,7 +134,7 @@ def compute_and_save_f0(
         win_len = int(min(5, max(1, int(expected_len))))
         if win_len % 2 == 0:
             win_len = max(1, win_len - 1)
-        
+
         # detect_pitch_frequency returns (channels, frames)
         f0 = ta.functional.detect_pitch_frequency(
             audio,
@@ -171,7 +153,7 @@ def compute_and_save_f0(
             f0 = f0[:expected_len]
 
         f0 = f0.unsqueeze(0)  # Add channel dimension: (1, T)
-        
+
         # Normalize F0
         # Only normalize non-zero values (voiced frames)
         f0_voiced = f0[f0 > 0]
@@ -183,7 +165,7 @@ def compute_and_save_f0(
             )
         else:
             f0_normalized = f0  # all zeros, keep as is
-        
+
         out_path.parent.mkdir(parents=True, exist_ok=True)
         arr = f0_normalized.cpu().numpy().astype(np.float32)
         np.save(out_path, arr)
@@ -250,12 +232,29 @@ def main():
     f_max = float(cfg["f_max"])
     mel_mean = float(data_stats["mel_mean"])
     mel_std = float(data_stats["mel_std"])
-    
+
     # F0 parameters (optional, with defaults)
     f0_fmin = float(cfg.get("f0_fmin", 50.0))
     f0_fmax = float(cfg.get("f0_fmax", 1100.0))
     f0_mean = float(data_stats.get("f0_mean", 0.0))
     f0_std = float(data_stats.get("f0_std", 1.0))
+
+    # ---- NEW: read mel_backend for extractor selection ----
+    mel_backend = cfg.get("mel_backend", "hifigan")
+    # Instantiate the backend-agnostic mel extractor here, once
+    mel_extractor = get_mel_extractor(
+        mel_backend,
+        sample_rate=sample_rate,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        win_length=win_length,
+        n_mels=n_mels,
+        f_min=f_min,
+        f_max=f_max,
+    )
+    print(f"[precompute_corpus] Using mel_backend: {mel_backend} "
+          f"with params: sample_rate={sample_rate}, n_fft={n_fft}, hop_length={hop_length}, "
+          f"win_length={win_length}, n_mels={n_mels}, f_min={f_min}, f_max={f_max}")
 
     # Gather unique wavs from the train + valid filelists
     wavs: List[Path] = []
@@ -285,9 +284,6 @@ def main():
     print(f"[precompute_corpus] Output: {mel_dir}")
     print(f"[precompute_corpus] Files: {total} (train+valid)")
 
-    # center must match training usage in TextMelDataset.get_mel (center=False)
-    center = False
-
     for i, wav_path in enumerate(unique_wavs, start=1):
         stem = wav_path.stem
         out_path = mel_dir / f"{stem}.npy"
@@ -295,15 +291,9 @@ def main():
             wav_path=wav_path,
             out_path=out_path,
             sample_rate=sample_rate,
-            n_fft=n_fft,
-            n_mels=n_mels,
-            hop_length=hop_length,
-            win_length=win_length,
-            f_min=f_min,
-            f_max=f_max,
             mel_mean=mel_mean,
             mel_std=mel_std,
-            center=center,
+            mel_extractor=mel_extractor,  # Pass backend-agnostic extractor
         )
         if success:
             ok += 1
@@ -322,7 +312,16 @@ def main():
         "win_length": win_length,
         "f_min": f_min,
         "f_max": f_max,
-        "center": center,
+        "mel_backend": mel_backend,  # <--- NEW: record mel backend used
+        "mel_extractor_params": {
+            "sample_rate": sample_rate,
+            "n_fft": n_fft,
+            "n_mels": n_mels,
+            "hop_length": hop_length,
+            "win_length": win_length,
+            "f_min": f_min,
+            "f_max": f_max,
+        },
         "mel_mean": mel_mean,
         "mel_std": mel_std,
         "num_files": total,
@@ -348,6 +347,7 @@ def main():
         print(f"[precompute_f0] F0 params: fmin={f0_fmin}, fmax={f0_fmax}")
         print(f"[precompute_f0] F0 stats (for normalization): mean={f0_mean}, std={f0_std}")
 
+
         f0_dir.mkdir(parents=True, exist_ok=True)
         f0_ok = 0
         f0_failures = []
@@ -355,16 +355,16 @@ def main():
         for i, wav_path in enumerate(unique_wavs, start=1):
             stem = wav_path.stem
             mel_npy_path = mel_dir / f"{stem}.npy"
-            
+
             # Load the corresponding mel to get its length
             if not mel_npy_path.exists():
                 print(f"[precompute_f0] ERROR: Mel not found for {wav_path}")
                 f0_failures.append((wav_path.as_posix(), "Corresponding mel file not found"))
                 continue
-            
+
             mel_arr = np.load(mel_npy_path)
             mel_length = mel_arr.shape[-1]
-            
+
             out_path = f0_dir / f"{stem}.npy"
             success, msg, _ = compute_and_save_f0(
                 wav_path=wav_path,

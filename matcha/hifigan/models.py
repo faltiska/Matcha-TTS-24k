@@ -368,18 +368,11 @@ def generator_loss(disc_outputs):
     return loss, gen_losses
 
 
+
 if __name__ == "__main__":
-    # CLI entrypoint to test HiFiGAN vocoder quality on a given WAV.
-    # Steps:
-    # 1) Load WAV, resample to training SR, normalize like training (peak norm * 0.95)
-    # 2) Compute mel with the same params as training
-    # 3) Run HiFiGAN Generator and optionally apply denoiser
-    # 4) Save to project root (default: vocoder-test.wav)
-    # 5) Print timing, RT factor, and mel time-alignment check
+    # CLI entrypoint to test HiFiGAN vocoder quality on a given WAV or a mel (.npy), fully YAML-driven.
     import argparse
     import os
-    import random
-    from types import SimpleNamespace
 
     import numpy as np
     import torch
@@ -394,19 +387,21 @@ if __name__ == "__main__":
             "librosa is required for this test script. Please install it (pip install librosa)."
         ) from e
 
-    from matcha.hifigan.config import v1 as _cfg_v1
+    from types import SimpleNamespace
     from matcha.hifigan.denoiser import Denoiser
     from matcha.utils.audio import MAX_WAV_VALUE
     from matcha.mel.extractors import get_mel_extractor
     from matcha.cli import assert_required_models_available, VOCODER_URLS
 
-    parser = argparse.ArgumentParser(description="Test HiFiGAN vocoder on a WAV file")
-    parser.add_argument("--wav", type=str, required=True, help="Path to input WAV file")
+    parser = argparse.ArgumentParser(description="Test HiFiGAN vocoder: use corpus YAML, accept wav or mel.")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--vocoder-id", type=str, choices=list(VOCODER_URLS.keys()), help="Pretrained vocoder ID to use (downloads to user data dir if needed)")
+    group.add_argument("--wav", type=str, help="Input WAV file to extract mel from (corpus config used for all params)")
+    group.add_argument("--mel", type=str, help="Input precomputed mel numpy file (.npy) from precompute_corpus (corpus config used for all params)")
+    parser.add_argument("--vocoder-id", type=str, required=True, choices=list(VOCODER_URLS.keys()), help="Pretrained vocoder ID (will be downloaded to user data dir if needed)")
+    parser.add_argument("--data-config", "-c", required=True, type=str, help="Path to corpus data YAML (as used by precompute_corpus). All params (mel_mean, mel_std, sample_rate, n_feats, n_fft, hop_length, win_length, f_min, f_max) ARE TAKEN FROM THIS FILE.")
     default_out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "vocoder-test.wav"))
     parser.add_argument("--out", type=str, default=default_out, help="Output WAV path (default: project_root/vocoder-test.wav)")
-    parser.add_argument("--device", type=str, choices=["auto", "cuda", "cpu"], default="auto", help="Device to run on")
+    parser.add_argument("--device", type=str, choices=["auto", "cuda", "cpu"], default="auto", help="Device for inference (default: auto)")
     parser.add_argument("--remove-weight-norm", action="store_true", help="Remove weight norm from generator for inference speed")
     parser.add_argument("--denoise", action="store_true", help="Apply HiFi-GAN denoiser (bias removal) after generation")
     parser.add_argument("--denoise-strength", type=float, default=0.0005, help="Denoiser strength (default: 5e-4)")
@@ -415,7 +410,6 @@ if __name__ == "__main__":
 
     # Seed & cuDNN flags for reproducibility
     seed = 1234
-    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -423,8 +417,29 @@ if __name__ == "__main__":
     cudnn.benchmark = False
     cudnn.deterministic = True
 
-    # Prepare config as attribute namespace (Generator expects attribute access)
-    h = SimpleNamespace(**_cfg_v1)
+    # Load and display corpus config
+    import yaml
+    from pathlib import Path
+    cfg_path = Path(args.data_config).resolve()
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    print(f"[hifigan-test] Loaded corpus data config: {cfg_path}")
+
+    # Extract all params ONLY from YAML
+    try:
+        mel_mean = float(config["data_statistics"]["mel_mean"])
+        mel_std = float(config["data_statistics"]["mel_std"])
+        sample_rate = int(config["sample_rate"])
+        n_feats = int(config["n_feats"])
+        n_fft = int(config["n_fft"])
+        hop_length = int(config["hop_length"])
+        win_length = int(config["win_length"])
+        f_min = float(config["f_min"])
+        f_max = float(config["f_max"])
+    except Exception as e:
+        raise RuntimeError(f"Config file missing required fields for HiFiGAN test. Required: sample_rate, n_feats, n_fft, hop_length, win_length, f_min, f_max, data_statistics.mel_mean, data_statistics.mel_std\n{e}")
+
+    print(f"[hifigan-test] Effective params: sr={sample_rate}, n_feats={n_feats}, mel_mean={mel_mean}, mel_std={mel_std}, n_fft={n_fft}, hop_length={hop_length}, win_length={win_length}, f_min={f_min}, f_max={f_max}")
 
     # Device selection
     if args.device == "cuda":
@@ -433,54 +448,84 @@ if __name__ == "__main__":
         device = "cpu"
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[hifigan-test] device={device}")
 
-    print(f"[vocoder-test] device={device}")
+    # Load vocoder weights from user data dir if needed
+    _ns = SimpleNamespace(checkpoint_path="", model="matcha_ljspeech", vocoder=args.vocoder_id)
+    paths = assert_required_models_available(_ns)
+    ckpt_path = str(paths["vocoder"])
+    print(f"[hifigan-test] using vocoder_id '{args.vocoder_id}' -> {ckpt_path}")
 
-    y, _ = librosa.load(args.wav, sr=h.sampling_rate)
-    y = librosa_normalize(y) * 0.95 # matches what we do during training
-    y_t = torch.from_numpy(y).float().unsqueeze(0).to(device)
-
-    # Compute mel with training params (factory-aligned extractor)
-    with torch.no_grad():
-        mel_extractor = get_mel_extractor(
-            "hifigan",
-            sample_rate=h.sampling_rate,
-            n_fft=h.n_fft,
-            hop_length=h.hop_size,
-            win_length=h.win_size,
-            n_mels=h.num_mels,
-            f_min=h.fmin,
-            f_max=h.fmax,
-        )
-        mel = mel_extractor(y_t)
-    print(f"[vocoder-test] mel shape: {tuple(mel.shape)}")
-
+    # Build generator
+    from matcha.hifigan.config import v1 as _cfg_v1
+    h = SimpleNamespace(**_cfg_v1)
+    h.sampling_rate = sample_rate
+    h.num_mels = n_feats
+    h.n_fft = n_fft
+    h.hop_size = hop_length
+    h.win_size = win_length
+    h.fmin = f_min
+    h.fmax = f_max
     generator = Generator(h).to(device)
-    if hasattr(args, "vocoder_id") and args.vocoder_id is not None:
-        _ns = SimpleNamespace(checkpoint_path="", model="matcha_ljspeech", vocoder=args.vocoder_id)
-        paths = assert_required_models_available(_ns)
-        ckpt_path = str(paths["vocoder"])
-        print(f"[vocoder-test] using vocoder id '{args.vocoder_id}' -> {ckpt_path}")
+
     ckpt = torch.load(ckpt_path, map_location=device)
     state = ckpt.get("generator", ckpt.get("state_dict", ckpt))
-
     missing, unexpected = generator.load_state_dict(state, strict=False)
     if missing:
-        print(f"[vocoder-test] Missing keys when loading state_dict: {missing}")
+        print(f"[hifigan-test] Missing keys when loading state_dict: {missing}")
     if unexpected:
-        print(f"[vocoder-test] Unexpected keys when loading state_dict: {unexpected}")
+        print(f"[hifigan-test] Unexpected keys when loading state_dict: {unexpected}")
 
     generator.eval()
     if args.remove_weight_norm:
-        print("[vocoder-test] Removing weight norm for inference")
+        print("[hifigan-test] Removing weight norm for inference")
         generator.remove_weight_norm()
 
-    # Inference
+    # Load or extract mel, apply normalization and denormalization logic as for vocos24k
+    if args.mel is not None:
+        if not os.path.exists(args.mel):
+            raise FileNotFoundError(f"Specified mel file does not exist: {args.mel}")
+        print(f"[hifigan-test] Loading mel from npy: {args.mel}")
+        mel = np.load(args.mel)
+        if mel.ndim == 2:
+            mel = mel[np.newaxis, ...]
+        # Denormalize, as wrapper.py
+        print(f"[hifigan-test] Denormalizing mel using mean={mel_mean}, std={mel_std}")
+        mel = mel * mel_std + mel_mean
+        mel = torch.from_numpy(mel).float().to(device)
+        print(f"[hifigan-test] Loaded mel shape: {tuple(mel.shape)}")
+    elif args.wav is not None:
+        y, _ = librosa.load(args.wav, sr=sample_rate)
+        y = librosa_normalize(y) * 0.95
+        y_t = torch.from_numpy(y).float().unsqueeze(0).to(device)
+        mel_extractor = get_mel_extractor(
+            "hifigan",
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=win_length,
+            n_mels=n_feats,
+            f_min=f_min,
+            f_max=f_max,
+        )
+        mel = mel_extractor(y_t).cpu().numpy()
+        print(f"[hifigan-test] Extracted mel (factory: hifigan) shape: {tuple(mel.shape)}")
+        # Normalize and then denormalize (testing full train/infer symmetry)
+        print(f"[hifigan-test] Normalizing mel with mean={mel_mean}, std={mel_std}")
+        mel = (mel - mel_mean) / mel_std
+        print(f"[hifigan-test] Denormalizing mel using mean={mel_mean}, std={mel_std} (restores to vocoder expected domain)")
+        mel = mel * mel_std + mel_mean
+        mel = torch.from_numpy(mel).float().to(device)
+        print(f"[hifigan-test] Final (denormalized) mel shape: {tuple(mel.shape)}")
+    else:
+        raise ValueError("You must provide either --wav or --mel")
+
+    # Synthesize waveform
     with torch.no_grad():
         y_hat = generator(mel).squeeze(0).squeeze(0)  # [T]
 
     if args.denoise:
-        print(f"[vocoder-test] Applying denoiser (strength={args.denoise_strength})")
+        print(f"[hifigan-test] Applying denoiser (strength={args.denoise_strength})")
         denoiser = Denoiser(generator)
         y_hat = denoiser(y_hat.unsqueeze(0), strength=args.denoise_strength).squeeze(0)
 
@@ -489,5 +534,5 @@ if __name__ == "__main__":
     y_np = np.clip(y_np, -1.0, 1.0)
     wav_int16 = (y_np * MAX_WAV_VALUE).astype(np.int16)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    wav_write(args.out, h.sampling_rate, wav_int16)
-    print(f"[vocoder-test] Reconstituted file saved to: {args.out}")
+    wav_write(args.out, sample_rate, wav_int16)
+    print(f"[hifigan-test] Reconstituted file saved to: {args.out}")

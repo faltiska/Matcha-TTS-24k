@@ -22,11 +22,13 @@ python -m matcha.cli --text "Are you listening?"
 I have added a new Vocoder, Vocos, used with a model trained on 24KHz audio.  
 I have also added code to test the vocoders, using these commands:
 ```
-python -m matcha.hifigan.models --wav input.wav --vocoder-id hifigan_T2_v1
+python -m matcha.hifigan.models --wav input.wav --data-config  configs/data/corpus.yaml --vocoder-id hifigan_T2_v1
+python -m matcha.hifigan.models --mel input.mel --data-config  configs/data/corpus.yaml --vocoder-id hifigan_T2_v1
 ```
 which will output a file called vocoder-test.wav in the project root.
 ```
-python -m matcha.vocos24k.wrapper --wav input.wav
+python -m matcha.vocos24k.wrapper --wav input.wav --data-config  configs/data/corpus.yaml
+python -m matcha.vocos24k.wrapper --mel input.mel --data-config  configs/data/corpus.yaml
 ```
 which will output a file called vocoder-test24k.wav
 
