@@ -16,8 +16,16 @@ win_length: 1024
 f_min: 0
 f_max: 12000
 mel_backend: vocos24k
-data_statistics:
-  mel_mean: 0.0
-  mel_std: 1.0
 seed: ${seed}
 load_durations: false
+
+# Computed for my dataset with command matcha-data-stats -i corpus-small-24k.yaml
+data_statistics:
+  mel_mean: 0.07517392188310623
+  mel_std: 1.0012329816818237
+  f0_mean: 0.0
+  f0_std: 1.0
+
+# Cached mel/f0 folders (enable after running precompute script)
+mel_dir: data/corpus-small-24k/mels
+f0_dir: data/corpus-small-24k/f0
