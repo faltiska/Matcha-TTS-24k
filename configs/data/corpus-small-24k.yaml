@@ -18,17 +18,15 @@ f_max: 12000
 seed: ${seed}
 load_durations: false
 
+# Computed for my dataset with command:
+#   matcha-data-stats -i corpus-small-24k.yaml
 data_statistics:
-  # Computed for my dataset with command:
-  #   matcha-data-stats -i corpus-small-24k.yaml
-  mel_mean: -5.794886589050293
-  mel_std: 2.8128933906555176
-  # Computed for my dataset with command:
-  #   python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-24k.yaml
-  f0_mean: 0.0
-  f0_std: 1.0
+  mel_mean: -1.7744582891464233
+  mel_std: 4.116815090179443
+  f0_mean: 248.1585693359375
+  f0_std: 297.7625427246094
 
-# Cached mel/f0 folders (enable after running precompute script)
+# Cache folders (the precompute script will put mels and pitch files here)
 mel_dir: data/corpus-small-24k/mels
 f0_dir: data/corpus-small-24k/f0
 
