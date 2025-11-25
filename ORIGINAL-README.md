@@ -1,6 +1,7 @@
 <div align="center">
 
 # 🍵 Matcha-TTS: A fast TTS architecture with conditional flow matching
+nditional flow matching
 
 ### [Shivam Mehta](https://www.kth.se/profile/smehta), [Ruibo Tu](https://www.kth.se/profile/ruibo), [Jonas Beskow](https://www.kth.se/profile/beskow), [Éva Székely](https://www.kth.se/profile/szekely), and [Gustav Eje Henter](https://people.kth.se/~ghe/)
 
@@ -41,11 +42,8 @@ You can also [try 🍵 Matcha-TTS in your browser on HuggingFace 🤗 spaces](ht
 1. Create an environment (suggested but optional)
 
 ```
-sudo apt update
-sudo apt install build-essential python3-dev
-uv venv --python 3.10
-uv pip install torch torchaudio torchvision torchmetrics torchcodec --index-url https://download.pytorch.org/whl/cu130
-source .venv/bin/activate
+conda create -n matcha-tts python=3.10 -y
+conda activate matcha-tts
 ```
 
 2. Install Matcha TTS using pip or from source
@@ -146,7 +144,7 @@ valid_filelist_path: data/filelists/ljs_audio_text_val_filelist.txt
 5. Generate normalisation statistics with the yaml file of dataset configuration
 
 ```bash
-matcha-data-stats -i your-corpus.yaml
+matcha-data-stats -i ljspeech.yaml
 # Output:
 #{'mel_mean': -5.53662231756592, 'mel_std': 2.1161014277038574}
 ```
@@ -163,64 +161,32 @@ to the paths of your train and validation filelists.
 
 6. Run the training script
 
-Edit the configs/train.yaml and point to your corpus, then run:
-
-```bash
-python matcha/train.py trainer.precision=bf16-mixed
-```
-then monitor it with:
-```bash
-uv pip install tensorflow
-tensorboard --logdir=logs/train/your-corpus/runs/2025-11-16_12-55-43/tensorboard/version_0
-```
-
 ```bash
 make train-ljspeech
 ```
+
 or
+
 ```bash
 python matcha/train.py experiment=ljspeech
 ```
 
 - for a minimum memory run
+
 ```bash
 python matcha/train.py experiment=ljspeech_min_memory
 ```
 
 - for multi-gpu training, run
+
 ```bash
 python matcha/train.py experiment=ljspeech trainer.devices=[0,1]
 ```
 
-### Optional: Precompute mel spectrogram cache
-
-You can speed up training by precomputing and caching normalized mel-spectrograms. This avoids recomputing mels every epoch and reduces data-loading overhead.
-
-1) Generate the mel cache:
-```bash
-python -m matcha.utils.precompute_mels -i configs/data/your-corpus.yaml
-```
-
-2) Enable cached mels and persistent workers in your data config (your-corpus.yaml):
-```yaml
-persistent_workers: true
-use_cached_mels: true
-mel_dir: data/your-corpus/mels
-```
-
-Note:
-- The cache is only valid if mel parameters (sr, n_fft, n_mels, hop, win, fmin, fmax, center) and normalization stats match your training config.
-- Cached mels are saved already normalized using the provided mean/std.
-
 7. Synthesise from the custom trained model
+
 ```bash
 matcha-tts --text "<INPUT TEXT>" --checkpoint_path <PATH TO CHECKPOINT>
-
-matcha-tts --text "It was a dark and stormy night; the rain fell in torrents, except at occasional intervals, when it was checked by a violent gust of wind that swept up the streets (for it is in London that our scene lies), rattling along the housetops, and fiercely agitating the scanty flame of the lamps that struggled against the darkness." \
---checkpoint_path logs/train/your-corpus/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_univ_v1 --steps 50
-
-matcha-tts --text "It was a dark and stormy night; the rain fell in torrents, except at occasional intervals, when it was checked by a violent gust of wind that swept up the streets (for it is in London that our scene lies), rattling along the housetops, and fiercely agitating the scanty flame of the lamps that struggled against the darkness." \
---checkpoint_path logs/train/your-corpus/runs/2025-11-16_16-33-03/checkpoints/checkpoint_epoch=999.ckpt --vocoder hifigan_T2_v1 --steps 50
 ```
 
 ## ONNX support
@@ -348,26 +314,3 @@ Other source code we would like to acknowledge:
 - [Grad-TTS](https://github.com/huawei-noah/Speech-Backbones/tree/main/Grad-TTS): For the monotonic alignment search source code
 - [torchdyn](https://github.com/DiffEqML/torchdyn): Useful for trying other ODE solvers during research and development
 - [labml.ai](https://nn.labml.ai/transformers/rope/index.html): For the RoPE implementation
-
-## Configuring the trainer
-When you run `python matcha/train.py`, Hydra loads configs in this order:
-1. __`configs/train.yaml`__ (the main default config)
-    - Sets `data: your-corpus` → loads `configs/data/your-corpus.yaml`
-    - Sets `model: matcha` → loads `configs/model/matcha.yaml`
-    - Sets `experiment: null` → no experiment config loaded
-
-2. __Experiment configs__ (optional override)
-    - If you run `python matcha/train.py experiment=ljspeech`, it loads `configs/experiment/ljspeech.yaml`
-    - This can override other configs (e.g., the ljspeech experiment overrides the data to use ljspeech.yaml instead)
-
-
-## Improvements
-
-Compared to the original MatchaTTS, I did the following:
-- I have increased the decoder model capacity
-- I have switched to an AdamW optimizer
-- I have added Vocos
-- I have increased the TextEncoder model size
-- I have added an F0 (pitch) extractor
-- I have implemented a corpus mel and pitch precomputation script.
-- I have included a matmul precision auto-config

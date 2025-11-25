@@ -4,25 +4,19 @@ import os
 import warnings
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")  # Use non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 import torch
-from omegaconf import OmegaConf
 
 from matcha.hifigan.config import v1
 from matcha.hifigan.denoiser import Denoiser
 from matcha.hifigan.env import AttrDict
 from matcha.hifigan.models import Generator as HiFiGAN
-
 from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, text_to_sequence
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
-from matcha.vocos.wrapper import load_vocoder as load_vocos
-from matcha.istftnet.wrapper import load_vocoder as load_istftnet
-from matcha.hifigan16k.wrapper import load_vocoder as load_hifigan16k
+from matcha.vocos24k.wrapper import load_model as load_vocos_24k
 
 MATCHA_URLS = {
     "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
@@ -32,8 +26,7 @@ MATCHA_URLS = {
 VOCODER_URLS = {
     "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
     "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
-    "vocos_mel_22khz": "BSC-LT/vocos-mel-22khz",
-    "istftnet": "Uberduck/iSTFTNet",
+    "vocos_24k": "https://huggingface.co/charactr/vocos-mel-24khz",
 }
 
 MULTISPEAKER_MODEL = {
@@ -77,25 +70,18 @@ def get_texts(args):
     return texts
 
 
-def ensure_matcha_model_available(args):
-    """Download and return path to the Matcha model (only for pretrained models)."""
+def assert_required_models_available(args):
     save_dir = get_user_data_dir()
-    model_path = save_dir / f"{args.model}.ckpt"
-    assert_model_downloaded(model_path, MATCHA_URLS[args.model])
-    return model_path
-
-
-def ensure_vocoder_available(vocoder_name):
-    vocoder_url = VOCODER_URLS[vocoder_name]
-    if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
-        save_dir = get_user_data_dir()
-        vocoder_path = save_dir / f"{vocoder_name}"
-        assert_model_downloaded(vocoder_path, vocoder_url)
-        return vocoder_path
-    elif vocoder_name in ("vocos_mel_22khz", "istftnet"):
-        return vocoder_url
+    if not hasattr(args, "checkpoint_path") and args.checkpoint_path is None:
+        model_path = args.checkpoint_path
     else:
-        raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
+        model_path = save_dir / f"{args.model}.ckpt"
+        assert_model_downloaded(model_path, MATCHA_URLS[args.model])
+
+    vocoder_path = save_dir / f"{args.vocoder}"
+    assert_model_downloaded(vocoder_path, VOCODER_URLS[args.vocoder])
+    return {"matcha": model_path, "vocoder": vocoder_path}
+
 
 def load_hifigan(checkpoint_path, device):
     h = AttrDict(v1)
@@ -105,20 +91,19 @@ def load_hifigan(checkpoint_path, device):
     hifigan.remove_weight_norm()
     return hifigan
 
-def load_vocoder(vocoder_name, checkpoint_path_or_model_id, device):
-    print(f"[!] Loading {vocoder_name}!")
 
+def load_vocoder(vocoder_name, checkpoint_path, device):
+    print(f"[!] Loading {vocoder_name}!")
     if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
-        vocoder = load_hifigan(checkpoint_path_or_model_id, device)
+        vocoder = load_hifigan(checkpoint_path, device)
         denoiser = Denoiser(vocoder, mode="zeros")
-    elif vocoder_name == "vocos_mel_22khz":
-        vocoder = load_vocos(device=device)
-        denoiser = None
-    elif vocoder_name == "istftnet":
-        vocoder = load_istftnet(device=device)
+    elif vocoder_name == "vocos_24k":
+        vocoder = load_vocos_24k(device)
         denoiser = None
     else:
-        raise NotImplementedError(f"Vocoder {vocoder_name} not implemented! Available vocoders: {VOCODER_URLS}")
+        raise NotImplementedError(
+            f"Vocoder {vocoder_name} not implemented! define a load_<<vocoder_name>> method for it"
+        )
 
     print(f"[+] {vocoder_name} loaded!")
     return vocoder, denoiser
@@ -141,18 +126,18 @@ def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
     return audio.cpu().squeeze()
 
 
-def save_to_folder(filename: str, output: dict, folder: str, sr: int = 22050):
+def save_to_folder(filename: str, output: dict, folder: str, sample_rate: int = 22050):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
     plot_spectrogram_to_numpy(np.array(output["mel"].squeeze().float().cpu()), f"{filename}.png")
     np.save(folder / f"{filename}", output["mel"].cpu().numpy())
-    sf.write(folder / f"{filename}.wav", output["waveform"], sr, "PCM_24")
+    sf.write(folder / f"{filename}.wav", output["waveform"], sample_rate, "PCM_24")
     return folder.resolve() / f"{filename}.wav"
 
 
 def validate_args(args):
     assert (
-            args.text or args.file
+        args.text or args.file
     ), "Either text or file must be provided Matcha-T(ea)TTS need sometext to whisk the waveforms."
     assert args.temperature >= 0, "Sampling temperature cannot be negative"
     assert args.steps > 0, "Number of ODE steps must be greater than 0"
@@ -165,6 +150,11 @@ def validate_args(args):
         if args.model in MULTISPEAKER_MODEL:
             args = validate_args_for_multispeaker_model(args)
     else:
+        # When using a custom model
+        if args.vocoder is None:
+            args.vocoder = "hifigan_T2_v1"
+            warn_ = f"[-] Using custom model checkpoint, but no vocoder specified, defaulting to {args.vocoder}."
+            warnings.warn(warn_, UserWarning)
         if args.speaking_rate is None:
             args.speaking_rate = 1.0
 
@@ -176,13 +166,20 @@ def validate_args(args):
 
 
 def validate_args_for_multispeaker_model(args):
+    if args.vocoder is not None:
+        if args.vocoder != MULTISPEAKER_MODEL[args.model]["vocoder"]:
+            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {MULTISPEAKER_MODEL[args.model]['vocoder']}"
+            warnings.warn(warn_, UserWarning)
+    else:
+        args.vocoder = MULTISPEAKER_MODEL[args.model]["vocoder"]
+
     if args.speaking_rate is None:
         args.speaking_rate = MULTISPEAKER_MODEL[args.model]["speaking_rate"]
 
     spk_range = MULTISPEAKER_MODEL[args.model]["spk_range"]
     if args.spk is not None:
         assert (
-                args.spk >= spk_range[0] and args.spk <= spk_range[-1]
+            args.spk >= spk_range[0] and args.spk <= spk_range[-1]
         ), f"Speaker ID must be between {spk_range} for this model."
     else:
         available_spk_id = MULTISPEAKER_MODEL[args.model]["spk"]
@@ -194,6 +191,13 @@ def validate_args_for_multispeaker_model(args):
 
 
 def validate_args_for_single_speaker_model(args):
+    if args.vocoder is not None:
+        if args.vocoder != SINGLESPEAKER_MODEL[args.model]["vocoder"]:
+            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {SINGLESPEAKER_MODEL[args.model]['vocoder']}"
+            warnings.warn(warn_, UserWarning)
+    else:
+        args.vocoder = SINGLESPEAKER_MODEL[args.model]["vocoder"]
+
     if args.speaking_rate is None:
         args.speaking_rate = SINGLESPEAKER_MODEL[args.model]["speaking_rate"]
 
@@ -228,9 +232,9 @@ def cli():
     parser.add_argument(
         "--vocoder",
         type=str,
-        default="hifigan_univ_v1",
+        default=None,
         help="Vocoder to use (default: will use the one suggested with the pretrained model))",
-        choices=VOCODER_URLS,
+        choices=VOCODER_URLS.keys(),
     )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
@@ -265,50 +269,27 @@ def cli():
     parser.add_argument(
         "--batch_size", type=int, default=32, help="Batch size only useful when --batched (default: 32)"
     )
-    parser.add_argument(
-        "--model_config",
-        type=str,
-        default="configs/model/matcha.yaml",
-        help="Path to model config (reads inference.sample_rate and inference.hop_length)",
-    )
 
     args = parser.parse_args()
 
     args = validate_args(args)
     device = get_device(args)
     print_config(args)
-
-    # Read inference-time audio params from model config
-    try:
-        cfg = OmegaConf.load(args.model_config) if args.model_config is not None else None
-        inf = cfg.get("inference", {}) if cfg is not None else {}
-        sr = int(inf.get("sample_rate", 22050))
-        hop_length = int(inf.get("hop_length", 256))
-    except Exception:
-        sr, hop_length = 22050, 256
-    print(f"\t- Inference sample rate: {sr}")
-    print(f"\t- Inference hop length: {hop_length}")
-
-    # Always ensure vocoder is available (required for both custom and pretrained models)
-    vocoder_path_or_id = ensure_vocoder_available(args.vocoder)
+    paths = assert_required_models_available(args)
 
     if args.checkpoint_path is not None:
-        # Use custom model checkpoint
         print(f"[🍵] Loading custom model from {args.checkpoint_path}")
-        matcha_path = args.checkpoint_path
+        paths["matcha"] = args.checkpoint_path
         args.model = "custom_model"
-    else:
-        # Download and use pretrained model
-        matcha_path = ensure_matcha_model_available(args)
 
-    model = load_matcha(args.model, matcha_path, device)
-    # Attach inference-time audio params
-    setattr(model, "sample_rate", sr)
-    setattr(model, "hop_length", hop_length)
-    # Also expose on args for downstream functions
-    args.sr = sr
-    args.hop_length = hop_length
-    vocoder, denoiser = load_vocoder(args.vocoder, vocoder_path_or_id, device)
+    model = load_matcha(args.model, paths["matcha"], device)
+    # Enforce mel/vocoder compatibility based on training-time backend saved in the model
+    model_backend = getattr(model, "mel_backend", "hifigan")
+    if model_backend == "vocos24k" and args.vocoder != "vocos_24k":
+        raise ValueError("Model was trained with mel_backend='vocos24k' but a non-Vocos vocoder was selected. Use --vocoder vocos_24k.")
+    if model_backend == "hifigan" and args.vocoder == "vocos_24k":
+        raise ValueError("Model was trained with mel_backend='hifigan' but Vocos vocoder was selected. Use a HiFi-GAN vocoder.")
+    vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
 
     texts = get_texts(args)
 
@@ -346,6 +327,9 @@ def batched_collate_fn(batch):
 def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf = []
     total_rtf_w = []
+    # Use correct sample rate based on model's mel backend
+    model_backend = getattr(model, "mel_backend", "hifigan")
+    sample_rate = 24000 if model_backend == "vocos24k" else 22050
     processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
     dataloader = torch.utils.data.DataLoader(
         BatchedSynthesisDataset(processed_text),
@@ -368,7 +352,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * args.sr / (output["waveform"].shape[-1])
+        rtf_w = t * sample_rate / (output["waveform"].shape[-1])
         print(f"[🍵-Batch: {i}] Matcha-TTS RTF: {output['rtf']:.4f}")
         print(f"[🍵-Batch: {i}] Matcha-TTS + VOCODER RTF: {rtf_w:.4f}")
         total_rtf.append(output["rtf"])
@@ -376,8 +360,8 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
         for j in range(output["mel"].shape[0]):
             base_name = f"utterance_{j:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{j:03d}"
             length = output["mel_lengths"][j]
-            new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * args.hop_length]}
-            location = save_to_folder(base_name, new_dict, args.output_folder, args.sr)
+            new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * 256]}
+            location = save_to_folder(base_name, new_dict, args.output_folder, sample_rate)
             print(f"[🍵-{j}] Waveform saved: {location}")
 
     print("".join(["="] * 100))
@@ -389,6 +373,9 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf = []
     total_rtf_w = []
+    # Use correct sample rate based on model's mel backend
+    model_backend = getattr(model, "mel_backend", "hifigan")
+    sample_rate = 24000 if model_backend == "vocos24k" else 22050
     for i, text in enumerate(texts):
         i = i + 1
         base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"
@@ -408,15 +395,15 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             length_scale=args.speaking_rate,
         )
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
-        # RTF with HiFiGAN
+        # RTF with vocoder
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * args.sr / (output["waveform"].shape[-1])
+        rtf_w = t * sample_rate / (output["waveform"].shape[-1])
         print(f"[🍵-{i}] Matcha-TTS RTF: {output['rtf']:.4f}")
         print(f"[🍵-{i}] Matcha-TTS + VOCODER RTF: {rtf_w:.4f}")
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, output, args.output_folder, args.sr)
+        location = save_to_folder(base_name, output, args.output_folder, sample_rate)
         print(f"[+] Waveform saved: {location}")
 
     print("".join(["="] * 100))

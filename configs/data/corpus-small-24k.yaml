@@ -1,0 +1,23 @@
+_target_: matcha.data.text_mel_datamodule.TextMelDataModule
+name: corpus-small-24k
+train_filelist_path: data/corpus-small-24k/train.csv
+valid_filelist_path: data/corpus-small-24k/validate.csv
+batch_size: 32
+num_workers: 20
+pin_memory: True
+cleaners: [english_cleaners2]
+add_blank: True
+n_spks: 1
+n_fft: 1024
+n_feats: 100
+sample_rate: 24000
+hop_length: 256
+win_length: 1024
+f_min: 0
+f_max: 12000
+mel_backend: vocos24k
+data_statistics:
+  mel_mean: 0.0
+  mel_std: 1.0
+seed: ${seed}
+load_durations: false

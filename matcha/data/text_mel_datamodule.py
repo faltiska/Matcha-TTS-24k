@@ -9,7 +9,7 @@ from lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
 
 from matcha.text import text_to_sequence
-from matcha.utils.audio import mel_spectrogram
+from matcha.mel.extractors import get_mel_extractor
 from matcha.utils.model import fix_len_compatibility, normalize
 from matcha.utils.utils import intersperse
 
@@ -48,6 +48,7 @@ class TextMelDataModule(LightningDataModule):
         use_f0: bool = True,
         f0_fmin: float = 50.0,
         f0_fmax: float = 1100.0,
+        mel_backend="hifigan",
     ):
         super().__init__()
 
@@ -83,6 +84,7 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f0_fmax,
             self.hparams.mel_dir,
             self.hparams.f0_dir,
+            self.hparams.mel_backend,
         )
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
@@ -104,6 +106,7 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f0_fmax,
             self.hparams.mel_dir,
             self.hparams.f0_dir,
+            self.hparams.mel_backend,
         )
 
     def train_dataloader(self):
@@ -163,6 +166,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         f0_fmax=1100.0,
         mel_dir=None,
         f0_dir=None,
+        mel_backend="hifigan",
     ):
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.n_spks = n_spks
@@ -181,6 +185,17 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.f0_fmax = f0_fmax
         self.mel_dir = mel_dir
         self.f0_dir = f0_dir
+        self.mel_backend = mel_backend
+        self.mel_extractor = get_mel_extractor(
+            mel_backend,
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            n_mels=self.n_mels,
+            f_min=self.f_min,
+            f_max=self.f_max,
+        )
 
         if data_parameters is not None:
             self.data_parameters = data_parameters
@@ -250,17 +265,7 @@ class TextMelDataset(torch.utils.data.Dataset):
 
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
-        mel = mel_spectrogram(
-            audio,
-            self.n_fft,
-            self.n_mels,
-            self.sample_rate,
-            self.hop_length,
-            self.win_length,
-            self.f_min,
-            self.f_max,
-            center=False,
-        ).squeeze()
+        mel = self.mel_extractor(audio).squeeze()
         mel = normalize(mel, self.data_parameters["mel_mean"], self.data_parameters["mel_std"])
         return mel
 
