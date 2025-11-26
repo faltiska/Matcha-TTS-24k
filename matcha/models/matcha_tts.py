@@ -263,15 +263,18 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Align encoded text with mel-spectrogram and get mu_y segment
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
-        if self.use_pitch and f0 is not None:
-            mu_y = mu_y + self.f0_scale * self.f0_proj(torch.log(f0 + 1e-3)) * y_mask
+        if self.use_pitch and (f0 is not None) and (f0_mask is not None):
+            f0_log = torch.where(f0 > 0, torch.log(f0 + 1e-5), torch.zeros_like(f0))
+            pitch_mask = f0_mask * y_mask
+            mu_y = mu_y + self.f0_scale * self.f0_proj(f0_log) * pitch_mask
 
         # Compute pitch loss
         pitch_loss = torch.tensor(0.0, device=y.device)
         if self.use_pitch and (f0 is not None) and (f0_mask is not None):
             p_log_y = torch.matmul(attn.squeeze(1).transpose(1, 2), p_log.transpose(1, 2)).transpose(1, 2)
             pitch_mask = f0_mask * y_mask
-            pitch_loss = torch.sum((p_log_y - torch.log(f0 + 1e-8)) ** 2 * pitch_mask) / (torch.sum(pitch_mask) + 1e-8)
+            f0_log = torch.where(f0 > 0, torch.log(f0 + 1e-5), torch.zeros_like(f0))
+            pitch_loss = torch.sum((p_log_y - f0_log) ** 2 * pitch_mask) / (torch.sum(pitch_mask) + 1e-8)
 
         # Compute loss of the decoder
         diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks, cond=cond)

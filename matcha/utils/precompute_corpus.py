@@ -88,6 +88,8 @@ def compute_and_save_mel(
         mel = normalize(mel, mel_mean, mel_std).cpu()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         arr = mel.numpy().astype(np.float32)
+        if np.isnan(arr).any() or np.isinf(arr).any():
+            raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in mel for {out_path}")
         np.save(out_path, arr)
         mel_length = arr.shape[-1]
         return True, "", mel_length
@@ -102,8 +104,6 @@ def compute_and_save_f0(
     hop_length: int,
     f0_fmin: float,
     f0_fmax: float,
-    f0_mean: float,
-    f0_std: float,
     expected_len: int,
 ) -> Tuple[bool, str, int]:
     """
@@ -153,20 +153,11 @@ def compute_and_save_f0(
 
         f0 = f0.unsqueeze(0)  # Add channel dimension: (1, T)
 
-        # Normalize F0
-        # Only normalize non-zero values (voiced frames)
-        f0_voiced = f0[f0 > 0]
-        if len(f0_voiced) > 0:
-            f0_normalized = torch.where(
-                f0 > 0,
-                (f0 - f0_mean) / f0_std,
-                torch.zeros_like(f0)
-            )
-        else:
-            f0_normalized = f0  # all zeros, keep as is
-
+        # Save raw Hz F0 (unvoiced frames are 0). No normalization applied.
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        arr = f0_normalized.cpu().numpy().astype(np.float32)
+        arr = f0.cpu().numpy().astype(np.float32)
+        if np.isnan(arr).any() or np.isinf(arr).any():
+            raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in F0 for {out_path}")
         np.save(out_path, arr)
         return True, "", f0.shape[-1]
     except Exception as e:  # pylint: disable=broad-except
@@ -235,8 +226,6 @@ def main():
     # F0 parameters (optional, with defaults)
     f0_fmin = float(cfg.get("f0_fmin", 50.0))
     f0_fmax = float(cfg.get("f0_fmax", 1100.0))
-    f0_mean = float(data_stats.get("f0_mean", 0.0))
-    f0_std = float(data_stats.get("f0_std", 1.0))
 
     # ---- NEW: read mel_backend for extractor selection ----
     mel_backend = cfg.get("mel_backend", "hifigan")
@@ -344,8 +333,6 @@ def main():
         print(f"[precompute_f0] Output: {f0_dir}")
         print(f"[precompute_f0] Files: {total} (train+valid)")
         print(f"[precompute_f0] F0 params: fmin={f0_fmin}, fmax={f0_fmax}")
-        print(f"[precompute_f0] F0 stats (for normalization): mean={f0_mean}, std={f0_std}")
-
 
         f0_dir.mkdir(parents=True, exist_ok=True)
         f0_ok = 0
@@ -372,8 +359,6 @@ def main():
                 hop_length=hop_length,
                 f0_fmin=f0_fmin,
                 f0_fmax=f0_fmax,
-                f0_mean=f0_mean,
-                f0_std=f0_std,
                 expected_len=mel_length,
             )
             if success:
@@ -390,8 +375,6 @@ def main():
             "hop_length": hop_length,
             "f0_fmin": f0_fmin,
             "f0_fmax": f0_fmax,
-            "f0_mean": f0_mean,
-            "f0_std": f0_std,
             "num_files": total,
             "num_ok": f0_ok,
             "num_fail": len(f0_failures),

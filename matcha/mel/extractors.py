@@ -7,7 +7,7 @@ import torchaudio
 from matcha.utils.audio import mel_spectrogram as hifigan_mel
 
 
-def _vocos24k_mel_factory(
+def _vocos_mel_factory(
     sample_rate: int = 24000,
     n_fft: int = 1024,
     hop_length: int = 256,
@@ -97,8 +97,8 @@ def get_mel_extractor(
     """
     b = (backend or "hifigan").lower()
 
-    if b == "vocos24k":
-        return _vocos24k_mel_factory(
+    if b == "vocos":
+        return _vocos_mel_factory(
             sample_rate=sample_rate or 24000,
             n_fft=n_fft or 1024,
             hop_length=hop_length or 256,

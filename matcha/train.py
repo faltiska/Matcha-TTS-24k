@@ -62,16 +62,6 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     log.info(f"Instantiating model <{cfg.model._target_}>")  # pylint: disable=protected-access
     model: LightningModule = hydra.utils.instantiate(cfg.model)
-    # Persist mel backend used for training into model hparams (defaults to "hifigan")
-    mel_backend = getattr(cfg, "data", {}).get("mel_backend", "hifigan") if isinstance(cfg.get("data"), Dict) else "hifigan"
-    # Fallback if OmegaConf, access as attribute
-    try:
-        mel_backend = cfg.data.mel_backend if hasattr(cfg.data, "mel_backend") else "hifigan"
-    except Exception:
-        pass
-    setattr(model, "mel_backend", mel_backend)
-    if hasattr(model, "hparams") and isinstance(model.hparams, dict):
-        model.hparams["mel_backend"] = mel_backend
 
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))

@@ -17,6 +17,7 @@ If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run 
 Run inference with:
 ```
 python -m matcha.cli --text "Are you listening?"
+python -m matcha.cli --text "Are you listening?" --vocoder vocos --checkpoint_path logs/train/corpus-small-24k/runs/2025-11-26_08-17-56/checkpoints/checkpoint_epoch=099.ckpt
 ```
 
 ## Training

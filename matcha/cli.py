@@ -16,7 +16,7 @@ from matcha.hifigan.models import Generator as HiFiGAN
 from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, text_to_sequence
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
-from matcha.vocos24k.wrapper import load_model as load_vocos_24k
+from matcha.vocos24k.wrapper import load_model as load_vocos
 
 MATCHA_URLS = {
     "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
@@ -26,7 +26,7 @@ MATCHA_URLS = {
 VOCODER_URLS = {
     "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
     "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
-    "vocos_24k": "https://huggingface.co/charactr/vocos-mel-24khz",
+    "vocos": "https://huggingface.co/charactr/vocos-mel-24khz",
 }
 
 MULTISPEAKER_MODEL = {
@@ -97,8 +97,8 @@ def load_vocoder(vocoder_name, checkpoint_path, device):
     if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
         vocoder = load_hifigan(checkpoint_path, device)
         denoiser = Denoiser(vocoder, mode="zeros")
-    elif vocoder_name == "vocos_24k":
-        vocoder = load_vocos_24k(device)
+    elif vocoder_name == "vocos":
+        vocoder = load_vocos(device)
         denoiser = None
     else:
         raise NotImplementedError(
@@ -283,12 +283,6 @@ def cli():
         args.model = "custom_model"
 
     model = load_matcha(args.model, paths["matcha"], device)
-    # Enforce mel/vocoder compatibility based on training-time backend saved in the model
-    model_backend = getattr(model, "mel_backend", "hifigan")
-    if model_backend == "vocos24k" and args.vocoder != "vocos_24k":
-        raise ValueError("Model was trained with mel_backend='vocos24k' but a non-Vocos vocoder was selected. Use --vocoder vocos_24k.")
-    if model_backend == "hifigan" and args.vocoder == "vocos_24k":
-        raise ValueError("Model was trained with mel_backend='hifigan' but Vocos vocoder was selected. Use a HiFi-GAN vocoder.")
     vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
 
     texts = get_texts(args)
@@ -329,7 +323,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf_w = []
     # Use correct sample rate based on model's mel backend
     model_backend = getattr(model, "mel_backend", "hifigan")
-    sample_rate = 24000 if model_backend == "vocos24k" else 22050
+    sample_rate = 24000 if model_backend == "vocos" else 22050
     processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
     dataloader = torch.utils.data.DataLoader(
         BatchedSynthesisDataset(processed_text),
@@ -375,7 +369,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf_w = []
     # Use correct sample rate based on model's mel backend
     model_backend = getattr(model, "mel_backend", "hifigan")
-    sample_rate = 24000 if model_backend == "vocos24k" else 22050
+    sample_rate = 24000 if model_backend == "vocos" else 22050
     for i, text in enumerate(texts):
         i = i + 1
         base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"

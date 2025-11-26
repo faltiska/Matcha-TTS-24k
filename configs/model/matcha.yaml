@@ -11,11 +11,12 @@ n_vocab: 178
 
 n_spks: ${data.n_spks}
 spk_emb_dim: 64
-n_feats: 80
+n_feats: 100
 data_statistics: ${data.data_statistics}
 out_size: null # Must be divisible by 4
 prior_loss: true
 use_precomputed_durations: ${data.load_durations}
+
 # Pitch conditioning (F0)
 use_pitch: true
 # lambda_pitch says how much the pitch loss contributes to the total loss.
@@ -31,5 +32,5 @@ lambda_pitch: 0.2
 # Inference-time audio params (used by CLI/app/onnx)
 # Keep defaults here; override per project if needed.
 inference:
-  sample_rate: 16000
-  hop_length: 192
+  sample_rate: 24000
+  hop_length: 256

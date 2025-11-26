@@ -263,6 +263,7 @@ class TextMelDataset(torch.utils.data.Dataset):
                 mel = torch.from_numpy(arr).float()
                 return mel
 
+        # Compute mel from wav file
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
         mel = self.mel_extractor(audio).squeeze()
@@ -272,12 +273,12 @@ class TextMelDataset(torch.utils.data.Dataset):
     def get_f0(self, filepath, expected_len):
         """
         Load precomputed F0 if available, otherwise compute it using torchaudio YIN.
-        Precomputed F0 is already aligned to mel length and normalized.
+        Precomputed F0 is already aligned to mel length.
 
         Returns:
             torch.Tensor: shape (1, expected_len)
         """
-        # Try loading cached, already-normalized F0 if enabled
+        # Try loading cached F0 if enabled
         if self.f0_dir is not None:
             name = Path(filepath).stem
             npy_path = Path(self.f0_dir) / f"{name}.npy"
@@ -286,7 +287,7 @@ class TextMelDataset(torch.utils.data.Dataset):
                 f0 = torch.from_numpy(arr).float()
                 return f0
 
-        # Compute F0 on-the-fly and normalize
+        # Compute F0 from wav file
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
         # Ensure mono
@@ -316,19 +317,8 @@ class TextMelDataset(torch.utils.data.Dataset):
             f0 = f0[:expected_len]
 
         f0 = f0.unsqueeze(0)
-        
-        # Normalize F0 (only non-zero values for voiced frames)
-        f0_voiced = f0[f0 > 0]
-        if len(f0_voiced) > 0:
-            f0_normalized = torch.where(
-                f0 > 0,
-                (f0 - self.data_parameters.get("f0_mean", 0.0)) / max(self.data_parameters.get("f0_std", 1.0), 1e-5),
-                torch.zeros_like(f0)
-            )
-        else:
-            f0_normalized = f0
-
-        return f0_normalized
+        # Return raw Hz F0 (unvoiced frames are 0). Normalization is intentionally not applied.
+        return f0
 
     def get_text(self, text, add_blank=True):
         text_norm, cleaned_text = text_to_sequence(text, self.cleaners)
