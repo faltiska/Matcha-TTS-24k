@@ -20,6 +20,11 @@ def parse_filelist(filelist_path, split_char="|"):
     return filepaths_and_text
 
 
+"""
+IMPORTANT: As of Nov 2025, all corpus train.csv/validate.csv files must use the following convention:
+- The first column is the base relative path of the audio file, without extension (e.g., "1/filename", not "1/filename.wav")
+- TextMelDataset will append '.wav' for audio files , and '.npy' for mel and f0 files.
+"""
 class TextMelDataModule(LightningDataModule):
     def __init__(  # pylint: disable=unused-argument
         self,
@@ -168,6 +173,8 @@ class TextMelDataset(torch.utils.data.Dataset):
         f0_dir=None,
         mel_backend="hifigan",
     ):
+        self.filelist_path = Path(filelist_path)
+        self.filelist_dir = self.filelist_path.parent
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.n_spks = n_spks
         self.cleaners = cleaners
@@ -205,31 +212,32 @@ class TextMelDataset(torch.utils.data.Dataset):
         random.shuffle(self.filepaths_and_text)
 
     def get_datapoint(self, filepath_and_text):
-        if self.n_spks > 1:
-            filepath, spk, text = (
-                filepath_and_text[0],
-                int(filepath_and_text[1]),
-                filepath_and_text[2],
-            )
+        # rel_base_path now includes speaker subfolder, e.g., '1/filename'
+        if len(filepath_and_text) == 3:
+            rel_base_path, spk, text = filepath_and_text[0], int(filepath_and_text[1]), filepath_and_text[2]
         else:
-            filepath, text = filepath_and_text[0], filepath_and_text[1]
-            spk = None
+            rel_base_path, spk, text = filepath_and_text[0], None, filepath_and_text[1]
 
+        # rel_base_base is like "1/abc"
+        wav_path = self.filelist_dir / "wav" / (rel_base_path + ".wav")
+        if not wav_path.exists():
+            raise FileNotFoundError(f"WAV file not found: {wav_path}")
+        
         text, cleaned_text = self.get_text(text, add_blank=self.add_blank)
-        mel = self.get_mel(filepath)
+        mel = self.get_mel(rel_base_path)
 
-        durations = self.get_durations(filepath, text) if self.load_durations else None
+        durations = self.get_durations(wav_path, text) if self.load_durations else None
 
         sample = {
             "x": text,
             "y": mel,
             "spk": spk,
-            "filepath": filepath,
+            "filepath": rel_base_path,
             "x_text": cleaned_text,
             "durations": durations,
         }
         if self.use_f0:
-            f0 = self.get_f0(filepath, expected_len=mel.shape[-1])
+            f0 = self.get_f0(rel_base_path, expected_len=mel.shape[-1])
             f0_mask = (f0 > 0).float()
             sample["f0"] = f0
             sample["f0_mask"] = f0_mask
@@ -253,24 +261,28 @@ class TextMelDataset(torch.utils.data.Dataset):
 
         return durs
 
-    def get_mel(self, filepath):
-        # Try loading cached, already-normalized mel if enabled
+    def get_mel(self, rel_base_path):
+        # rel_base_path is like "1/abc"
+        # Try loading cached, already-normalized mel
         if self.mel_dir is not None:
-            name = Path(filepath).stem
-            npy_path = Path(self.mel_dir) / f"{name}.npy"
-            if npy_path.exists():
-                arr = np.load(npy_path).astype(np.float32)
+            mel_path = Path(self.mel_dir) / (rel_base_path + ".npy")
+            if mel_path.exists():
+                arr = np.load(mel_path).astype(np.float32)
                 mel = torch.from_numpy(arr).float()
                 return mel
 
-        # Compute mel from wav file
-        audio, sr = ta.load(filepath)
+        # Compute mel from wav file if not cached
+        wav_path = self.filelist_dir / "wav" / (rel_base_path + ".wav")
+        if not wav_path.exists():
+            raise FileNotFoundError(f"WAV file not found: {wav_path}")
+
+        audio, sr = ta.load(wav_path)
         assert sr == self.sample_rate
         mel = self.mel_extractor(audio).squeeze()
         mel = normalize(mel, self.data_parameters["mel_mean"], self.data_parameters["mel_std"])
         return mel
 
-    def get_f0(self, filepath, expected_len):
+    def get_f0(self, rel_base_path, expected_len):
         """
         Load precomputed F0 if available, otherwise compute it using torchaudio YIN.
         Precomputed F0 is already aligned to mel length.
@@ -278,17 +290,19 @@ class TextMelDataset(torch.utils.data.Dataset):
         Returns:
             torch.Tensor: shape (1, expected_len)
         """
-        # Try loading cached F0 if enabled
+        # rel_base_path is like "1/abc"
         if self.f0_dir is not None:
-            name = Path(filepath).stem
-            npy_path = Path(self.f0_dir) / f"{name}.npy"
-            if npy_path.exists():
-                arr = np.load(npy_path).astype(np.float32)
+            f0_path = Path(self.f0_dir) / (rel_base_path + ".npy")
+            if f0_path.exists():
+                arr = np.load(f0_path).astype(np.float32)
                 f0 = torch.from_numpy(arr).float()
                 return f0
 
-        # Compute F0 from wav file
-        audio, sr = ta.load(filepath)
+        wav_path = self.filelist_dir / "wav" / (rel_base_path + ".wav")
+        if not wav_path.exists():
+            raise FileNotFoundError(f"WAV file not found: {wav_path}")
+
+        audio, sr = ta.load(wav_path)
         assert sr == self.sample_rate
         # Ensure mono
         if audio.dim() == 2 and audio.size(0) > 1:
@@ -299,7 +313,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         win_len = int(min(5, max(1, int(expected_len))))
         if win_len % 2 == 0:
             win_len = max(1, win_len - 1)
-        # detect_pitch_frequency returns (channels, frames)
         f0 = ta.functional.detect_pitch_frequency(
             audio,
             self.sample_rate,
@@ -317,7 +330,6 @@ class TextMelDataset(torch.utils.data.Dataset):
             f0 = f0[:expected_len]
 
         f0 = f0.unsqueeze(0)
-        # Return raw Hz F0 (unvoiced frames are 0). Normalization is intentionally not applied.
         return f0
 
     def get_text(self, text, add_blank=True):
@@ -368,7 +380,6 @@ class TextMelBatchCollate:
                 durations[i, : item["durations"].shape[-1]] = item["durations"]
             if "f0" in item and item["f0"] is not None:
                 f_len = y_.shape[-1]
-                # item["f0"] is (1, T)
                 f0[i, :, :f_len] = item["f0"]
                 f0_mask[i, :, :f_len] = item["f0_mask"]
 

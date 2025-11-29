@@ -3,7 +3,7 @@ name: corpus-small-24k
 train_filelist_path: data/corpus-small-24k/train.csv
 valid_filelist_path: data/corpus-small-24k/validate.csv
 batch_size: 18
-num_workers: 16
+num_workers: 8
 persistent_workers: true
 pin_memory: True
 cleaners: [english_cleaners2]
@@ -22,9 +22,9 @@ load_durations: false
 # Computed for my dataset with command:
 #   matcha-data-stats -i corpus-small-24k.yaml
 data_statistics:
-  mel_mean: -1.7744582891464233
-  mel_std: 4.116815090179443
-
+  mel_mean: -1.81633
+  mel_std: 4.177081
+  
 # Cache folders (the precompute script will put mels and pitch files here)
 mel_dir: data/corpus-small-24k/mels
 f0_dir: data/corpus-small-24k/f0

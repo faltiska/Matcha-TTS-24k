@@ -24,7 +24,7 @@ python -m matcha.cli --text "Are you listening?" --vocoder vocos --checkpoint_pa
 Delete the mels and f0 folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
- matcha-data-stats -i configs/data/corpus-small-24k.yaml -f
+matcha-data-stats -i corpus-small-24k.yaml
 ```
 It will output something like
 {'mel_mean': -1.7744582891464233, 'mel_std': 4.116815090179443}

@@ -245,7 +245,7 @@ def main():
           f"win_length={win_length}, n_mels={n_mels}, f_min={f_min}, f_max={f_max}")
 
     # Gather unique wavs from the train + valid filelists
-    wavs: List[Path] = []
+    rel_and_abs_wavs: List[Tuple[str, Path]] = []
     for fl in [train_filelist, valid_filelist]:
         if not fl.exists():
             raise FileNotFoundError(f"Filelist not found: {fl}")
@@ -253,28 +253,22 @@ def main():
         for parts in entries:
             if not parts:
                 continue
-            wavs.append(_resolve_path(parts[0]))
+            rel_base = parts[0]
+            wav_path = (fl.parent / "wav" / (rel_base + ".wav")).resolve()
+            rel_and_abs_wavs.append((rel_base, wav_path))
 
-    # Deduplicate while keeping order
-    seen = set()
-    unique_wavs: List[Path] = []
-    for w in wavs:
-        if w not in seen:
-            unique_wavs.append(w)
-            seen.add(w)
-
-    total = len(unique_wavs)
+    total = len(rel_and_abs_wavs)
     ok = 0
     failures = []
 
     mel_dir.mkdir(parents=True, exist_ok=True)
     print(f"[precompute_corpus] Config: {cfg_path}")
     print(f"[precompute_corpus] Output: {mel_dir}")
-    print(f"[precompute_corpus] Files: {total} (train+valid)")
+    print(f"[precompute_corpus] Files: {total} (train+validate)")
 
-    for i, wav_path in enumerate(unique_wavs, start=1):
-        stem = wav_path.stem
-        out_path = mel_dir / f"{stem}.npy"
+    for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
+        # rel_base is like "1/abc"
+        out_path = mel_dir / (rel_base + ".npy")
         success, msg, mel_length = compute_and_save_mel(
             wav_path=wav_path,
             out_path=out_path,
@@ -288,7 +282,7 @@ def main():
             print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
         else:
             print(f"[precompute_corpus] ERROR: {msg}")
-            failures.append((wav_path.as_posix(), msg))
+            failures.append((str(wav_path), msg))
 
     # Write metadata for traceability
     meta = {
@@ -338,20 +332,20 @@ def main():
         f0_ok = 0
         f0_failures = []
 
-        for i, wav_path in enumerate(unique_wavs, start=1):
-            stem = wav_path.stem
-            mel_npy_path = mel_dir / f"{stem}.npy"
+        for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
+            # rel_base is like "1/abc"
+            mel_npy_path = mel_dir / (rel_base + ".npy")
 
             # Load the corresponding mel to get its length
             if not mel_npy_path.exists():
                 print(f"[precompute_f0] ERROR: Mel not found for {wav_path}")
-                f0_failures.append((wav_path.as_posix(), "Corresponding mel file not found"))
+                f0_failures.append((str(wav_path), "Corresponding mel file not found"))
                 continue
 
             mel_arr = np.load(mel_npy_path)
             mel_length = mel_arr.shape[-1]
 
-            out_path = f0_dir / f"{stem}.npy"
+            out_path = f0_dir / (rel_base + ".npy")
             success, msg, _ = compute_and_save_f0(
                 wav_path=wav_path,
                 out_path=out_path,
@@ -366,7 +360,7 @@ def main():
                 print(f"\r[precompute_f0] {i}/{total} done.", end="", flush=True)
             else:
                 print(f"[precompute_f0] ERROR: {msg}")
-                f0_failures.append((wav_path.as_posix(), msg))
+                f0_failures.append((str(wav_path), msg))
 
         # Write F0 metadata
         f0_meta = {

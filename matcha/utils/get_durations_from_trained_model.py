@@ -33,7 +33,9 @@ def save_durations_to_folder(
 ):
     durations = attn.squeeze().sum(1)[:x_length].numpy()
     durations_json = get_phoneme_durations(durations, text)
-    output = output_folder / Path(filepath).name.replace(".wav", ".npy")
+    # filepath includes speaker subfolder (e.g., "1/filename")
+    output = output_folder / (filepath.replace(".wav", ".npy"))
+    output.parent.mkdir(parents=True, exist_ok=True)
     with open(output.with_suffix(".json"), "w", encoding="utf-8") as f:
         json.dump(durations_json, f, indent=4, ensure_ascii=False)
 
