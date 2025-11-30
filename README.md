@@ -66,6 +66,12 @@ Monitor training with:
 tensorboard --logdir=logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
 ```
 
+Profile your trainer with:
+```
+python -m matcha.train +trainer.profiler="simple"
+```
+This will generate a profile report at the end of training, so maybe set it to run for just a small number of epochs.
+
 ## Improvements
 
 Compared to the original MatchaTTS, I did the following:
