@@ -77,11 +77,14 @@ This will generate a profile report at the end of training, so maybe set it to r
 Compared to the original MatchaTTS, I did the following:
 - I have increased the decoder model capacity
 - I have switched to an AdamW optimizer
-- I have added Vocos using a model trained on 24KHz audio. 
+- I have added Vocos using a model trained on 24KHz audio 
 - I have increased the TextEncoder model size
 - I have added an F0 (pitch) extractor
-- I have implemented a corpus mel and pitch precomputation script.
+- I have implemented a corpus mel and pitch precomputation script
 - I have included a matmul precision auto-config
+- I have added 2 more ODE solvers 
+- I have implemented a GPU version of the maximum_path method used in the monotonic_align module
+- I found a series of performance improvements 
 
 # Learning gradients 
 
