@@ -141,7 +141,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         mu_x, logw, x_mask, p_log = self.encoder(x, x_lengths, spks)
 
         w = torch.exp(logw) * x_mask
-        w_ceil = torch.ceil(w) * length_scale
+        w_ceil = torch.ceil(w * length_scale)
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
@@ -165,7 +165,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         t = (dt.datetime.now() - t).total_seconds()
-        sr = getattr(self, "sample_rate", 22050)
+        sr = getattr(self, "sample_rate", 24000)
         hop = getattr(self, "hop_length", 256)
         rtf = t * sr / (decoder_outputs.shape[-1] * hop)
 

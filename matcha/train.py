@@ -62,6 +62,10 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     log.info(f"Instantiating model <{cfg.model._target_}>")  # pylint: disable=protected-access
     model: LightningModule = hydra.utils.instantiate(cfg.model, lambda_pitch=cfg.lambda_pitch)
+    
+    # Store audio parameters from data config into model for inference
+    model.sample_rate = cfg.data.sample_rate
+    model.hop_length = cfg.data.hop_length
 
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))

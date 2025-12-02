@@ -212,46 +212,48 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def on_validation_end(self) -> None:
-        pass
-        # if self.trainer.is_global_zero:
-        #     one_batch = next(iter(self.trainer.val_dataloaders))
-        #     if self.current_epoch == 0:
-        #         log.debug("Plotting original samples")
-        #         for i in range(2):
-        #             y = one_batch["y"][i].unsqueeze(0).to(self.device)
-        #             self.logger.experiment.add_image(
-        #                 f"original/{i}",
-        #                 plot_tensor(y.squeeze().cpu()),
-        #                 self.current_epoch,
-        #                 dataformats="HWC",
-        #             )
-        # 
-        #     log.debug("Synthesising...")
-        #     for i in range(2):
-        #         x = one_batch["x"][i].unsqueeze(0).to(self.device)
-        #         x_lengths = one_batch["x_lengths"][i].unsqueeze(0).to(self.device)
-        #         spks = one_batch["spks"][i].unsqueeze(0).to(self.device) if one_batch["spks"] is not None else None
-        #         output = self.synthesise(x[:, :x_lengths], x_lengths, n_timesteps=10, spks=spks)
-        #         y_enc, y_dec = output["encoder_outputs"], output["decoder_outputs"]
-        #         attn = output["attn"]
-        #         self.logger.experiment.add_image(
-        #             f"generated_enc/{i}",
-        #             plot_tensor(y_enc.squeeze().cpu()),
-        #             self.current_epoch,
-        #             dataformats="HWC",
-        #         )
-        #         self.logger.experiment.add_image(
-        #             f"generated_dec/{i}",
-        #             plot_tensor(y_dec.squeeze().cpu()),
-        #             self.current_epoch,
-        #             dataformats="HWC",
-        #         )
-        #         self.logger.experiment.add_image(
-        #             f"alignment/{i}",
-        #             plot_tensor(attn.squeeze().cpu()),
-        #             self.current_epoch,
-        #             dataformats="HWC",
-        #         )
+        if not self.hparams.plot_mel_on_validation_end:
+            return
+        
+        if self.trainer.is_global_zero:
+            one_batch = next(iter(self.trainer.val_dataloaders))
+            if self.current_epoch == 0:
+                log.debug("Plotting original samples")
+                for i in range(2):
+                    y = one_batch["y"][i].unsqueeze(0).to(self.device)
+                    self.logger.experiment.add_image(
+                        f"original/{i}",
+                        plot_tensor(y.squeeze().cpu()),
+                        self.current_epoch,
+                        dataformats="HWC",
+                    )
+            
+            log.debug("Synthesising...")
+            for i in range(2):
+                x = one_batch["x"][i].unsqueeze(0).to(self.device)
+                x_lengths = one_batch["x_lengths"][i].unsqueeze(0).to(self.device)
+                spks = one_batch["spks"][i].unsqueeze(0).to(self.device) if one_batch["spks"] is not None else None
+                output = self.synthesise(x[:, :x_lengths], x_lengths, n_timesteps=10, spks=spks)
+                y_enc, y_dec = output["encoder_outputs"], output["decoder_outputs"]
+                attn = output["attn"]
+                self.logger.experiment.add_image(
+                    f"generated_enc/{i}",
+                    plot_tensor(y_enc.squeeze().cpu()),
+                    self.current_epoch,
+                    dataformats="HWC",
+                )
+                self.logger.experiment.add_image(
+                    f"generated_dec/{i}",
+                    plot_tensor(y_dec.squeeze().cpu()),
+                    self.current_epoch,
+                    dataformats="HWC",
+                )
+                self.logger.experiment.add_image(
+                    f"alignment/{i}",
+                    plot_tensor(attn.squeeze().cpu()),
+                    self.current_epoch,
+                    dataformats="HWC",
+                )
 
     def on_before_optimizer_step(self, optimizer):
         self.log_dict({f"grad_norm/{k}": v for k, v in grad_norm(self, norm_type=2).items()})

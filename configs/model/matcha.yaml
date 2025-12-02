@@ -19,9 +19,3 @@ use_precomputed_durations: ${data.load_durations}
 
 # Pitch conditioning (F0)
 use_pitch: true
-
-# Inference-time audio params (used by CLI/app/onnx)
-# Keep defaults here; override per project if needed.
-inference:
-  sample_rate: 24000
-  hop_length: 256

@@ -282,7 +282,6 @@ def cli():
 
     args = validate_args(args)
     device = get_device(args)
-    print_config(args)
     paths = assert_required_models_available(args)
 
     if args.checkpoint_path is not None:
@@ -292,7 +291,16 @@ def cli():
 
     model = load_matcha(args.model, paths["matcha"], device)
     model.decoder.solver = args.solver
+    
+    # Set audio params if not present (for old checkpoints)
+    if not hasattr(model, "sample_rate"):
+        model.sample_rate = 24000 if args.vocoder == "vocos" else 22050
+    if not hasattr(model, "hop_length"):
+        model.hop_length = 256
+    
     vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
+
+    print_config(args, model)
 
     texts = get_texts(args)
 
@@ -330,9 +338,7 @@ def batched_collate_fn(batch):
 def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf = []
     total_rtf_w = []
-    # Use correct sample rate based on model's mel backend
-    model_backend = getattr(model, "mel_backend", "hifigan")
-    sample_rate = 24000 if model_backend == "vocos" else 22050
+    sample_rate = getattr(model, "sample_rate")
     processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
     dataloader = torch.utils.data.DataLoader(
         BatchedSynthesisDataset(processed_text),
@@ -378,9 +384,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
 def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf = []
     total_rtf_w = []
-    # Use correct sample rate based on model's mel backend
-    model_backend = getattr(model, "mel_backend", "hifigan")
-    sample_rate = 24000 if model_backend == "vocos" else 22050
+    sample_rate = getattr(model, "sample_rate")
     for i, text in enumerate(texts):
         i = i + 1
         base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"
@@ -416,7 +420,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
 
 
-def print_config(args):
+def print_config(args, model):
     print("[!] Configurations: ")
     print(f"\t- Model: {args.model}")
     print(f"\t- Vocoder: {args.vocoder}")
@@ -425,7 +429,8 @@ def print_config(args):
     print(f"\t- Number of ODE steps: {args.steps}")
     print(f"\t- ODE Solver: {args.solver}")
     print(f"\t- Speaker: {args.spk}")
-
+    print(f"\t- Sample rate: {getattr(model, "sample_rate")}")
+    print(f"\t- Hop length: {getattr(model, "hop_length")}")
 
 def get_device(args):
     if torch.cuda.is_available() and not args.cpu:
