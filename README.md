@@ -83,7 +83,27 @@ Compared to the original MatchaTTS, I did the following:
 - I have implemented a corpus mel and pitch precomputation script.
 - I have included a matmul precision auto-config
 
+# Learning gradients 
 
+The gradient norm charts tell you about training stability and convergence:
+- What gradient norms mean:
+- Total norm: Overall magnitude of all gradients combined 
+- Too high (>10): Gradients exploding, model unstable 
+- Too low (<0.001): Gradients vanishing, model not learning 
+- Healthy: 0.1-5 range, gradually decreasing over time
+
+Per-layer norms: Which parts of your model are learning
+- Encoder vs Decoder vs Flow matching components 
+- If one is much larger, that component dominates learning
+- If one is near zero, that component isn't learning
+
+What to look for:
+- Spikes: Sudden jumps indicate instability - may need lower learning rate or gradient clipping 
+- Flat lines: Model stopped learning - learning rate too low or saturated
+- Steady decrease: Good! Model is converging smoothly
+- Oscillations: Normal early on, but persistent oscillations suggest learning rate too high
+
+# Misc
 
 See original [readme](ORIGINAL-README.md) too.
 
