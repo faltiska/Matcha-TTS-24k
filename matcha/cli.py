@@ -120,7 +120,12 @@ def load_matcha(model_name, checkpoint_path, device):
 
 
 def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
-    audio = vocoder(mel).clamp(-1, 1)
+    audio = vocoder(mel)
+
+    max_abs = audio.abs().max()
+    if max_abs > 1.0:
+        audio = audio / max_abs * 0.95
+        
     if denoiser is not None:
         audio = denoiser(audio.squeeze(), strength=denoiser_strength).cpu().squeeze()
 
