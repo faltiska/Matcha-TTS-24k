@@ -258,4 +258,5 @@ class BaseLightningClass(LightningModule, ABC):
         # Log gradient norms less frequently to reduce overhead 
         # (it was 21.6% of training time when I ran with the profiler enabled)
         if self.trainer.global_step % 20 == 0:
-            self.log_dict({f"grad_norm/{k}": v for k, v in grad_norm(self, norm_type=2).items()})
+            norms = grad_norm(self, norm_type=2)
+            self.log_dict({"grad_norm/grad_2.0_norm_total": norms["grad_2.0_norm_total"]})

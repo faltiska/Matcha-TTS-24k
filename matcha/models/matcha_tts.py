@@ -56,7 +56,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.use_pitch = use_pitch
         self.lambda_pitch = lambda_pitch
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
-        # Accept and store optional nested config group (Hydra) to avoid unexpected kwarg errors
         self.pitch = pitch
         self.inference = inference
 
@@ -70,6 +69,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             n_vocab,
             n_spks,
             spk_emb_dim,
+            use_pitch,
         )
 
         self.decoder = CFM(
@@ -134,7 +134,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks = self.spk_emb(spks.long())
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask, p_log = self.encoder(x, x_lengths, spks)
+        encoder_out = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask = encoder_out[:3]
+        if self.use_pitch:
+            p_log = encoder_out[3]
 
         w = torch.exp(logw) * x_mask
         w_ceil = torch.ceil(w * length_scale)
@@ -200,7 +203,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks = self.spk_emb(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask, p_log = self.encoder(x, x_lengths, spks)
+        encoder_out = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask = encoder_out[:3]
+        p_log = encoder_out[3] if len(encoder_out) > 3 else None
         y_max_length = y.shape[-1]
 
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)

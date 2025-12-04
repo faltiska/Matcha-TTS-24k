@@ -3,7 +3,7 @@ from abc import ABC
 import torch
 import torch.nn.functional as F
 from torchdiffeq import odeint, odeint_adjoint
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 from matcha.models.components.decoder import Decoder
 from matcha.utils.pylogger import get_pylogger
@@ -59,7 +59,7 @@ class BASECFM(torch.nn.Module, ABC):
             
         print(f"{dtype=}")
             
-        with autocast(dtype=dtype):
+        with autocast("cuda", dtype=dtype):
             z = torch.randn_like(mu) * temperature
             t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
             return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond)

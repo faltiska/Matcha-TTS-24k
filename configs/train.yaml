@@ -50,7 +50,7 @@ lambda_pitch: 0.1
 test: True
 
 # simply provide checkpoint path to resume training
-ckpt_path: logs/train/corpus-small-24k/runs/2025-12-01_14-36-08/checkpoints/checkpoint_epoch=999.ckpt
+ckpt_path: logs/train/corpus-small-24k/runs/2025-12-03_18-42-49/checkpoints/checkpoint_epoch=799.ckpt
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 1234

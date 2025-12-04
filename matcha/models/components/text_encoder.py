@@ -361,6 +361,7 @@ class TextEncoder(nn.Module):
         n_vocab,
         n_spks=1,
         spk_emb_dim=128,
+        use_pitch=False,
     ):
         super().__init__()
         self.encoder_type = encoder_type
@@ -369,6 +370,7 @@ class TextEncoder(nn.Module):
         self.n_channels = encoder_params.n_channels
         self.spk_emb_dim = spk_emb_dim
         self.n_spks = n_spks
+        self.use_pitch = use_pitch
 
         self.emb = torch.nn.Embedding(n_vocab, self.n_channels)
         torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels**-0.5)
@@ -401,12 +403,15 @@ class TextEncoder(nn.Module):
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
         )
-        self.proj_p = PitchPredictor(
-            self.n_channels + (spk_emb_dim if n_spks > 1 else 0),
-            duration_predictor_params.filter_channels_dp,
-            duration_predictor_params.kernel_size,
-            duration_predictor_params.p_dropout,
-        )
+        if use_pitch:
+            self.proj_p = PitchPredictor(
+                self.n_channels + (spk_emb_dim if n_spks > 1 else 0),
+                duration_predictor_params.filter_channels_dp,
+                duration_predictor_params.kernel_size,
+                duration_predictor_params.p_dropout,
+            )
+        else:
+            self.proj_p = None
 
     def forward(self, x, x_lengths, spks=None):
         """Run forward pass to the transformer based encoder and duration predictor
@@ -439,6 +444,9 @@ class TextEncoder(nn.Module):
 
         x_dp = torch.detach(x)
         logw = self.proj_w(x_dp, x_mask)
-        p_log = self.proj_p(x_dp, x_mask)
-
-        return mu, logw, x_mask, p_log
+        
+        if self.use_pitch:
+            p_log = self.proj_p(x_dp, x_mask)
+            return mu, logw, x_mask, p_log
+        else:
+            return mu, logw, x_mask

@@ -18,4 +18,4 @@ prior_loss: true
 use_precomputed_durations: ${data.load_durations}
 
 # Pitch conditioning (F0)
-use_pitch: true
+use_pitch: false
