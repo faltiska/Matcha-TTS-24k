@@ -1,12 +1,11 @@
 """
-Precompute and cache normalized mel-spectrograms and F0 for a given dataset YAML config.
+Precompute and cache normalized mel-spectrograms for a given dataset YAML config.
 
-This script reads all required parameters (filelists, mel params, F0 params, normalization stats,
+This script reads all required parameters (filelists, mel params, normalization stats,
 and output directories) from a Hydra-style data config YAML like configs/data/corpus-small.yaml.
 
 It then saves:
   - Normalized mel spectrograms as .npy files (shape: (n_mels, T)) into mel_dir
-  - F0 arrays as .npy files (shape: (1, T)) into f0_dir
   - metadata.json with the parameters used
 
 Usage:
@@ -97,76 +96,9 @@ def compute_and_save_mel(
         return False, f"Processing failed for {wav_path}: {e}", 0
 
 
-def compute_and_save_f0(
-    wav_path: Path,
-    out_path: Path,
-    sample_rate: int,
-    hop_length: int,
-    f0_fmin: float,
-    f0_fmax: float,
-    expected_len: int,
-) -> Tuple[bool, str, int]:
-    """
-    Compute F0 exactly as TextMelDataset.get_f0() does, aligned to mel length.
-
-    Args:
-        expected_len: The mel spectrogram length to align F0 to
-
-    Returns:
-        Tuple of (success: bool, error_msg: str, frame_length: int)
-    """
-    try:
-        audio, sr = ta.load(str(wav_path))
-    except Exception as e:  # pylint: disable=broad-except
-        return False, f"Failed loading {wav_path}: {e}", 0
-
-    if sr != sample_rate:
-        return False, f"Sample rate mismatch for {wav_path} (found {sr}, expected {sample_rate})", 0
-
-    try:
-        # Ensure mono
-        if audio.dim() == 2 and audio.size(0) > 1:
-            audio = audio[:1, :]
-
-        frame_time = hop_length / float(sample_rate)
-        # choose a small odd median smoothing window (in frames) to avoid exceeding available frames
-        win_len = int(min(5, max(1, int(expected_len))))
-        if win_len % 2 == 0:
-            win_len = max(1, win_len - 1)
-
-        # detect_pitch_frequency returns (channels, frames)
-        f0 = ta.functional.detect_pitch_frequency(
-            audio,
-            sample_rate,
-            frame_time=frame_time,
-            win_length=win_len,
-            freq_low=f0_fmin,
-            freq_high=f0_fmax,
-        )[0]
-
-        T = f0.shape[-1]
-        if T < expected_len:
-            pad = torch.zeros(expected_len - T, dtype=f0.dtype)
-            f0 = torch.cat([f0, pad], dim=-1)
-        elif T > expected_len:
-            f0 = f0[:expected_len]
-
-        f0 = f0.unsqueeze(0)  # Add channel dimension: (1, T)
-
-        # Save raw Hz F0 (unvoiced frames are 0). No normalization applied.
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        arr = f0.cpu().numpy().astype(np.float32)
-        if np.isnan(arr).any() or np.isinf(arr).any():
-            raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in F0 for {out_path}")
-        np.save(out_path, arr)
-        return True, "", f0.shape[-1]
-    except Exception as e:  # pylint: disable=broad-except
-        return False, f"Processing failed for {wav_path}: {e}", 0
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Precompute normalized mel-spectrograms and F0 (.npy) using parameters from a dataset YAML config."
+        description="Precompute normalized mel-spectrograms (.npy) using parameters from a dataset YAML config."
     )
     parser.add_argument(
         "-i",
@@ -184,8 +116,8 @@ def main():
     # Expected keys in the data YAML
     # train_filelist_path / valid_filelist_path
     # sample_rate, n_fft, n_feats, hop_length, win_length, f_min, f_max
-    # data_statistics: { mel_mean, mel_std, f0_mean, f0_std }
-    # mel_dir, f0_dir (outputs)
+    # data_statistics: { mel_mean, mel_std }
+    # mel_dir (output)
     required_top_keys = [
         "train_filelist_path",
         "valid_filelist_path",
@@ -211,7 +143,6 @@ def main():
     train_filelist = _resolve_path(str(cfg["train_filelist_path"]))
     valid_filelist = _resolve_path(str(cfg["valid_filelist_path"]))
     mel_dir = _resolve_path(str(cfg["mel_dir"]))
-    f0_dir = _resolve_path(str(cfg["f0_dir"])) if "f0_dir" in cfg else None
 
     sample_rate = int(cfg["sample_rate"])
     n_fft = int(cfg["n_fft"])
@@ -222,10 +153,6 @@ def main():
     f_max = float(cfg["f_max"])
     mel_mean = float(data_stats["mel_mean"])
     mel_std = float(data_stats["mel_std"])
-
-    # F0 parameters (optional, with defaults)
-    f0_fmin = float(cfg.get("f0_fmin", 50.0))
-    f0_fmax = float(cfg.get("f0_fmax", 1100.0))
 
     # ---- NEW: read mel_backend for extractor selection ----
     mel_backend = cfg.get("mel_backend", "hifigan")
@@ -320,69 +247,6 @@ def main():
                 f.write(f"{wav_path}\t{msg}\n")
 
     print(f"\n[precompute_corpus] Finished. ok={ok}, fail={len(failures)}.\nMetadata at {mel_dir/'metadata.json'}")
-
-    # Compute F0 if f0_dir is specified
-    if f0_dir is not None:
-        print(f"\n[precompute_f0] Config: {cfg_path}")
-        print(f"[precompute_f0] Output: {f0_dir}")
-        print(f"[precompute_f0] Files: {total} (train+valid)")
-        print(f"[precompute_f0] F0 params: fmin={f0_fmin}, fmax={f0_fmax}")
-
-        f0_dir.mkdir(parents=True, exist_ok=True)
-        f0_ok = 0
-        f0_failures = []
-
-        for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
-            # rel_base is like "1/abc"
-            mel_npy_path = mel_dir / (rel_base + ".npy")
-
-            # Load the corresponding mel to get its length
-            if not mel_npy_path.exists():
-                print(f"[precompute_f0] ERROR: Mel not found for {wav_path}")
-                f0_failures.append((str(wav_path), "Corresponding mel file not found"))
-                continue
-
-            mel_arr = np.load(mel_npy_path)
-            mel_length = mel_arr.shape[-1]
-
-            out_path = f0_dir / (rel_base + ".npy")
-            success, msg, _ = compute_and_save_f0(
-                wav_path=wav_path,
-                out_path=out_path,
-                sample_rate=sample_rate,
-                hop_length=hop_length,
-                f0_fmin=f0_fmin,
-                f0_fmax=f0_fmax,
-                expected_len=mel_length,
-            )
-            if success:
-                f0_ok += 1
-                print(f"\r[precompute_f0] {i}/{total} done.", end="", flush=True)
-            else:
-                print(f"[precompute_f0] ERROR: {msg}")
-                f0_failures.append((str(wav_path), msg))
-
-        # Write F0 metadata
-        f0_meta = {
-            "data_config": str(cfg_path),
-            "sample_rate": sample_rate,
-            "hop_length": hop_length,
-            "f0_fmin": f0_fmin,
-            "f0_fmax": f0_fmax,
-            "num_files": total,
-            "num_ok": f0_ok,
-            "num_fail": len(f0_failures),
-            "filelists": [str(train_filelist), str(valid_filelist)],
-        }
-        with open(f0_dir / "metadata.json", "w", encoding="utf-8") as f:
-            json.dump(f0_meta, f, indent=2)
-
-        if f0_failures:
-            with open(f0_dir / "failures.txt", "w", encoding="utf-8") as f:
-                for wav_path, msg in f0_failures:
-                    f.write(f"{wav_path}\t{msg}\n")
-
-        print(f"\n[precompute_f0] Finished. ok={f0_ok}, fail={len(f0_failures)}.\nMetadata at {f0_dir/'metadata.json'}")
 
 
 if __name__ == "__main__":

@@ -58,10 +58,6 @@ class BaseLightningClass(LightningModule, ABC):
         y, y_lengths = batch["y"], batch["y_lengths"]
         spks = batch["spks"]
 
-        # Optional pitch features
-        f0 = batch.get("f0", None)
-        f0_mask = batch.get("f0_mask", None)
-
         # self(...) will invoke the __call__ method from the super class, 
         # which, in its turn, invokes the forward method from matcha_tts.py
         outputs = self(
@@ -72,8 +68,6 @@ class BaseLightningClass(LightningModule, ABC):
             spks=spks,
             out_size=self.out_size,
             durations=batch["durations"],
-            f0=f0,
-            f0_mask=f0_mask,
         )
 
         loss_dict = {
@@ -81,9 +75,6 @@ class BaseLightningClass(LightningModule, ABC):
             "prior_loss": outputs[1],
             "diff_loss": outputs[2],
         }
-        
-        if getattr(self.hparams, "use_pitch", False):
-            loss_dict["pitch_loss"] = outputs[3]
 
         return loss_dict
 
@@ -130,16 +121,6 @@ class BaseLightningClass(LightningModule, ABC):
             sync_dist=True,
             batch_size=bs,
         )
-        if "pitch_loss" in loss_dict:
-            self.log(
-                "sub_loss/train_pitch_loss",
-                loss_dict["pitch_loss"],
-                on_step=True,
-                on_epoch=True,
-                logger=True,
-                sync_dist=True,
-                batch_size=bs,
-            )
 
         total_loss = sum(loss_dict.values())
         self.log(
@@ -185,16 +166,6 @@ class BaseLightningClass(LightningModule, ABC):
             sync_dist=True,
             batch_size=bs,
         )
-        if "pitch_loss" in loss_dict:
-            self.log(
-                "sub_loss/val_pitch_loss",
-                loss_dict["pitch_loss"],
-                on_step=True,
-                on_epoch=True,
-                logger=True,
-                sync_dist=True,
-                batch_size=bs,
-            )
 
         total_loss = sum(loss_dict.values())
         self.log(

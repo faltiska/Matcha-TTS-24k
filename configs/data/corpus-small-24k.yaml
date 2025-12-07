@@ -8,7 +8,7 @@ persistent_workers: true
 pin_memory: True
 cleaners: [english_cleaners2]
 add_blank: True
-n_spks: 1
+n_spks: 2
 n_fft: 1024
 n_feats: 100
 sample_rate: 24000
@@ -19,14 +19,17 @@ f_max: 12000
 seed: ${seed}
 load_durations: false
 
-# Computed for my dataset with command:
-#   matcha-data-stats -i corpus-small-24k.yaml
+# Computed for speaker 1
+#data_statistics:
+#  mel_mean: -1.81633
+#  mel_std: 4.177081
+
+# for speakers 1 and 2:
 data_statistics:
-  mel_mean: -1.81633
-  mel_std: 4.177081
+  mel_mean: -1.878392
+  mel_std: 3.519257
   
-# Cache folders (the precompute script will put mels and pitch files here)
+# Cache folder (the precompute script will put mels here)
 mel_dir: data/corpus-small-24k/mels
-f0_dir: data/corpus-small-24k/f0
 
 mel_backend: vocos

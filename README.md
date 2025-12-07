@@ -21,14 +21,13 @@ python -m matcha.cli --text "Are you listening?" --vocoder vocos --checkpoint_pa
 ```
 
 ## Training
-Delete the mels and f0 folders from the corpus, if they exist.
+Delete the mels folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
 matcha-data-stats -i corpus-small-24k.yaml
 ```
 It will output something like
 {'mel_mean': -1.7744582891464233, 'mel_std': 4.116815090179443}
-{'f0_mean': 248.1585693359375, 'f0_std': 297.7625427246094}
 Take the values and put them in the yaml file.
 
 Precompute mel spectrogram cache to speed up training. 
@@ -80,8 +79,7 @@ Compared to the original MatchaTTS, I did the following:
 - I have switched to an AdamW optimizer
 - I have added Vocos using a model trained on 24KHz audio 
 - I have increased the TextEncoder model size
-- I have added an F0 (pitch) extractor
-- I have implemented a corpus mel and pitch precomputation script
+- I have implemented a corpus mel precomputation script
 - I have included a matmul precision auto-config
 - I have added 2 more ODE solvers 
 - I have implemented a GPU version of the maximum_path method used in the monotonic_align module

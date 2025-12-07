@@ -1,5 +1,0 @@
-# Pitch (F0) configuration for Matcha-TTS
-# Centralized, component-style config (not tied to dataset YAMLs)
-
-f0_fmin: 50.0     # Hz, lower bound for pitch detection
-f0_fmax: 1100.0   # Hz, upper bound for pitch detection

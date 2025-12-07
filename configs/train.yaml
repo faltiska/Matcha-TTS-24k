@@ -40,7 +40,6 @@ tags: ["dev"]
 # set False to skip model training
 train: True
 
-lambda_pitch: 0.2
 lambda_duration: 1.0
 
 # evaluate on test set, using best model weights achieved during training
