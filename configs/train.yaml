@@ -40,17 +40,15 @@ tags: ["dev"]
 # set False to skip model training
 train: True
 
-# lambda_pitch says how much the pitch loss contributes to the total loss.
-# Generally it is between 0.1 and 0.3
-# I ran a training with lambda_pitch=0.2 and after step 20K, pitch started to grow in validation steps, while it was still dropping in training steps, so I think it was overfitting.
-lambda_pitch: 0.1
+lambda_pitch: 0.2
+lambda_duration: 1.0
 
 # evaluate on test set, using best model weights achieved during training
 # lightning chooses best weights based on the metric specified in checkpoint callback
 test: True
 
 # simply provide checkpoint path to resume training
-ckpt_path: logs/train/corpus-small-24k/runs/2025-12-03_18-42-49/checkpoints/checkpoint_epoch=799.ckpt
+ckpt_path: null
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 1234

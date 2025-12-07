@@ -1,11 +1,8 @@
-# Learns faster and is more stable.
 _target_: torch.optim.AdamW
 _partial_: true
 
-# I got the best results so far with lr: 1e-4 plus sigma_min: 3e-5 
-lr: 3e-5           
+lr: 1e-5
 
-# I can try to lower it to 1e-6
 weight_decay: 1e-4
 betas: [0.9, 0.98]
 eps: 1e-8

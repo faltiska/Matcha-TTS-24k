@@ -1,8 +1,5 @@
 name: CFM
 
-# possible values: euler, rk4 or heun
 solver: euler 
 
-# got much better results than with the original 1e-4
-# diffusion loss dropped below 1 in less than 1000 epochs.
-sigma_min: 5e-6
+sigma_min: 5e-5

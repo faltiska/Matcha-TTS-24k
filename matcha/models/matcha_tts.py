@@ -38,6 +38,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         use_precomputed_durations=False,
         use_pitch=False,
         lambda_pitch=0.2,
+        lambda_duration=1.0,
         pitch=None,
         inference=None,
         plot_mel_on_validation_end=False,
@@ -55,6 +56,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.use_precomputed_durations = use_precomputed_durations
         self.use_pitch = use_pitch
         self.lambda_pitch = lambda_pitch
+        self.lambda_duration = lambda_duration
+        print(f"\n{lambda_duration=}")
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
         self.pitch = pitch
         self.inference = inference
@@ -231,7 +234,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Compute loss between predicted log-scaled durations and those obtained from MAS
         # refered to as prior loss in the paper
         logw_ = torch.log(1e-8 + torch.sum(attn.unsqueeze(1), -1)) * x_mask
-        dur_loss = duration_loss(logw, logw_, x_lengths)
+        dur_loss = self.lambda_duration * duration_loss(logw, logw_, x_lengths)
 
         # Cut a small segment of mel-spectrogram in order to increase batch size
         #   - "Hack" taken from Grad-TTS, in case of Grad-TTS, we cannot train batch size 32 on a 24GB GPU without it
