@@ -3,22 +3,22 @@ import torch
 from matcha.utils.monotonic_align.core import maximum_path_c
 from torch.utils.cpp_extension import load_inline
 
-def maximum_path(value, mask):
+def maximum_path_cpu(value, mask):
     """Cython optimised version.
     value: [b, t_x, t_y]
     mask: [b, t_x, t_y]
     """
-    value = value * mask
     device = value.device
-    dtype = value.dtype
-    value = value.data.cpu().numpy().astype(np.float32)
-    path = np.zeros_like(value).astype(np.int32)
-    mask = mask.data.cpu().numpy()
 
-    t_x_max = mask.sum(1)[:, 0].astype(np.int32)
-    t_y_max = mask.sum(2)[:, 0].astype(np.int32)
-    maximum_path_c(path, value, t_x_max, t_y_max)
-    return torch.from_numpy(path).to(device=device, dtype=dtype)
+    value_masked = (value * mask).detach().cpu().to(torch.float32)
+    value_np = np.ascontiguousarray(value_masked.numpy())
+    mask_np = np.ascontiguousarray(mask.detach().cpu().numpy())
+    path = np.zeros_like(value_np, dtype=np.int32)
+    t_x_max = mask_np.sum(axis=1)[:, 0].astype(np.int32)
+    t_y_max = mask_np.sum(axis=2)[:, 0].astype(np.int32)
+
+    maximum_path_c(path, value_np, t_x_max, t_y_max)
+    return torch.from_numpy(path).to(device=device, dtype=torch.int32)
 
 ##################################################################################################
 # CUDA kernel code
@@ -133,52 +133,39 @@ maximum_path_cuda_module = load_inline(
     extra_cuda_cflags=['-O3']
 )
 
-def maximum_path_gpu(values, t_xs, t_ys, max_neg_val=-1e9):
+def maximum_path_gpu(value, mask, max_neg_val=-1e9):
     """
     GPU version of maximum_path using CUDA.
     
     Args:
-        values: torch.Tensor of shape (batch, max_t_x, max_t_y) - input values (will be converted to float32)
-        t_xs: torch.Tensor of shape (batch,) - actual lengths in x dimension
-        t_ys: torch.Tensor of shape (batch,) - actual lengths in y dimension
+        value: torch.Tensor of shape (batch, max_t_x, max_t_y) - input values
+        mask: torch.Tensor of shape (batch, max_t_x, max_t_y) or (batch, 1, max_t_x, max_t_y)
         max_neg_val: float - large negative value for masking
     
     Returns:
         paths: torch.Tensor of shape (batch, max_t_x, max_t_y) - binary path matrix
     """
-    assert values.is_cuda, "Input must be on CUDA device"
-
-    if values.dtype != torch.float32:
-        values = values.float()
-
-    paths = torch.zeros_like(values, dtype=torch.int32)
-
-    values = values.contiguous()
-    t_xs = t_xs.contiguous().int()
-    t_ys = t_ys.contiguous().int()
-
-    maximum_path_cuda_module.maximum_path_cuda(paths, values, t_xs, t_ys, max_neg_val)
-
-    return paths
-##################################################################################################
-
-def maximum_path_improved(value, mask):
-    """GPU optimised version with bf16 support.
-    value: [b, t_x, t_y]
-    mask: [b, t_x, t_y] or [b, 1, t_x, t_y]
-    """
+    assert value.is_cuda, "Input must be on CUDA device"
+    
     dtype = value.dtype
-
     if mask.dim() == 4:
         mask = mask.squeeze(1)
-
+    
     value = value * mask
-    t_x_max = mask.sum(1)[:, 0].int()
-    t_y_max = mask.sum(2)[:, 0].int()
-
-    path = maximum_path_gpu(value, t_x_max, t_y_max)
-
+    if value.dtype != torch.float32:
+        value = value.float()
+    
+    t_xs = mask.sum(1)[:, 0].int()
+    t_ys = mask.sum(2)[:, 0].int()
+    
+    paths = torch.zeros_like(value, dtype=torch.int32)
+    value = value.contiguous()
+    t_xs = t_xs.contiguous()
+    t_ys = t_ys.contiguous()
+    
+    maximum_path_cuda_module.maximum_path_cuda(paths, value, t_xs, t_ys, max_neg_val)
+    
     if dtype != torch.int32:
-        path = path.to(dtype)
-
-    return path
+        paths = paths.to(dtype)
+    
+    return paths

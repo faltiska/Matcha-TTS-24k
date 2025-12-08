@@ -52,7 +52,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
         self.lambda_duration = lambda_duration
-        print(f"\n{lambda_duration=}")
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
         self.inference = inference
 
@@ -203,8 +202,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + const
 
-                # attn = monotonic_align.maximum_path(log_prior, attn_mask.squeeze(1))
-                attn = monotonic_align.maximum_path_improved(log_prior, attn_mask)
+                # CPU based implementation
+                attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
+
+                # GPU based implementation
+                # I cannot get it compiled with the rest of the model, so when compilation is enabled, it is faster to use the CPU version.
+                # attn = monotonic_align.maximum_path_gpu(log_prior, attn_mask)
                 
                 attn = attn.detach()  # b, t_text, T_mel
 

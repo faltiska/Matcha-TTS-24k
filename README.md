@@ -4,7 +4,7 @@
 uv venv --python 3.10
 .venv\Scripts\activate
 uv pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu130
-python setup.py build_ext --inplace
+python setup.py build_ext --inplace --force
 ```
 
 ## Inference

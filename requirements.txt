@@ -1,8 +1,9 @@
 # --------- pytorch --------- #
-torch>=2.0.0
-torchvision>=0.15.0
-lightning>=2.0.0
-torchmetrics>=0.11.4
+torch>=2.9.1
+torchaudio>=2.9.1
+torchvision>=0.24.1
+lightning>=2.6.0
+torchmetrics>=1.8.2
 torchcodec>=0.8.1
 torchdiffeq>=0.2.5
 

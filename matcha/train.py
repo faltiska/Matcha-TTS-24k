@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import hydra
 import lightning as L
 import rootutils
+import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
@@ -50,7 +51,6 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     # configure torch float32 matmul precision for Tensor Cores if available
     utils.setup_cuda_matmul_precision(precision=cfg.get("float32_matmul_precision"))
 
-
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")  # pylint: disable=protected-access
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
@@ -60,6 +60,13 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     # Store audio parameters from data config into model for inference
     model.sample_rate = cfg.data.sample_rate
     model.hop_length = cfg.data.hop_length
+
+    # Compile model for faster training if enabled
+    if cfg.get("compile"):
+        log.info("Compiling model with torch.compile()...")
+        import logging
+        logging.getLogger('torch._dynamo').setLevel(logging.ERROR)
+        model = torch.compile(model)
 
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))
@@ -85,7 +92,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     if cfg.get("train"):
         log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"), weights_only=False)
 
     train_metrics = trainer.callback_metrics
 
