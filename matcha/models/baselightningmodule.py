@@ -80,6 +80,29 @@ class BaseLightningClass(LightningModule, ABC):
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
+        
+        # Check if a new speaker was added to the corpus
+        if "spk_emb.weight" in checkpoint["state_dict"]:
+            old_spk_emb = checkpoint["state_dict"]["spk_emb.weight"]
+            old_n_spks = old_spk_emb.shape[0]
+            new_n_spks = self.n_spks
+            
+            if old_n_spks < new_n_spks:
+                emb_dim = old_spk_emb.shape[1]
+                new_spk_emb = torch.zeros(new_n_spks, emb_dim, dtype=old_spk_emb.dtype)
+                new_spk_emb[:old_n_spks] = old_spk_emb
+                checkpoint["state_dict"]["spk_emb.weight"] = new_spk_emb
+                
+                # Expand optimizer state for speaker embeddings
+                for opt_state in checkpoint.get("optimizer_states", []):
+                    for param_id, state in opt_state.get("state", {}).items():
+                        for key in ["exp_avg", "exp_avg_sq"]:
+                            if key in state and state[key].shape[0] == old_n_spks:
+                                expanded = torch.zeros(new_n_spks, emb_dim, dtype=state[key].dtype)
+                                expanded[:old_n_spks] = state[key]
+                                state[key] = expanded
+                
+                log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
     def training_step(self, batch: Any, batch_idx: int):
         loss_dict = self.get_losses(batch)
