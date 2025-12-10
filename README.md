@@ -58,7 +58,6 @@ I find hifigan_T2_v1 better than hifigan_univ_v1, and Vocos at 24KHz better than
 Prepare your corpus, update configs/train.yaml, then run:
 ```
 export TORCHINDUCTOR_MAX_AUTOTUNE_GEMM=0
-export TORCHDYNAMO_VERBOSE=1
 python -m matcha.train
 ```   
 

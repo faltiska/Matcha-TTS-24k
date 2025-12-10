@@ -3,7 +3,6 @@ from abc import ABC
 import torch
 import torch.nn.functional as F
 from torchdiffeq import odeint, odeint_adjoint
-from torch.amp import autocast
 
 from matcha.models.components.decoder import Decoder
 from matcha.utils.pylogger import get_pylogger
@@ -51,18 +50,9 @@ class BASECFM(torch.nn.Module, ABC):
             sample: generated mel-spectrogram
                 shape: (batch_size, n_feats, mel_timesteps)
         """
-
-        if torch.cuda.is_bf16_supported():
-            dtype = torch.bfloat16
-        else:
-            dtype = torch.float16
-            
-        print(f"{dtype=}")
-            
-        with autocast("cuda", dtype=dtype):
-            z = torch.randn_like(mu) * temperature
-            t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
-            return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond)
+        z = torch.randn_like(mu) * temperature
+        t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
+        return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks, cond=cond)
 
     def solve(self, x, t_span, mu, mask, spks, cond):
         ode_func = OdeSolverWrapper(self.estimator, mask, mu, spks, cond)
