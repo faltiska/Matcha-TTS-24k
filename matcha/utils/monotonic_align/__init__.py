@@ -9,6 +9,7 @@ def maximum_path_cpu(value, mask):
     mask: [b, t_x, t_y]
     """
     device = value.device
+    dtype = value.dtype
 
     value_masked = (value * mask).detach().cpu().to(torch.float32)
     value_np = np.ascontiguousarray(value_masked.numpy())
@@ -18,7 +19,7 @@ def maximum_path_cpu(value, mask):
     t_y_max = mask_np.sum(axis=2)[:, 0].astype(np.int32)
 
     maximum_path_c(path, value_np, t_x_max, t_y_max)
-    return torch.from_numpy(path).to(device=device, dtype=torch.int32)
+    return torch.from_numpy(path).to(device=device, dtype=dtype)
 
 ##################################################################################################
 # CUDA kernel code
