@@ -7,6 +7,79 @@ import torchaudio
 from matcha.utils.audio import mel_spectrogram as hifigan_mel
 
 
+class VocosMelExtractor:
+    """Introduced a class, to avoid pickling errors on Windows."""
+    def __init__(
+        self,
+        sample_rate: int = 24000,
+        n_fft: int = 1024,
+        hop_length: int = 256,
+        win_length: int = 1024,
+        n_mels: int = 100,
+        log_eps: float = 1e-7,
+    ):
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.n_mels = n_mels
+        self.log_eps = log_eps
+        self.mel_spec = None
+    
+    def __call__(self, y: torch.Tensor) -> torch.Tensor:
+        if self.mel_spec is None:
+            self.mel_spec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.sample_rate,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                win_length=self.win_length,
+                n_mels=self.n_mels,
+                center=True,
+                power=1,
+                mel_scale="htk",
+                norm=None,
+            )
+        
+        device = y.device
+        mel = self.mel_spec.to(device)(y)
+        mel = torch.log(torch.clamp(mel, min=self.log_eps))
+        return mel
+
+
+class HifiganMelExtractor:
+    """Picklable HiFiGAN mel extractor class"""
+    def __init__(
+        self,
+        sample_rate: int = 22050,
+        n_fft: int = 1024,
+        hop_length: int = 256,
+        win_length: int = 1024,
+        n_mels: int = 80,
+        f_min: float = 0.0,
+        f_max: Optional[float] = 8000.0,
+    ):
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.n_mels = n_mels
+        self.f_min = f_min
+        self.f_max = f_max
+    
+    def __call__(self, y: torch.Tensor) -> torch.Tensor:
+        return hifigan_mel(
+            y,
+            self.n_fft,
+            self.n_mels,
+            self.sample_rate,
+            self.hop_length,
+            self.win_length,
+            self.f_min,
+            self.f_max,
+            center=False,
+        )
+
+
 def _vocos_mel_factory(
     sample_rate: int = 24000,
     n_fft: int = 1024,
@@ -15,32 +88,7 @@ def _vocos_mel_factory(
     n_mels: int = 100,
     log_eps: float = 1e-7,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
-    """
-    Create a mel extractor matching Vocos-24k training:
-    - torchaudio MelSpectrogram with center=True, power=1 (magnitude), mel_scale='htk', norm=None
-    - Natural log with eps=1e-7
-    """
-    mel_spec = torchaudio.transforms.MelSpectrogram(
-        sample_rate=sample_rate,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        win_length=win_length,
-        n_mels=n_mels,
-        center=True,
-        power=1,
-        # mel_scale default is 'htk' for Vocos (see upstream); torchaudio default is 'htk' in recent versions
-        mel_scale="htk",
-        norm=None,
-    )
-
-    def extract_fn(y: torch.Tensor) -> torch.Tensor:
-        # y: [B, T] or [1, T]
-        device = y.device
-        mel = mel_spec.to(device)(y)
-        mel = torch.log(torch.clamp(mel, min=log_eps))
-        return mel
-
-    return extract_fn
+    return VocosMelExtractor(sample_rate, n_fft, hop_length, win_length, n_mels, log_eps)
 
 
 def _hifigan_mel_factory(
@@ -52,26 +100,7 @@ def _hifigan_mel_factory(
     f_min: float = 0.0,
     f_max: Optional[float] = 8000.0,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
-    """
-    Create a mel extractor matching current HiFi-GAN usage in this repository:
-    - center=False
-    - librosa mel basis via matcha.utils.audio.mel_spectrogram
-    - Natural log compression with eps=1e-5 inside the helper
-    """
-    def extract_fn(y: torch.Tensor) -> torch.Tensor:
-        return hifigan_mel(
-            y,
-            n_fft,
-            n_mels,
-            sample_rate,
-            hop_length,
-            win_length,
-            f_min,
-            f_max,
-            center=False,
-        )
-
-    return extract_fn
+    return HifiganMelExtractor(sample_rate, n_fft, hop_length, win_length, n_mels, f_min, f_max)
 
 
 def get_mel_extractor(

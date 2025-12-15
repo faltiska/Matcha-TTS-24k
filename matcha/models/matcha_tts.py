@@ -201,11 +201,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 log_prior = y_square - y_mu_double + mu_square + const
 
                 # CPU based implementation
-                # attn = monotonic_align.maximum_path_cpu_2(log_prior, attn_mask.squeeze(1))
+                attn = monotonic_align.maximum_path_cpu_2(log_prior, attn_mask.squeeze(1))
 
                 # GPU based implementation
                 # I cannot get it compiled with the rest of the model, so when compilation is enabled, I have to use the CPU version.
-                attn = monotonic_align.maximum_path_gpu(log_prior, attn_mask)
+                # attn = monotonic_align.maximum_path_gpu(log_prior, attn_mask)
                 
                 attn = attn.detach()  # b, t_text, T_mel
 

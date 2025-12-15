@@ -46,3 +46,4 @@ gdown
 wget
 seaborn
 vocos
+ninja

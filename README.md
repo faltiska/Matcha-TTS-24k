@@ -4,13 +4,17 @@
 uv venv --python 3.10
 .venv\Scripts\activate
 uv pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu130
+uv pip install -r requirements.txt
+uv pip install triton-windows
 python setup.py build_ext --inplace --force
 ```
 
 ## Inference
-Set this env var on each terminal where you want to run inference:
+Set this env var on each terminal where you want to run either inference or training:
 ```
 set "PHONEMIZER_ESPEAK_LIBRARY=C:\Program Files\eSpeak NG\libespeak-ng.dll"
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
+set TORCH_DISABLE_ADDR2LINE=1
 ```
 If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run it for you.
 
