@@ -5,6 +5,7 @@ uv venv --python 3.10
 .venv\Scripts\activate
 uv pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu130
 python setup.py build_ext --inplace --force
+uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git
 ```
 
 ## Inference
@@ -16,8 +17,10 @@ If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run 
 
 Run inference with:
 ```
-python -m matcha.cli --text "Are you listening?"
-python -m matcha.cli --text "Are you listening?" --vocoder vocos --checkpoint_path logs/train/corpus-small-24k/runs/2025-11-26_08-17-56/checkpoints/checkpoint_epoch=099.ckpt
+python -m matcha.cli --text "You're leaving?"
+python -m matcha.cli --text "You're leaving?" --vocoder vocos \
+--checkpoint_path     logs/train/corpus-small-24k/runs/2025-12-14_16-03-29/checkpoints/checkpoint_epoch=109.ckpt \
+--spk 0,1,2,3
 ```
 
 ## Training
@@ -62,7 +65,7 @@ python -m matcha.train
 
 Monitor training with: 
 ```
-tensorboard --logdir=logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
+tensorboard --logdir logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
 ```
 
 Profile your trainer with:
@@ -129,7 +132,7 @@ Update the drivers with:
 sudo apt install cuda-drivers --update
 sudo apt install libcudnn9-cuda-13 --update
 ```
-or even
+or update all linux packages:
 ```
 sudo apt update && sudo apt full-upgrade
 ```
