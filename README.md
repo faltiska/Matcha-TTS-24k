@@ -9,16 +9,13 @@ then run this to set up the C++ compiler environment
 "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 ```
 It is required for running setup.py later, but also for training.
-Put 
-```
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-```
-in .venv/Scripts/activate.bat
 
 ```
 uv venv --python 3.10
 .venv\Scripts\activate
 uv pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu130
+or
+uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu130
 uv pip install -r requirements.txt
 uv pip install triton-windows
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git
@@ -83,7 +80,7 @@ python -m matcha.train
 
 Monitor training with: 
 ```
-tensorboard --logdir=logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
+tensorboard --logdir logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
 ```
 
 Profile your trainer with:
@@ -165,5 +162,3 @@ sudo apt update && sudo apt full-upgrade
 # Misc
 
 See original [readme](ORIGINAL-README.md) too.
-
-
