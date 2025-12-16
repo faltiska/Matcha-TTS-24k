@@ -1,5 +1,7 @@
 _target_: lightning.pytorch.trainer.Trainer
 
+num_sanity_val_steps: 0
+
 default_root_dir: ${paths.output_dir}
 
 max_epochs: -1
