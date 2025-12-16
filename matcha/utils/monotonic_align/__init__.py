@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from matcha.utils.monotonic_align.core import maximum_path_c
 
-@torch.compiler.disable
 def maximum_path_cpu(value, mask):
     """Cython optimised version - CUDA graph compatible.
     value: [b, t_x, t_y]
