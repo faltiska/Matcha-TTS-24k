@@ -4,11 +4,13 @@ import random
 
 import torch
 
-import matcha.utils.monotonic_align as monotonic_align
+from super_monotonic_align import maximum_path
+
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
+
 from matcha.utils.model import (
     denormalize,
     duration_loss,
@@ -76,6 +78,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.update_data_statistics(data_statistics)
 
+    @torch.compile(dynamic=True)
     def compute_mas_alignment(self, mu_x, y, attn_mask):
         """Compute Monotonic Alignment Search alignment."""
         # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
@@ -87,7 +90,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
             log_prior = y_square - y_mu_double + mu_square + const
             
-            attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
+            attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), dtype=log_prior.dtype)
             return attn.detach()
 
     @torch.inference_mode()

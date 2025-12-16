@@ -4,7 +4,7 @@ The benefit of this abstraction is that all the logic outside of model definitio
 """
 import inspect
 from abc import ABC
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Union, Callable
 
 import torch
 from lightning import LightningModule
@@ -17,6 +17,7 @@ log = utils.get_pylogger(__name__)
 
 
 class BaseLightningClass(LightningModule, ABC):
+    @torch.compiler.disable
     def update_data_statistics(self, data_statistics):
         if data_statistics is None:
             data_statistics = {
@@ -27,11 +28,13 @@ class BaseLightningClass(LightningModule, ABC):
         self.register_buffer("mel_mean", torch.tensor(data_statistics["mel_mean"]))
         self.register_buffer("mel_std", torch.tensor(data_statistics["mel_std"]))
 
+    @torch.compiler.disable
     def configure_optimizers(self) -> Any:
         optimizer = self.hparams.optimizer(params=self.parameters())
         if self.hparams.scheduler not in (None, {}):
             scheduler_args = {}
             # Manage last epoch for exponential schedulers
+            current_epoch = None
             if "last_epoch" in inspect.signature(self.hparams.scheduler.scheduler).parameters:
                 if hasattr(self, "ckpt_loaded_epoch"):
                     current_epoch = self.ckpt_loaded_epoch - 1
@@ -40,7 +43,8 @@ class BaseLightningClass(LightningModule, ABC):
 
             scheduler_args.update({"optimizer": optimizer})
             scheduler = self.hparams.scheduler.scheduler(**scheduler_args)
-            scheduler.last_epoch = current_epoch
+            if current_epoch:
+                scheduler.last_epoch = current_epoch
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
@@ -78,6 +82,7 @@ class BaseLightningClass(LightningModule, ABC):
 
         return loss_dict
 
+    @torch.compiler.disable
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
@@ -204,6 +209,7 @@ class BaseLightningClass(LightningModule, ABC):
 
         return total_loss
 
+    @torch.compiler.disable
     def on_validation_end(self) -> None:
         if not self.hparams.plot_mel_on_validation_end:
             return
@@ -248,9 +254,45 @@ class BaseLightningClass(LightningModule, ABC):
                     dataformats="HWC",
                 )
 
+    @torch.compiler.disable
     def on_before_optimizer_step(self, optimizer):
         # Log gradient norms less frequently to reduce overhead 
         # (it was 21.6% of training time when I ran with the profiler enabled)
         if self.trainer.global_step % 100 == 0:
             norms = grad_norm(self, norm_type=2)
             self.log_dict({"grad_norm/grad_2.0_norm_total": norms["grad_2.0_norm_total"]})
+
+    @torch.compiler.disable
+    def log(
+            self,
+            name: str,
+            value: Any,
+            prog_bar: bool = False,
+            logger: Optional[bool] = None,
+            on_step: Optional[bool] = None,
+            on_epoch: Optional[bool] = None,
+            reduce_fx: Union[str, Callable[[Any], Any]] = "mean",
+            enable_graph: bool = False,
+            sync_dist: bool = False,
+            sync_dist_group: Optional[Any] = None,
+            add_dataloader_idx: bool = True,
+            batch_size: Optional[int] = None,
+            metric_attribute: Optional[str] = None,
+            rank_zero_only: bool = False,
+    ) -> None:
+        super().log(
+            name=name,
+            value=value,
+            prog_bar=prog_bar,
+            logger=logger,
+            on_step=on_step,
+            on_epoch=on_epoch,
+            reduce_fx=reduce_fx,
+            enable_graph=enable_graph,
+            sync_dist=sync_dist,
+            sync_dist_group=sync_dist_group,
+            add_dataloader_idx=add_dataloader_idx,
+            batch_size=batch_size,
+            metric_attribute=metric_attribute,
+            rank_zero_only=rank_zero_only,
+        )
