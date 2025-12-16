@@ -4,7 +4,6 @@ import random
 
 import torch
 
-import matcha.utils.monotonic_align as monotonic_align  # pylint: disable=consider-using-from-import
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.models.components.flow_matching import CFM
@@ -200,14 +199,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + const
 
-                # CPU based implementation
-                # attn = monotonic_align.maximum_path_cpu_2(log_prior, attn_mask.squeeze(1))
+                from super_monotonic_align import maximum_path
+                attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), dtype=log_prior.dtype)
 
-                # GPU based implementation
-                # I cannot get it compiled with the rest of the model, so when compilation is enabled, I have to use the CPU version.
-                attn = monotonic_align.maximum_path_gpu(log_prior, attn_mask)
+                # from matcha.utils.monotonic_align import maximum_path_cpu
+                # attn = maximum_path_cpu(log_prior, attn_mask.squeeze(1).to(torch.int32))
                 
-                attn = attn.detach()  # b, t_text, T_mel
+                attn = attn.detach()
 
         # Compute loss between predicted log-scaled durations and those obtained from MAS
         # refered to as prior loss in the paper
