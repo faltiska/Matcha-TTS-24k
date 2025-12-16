@@ -4,7 +4,7 @@ import random
 
 import torch
 
-import matcha.utils.monotonic_align as monotonic_align  # pylint: disable=consider-using-from-import
+import matcha.utils.monotonic_align as monotonic_align
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.models.components.flow_matching import CFM
@@ -75,6 +75,20 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         )
 
         self.update_data_statistics(data_statistics)
+
+    def compute_mas_alignment(self, mu_x, y, attn_mask):
+        """Compute Monotonic Alignment Search alignment."""
+        # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
+        with torch.no_grad():
+            const = -0.5 * math.log(2 * math.pi) * self.n_feats
+            factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
+            y_square = torch.matmul(factor.transpose(1, 2), y**2)
+            y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
+            mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
+            log_prior = y_square - y_mu_double + mu_square + const
+            
+            attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
+            return attn.detach()
 
     @torch.inference_mode()
     def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=None, length_scale=1.0):
@@ -191,23 +205,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         if self.use_precomputed_durations:
             attn = generate_path(durations.squeeze(1), attn_mask.squeeze(1))
         else:
-            # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
-            with torch.no_grad():
-                const = -0.5 * math.log(2 * math.pi) * self.n_feats
-                factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-                y_square = torch.matmul(factor.transpose(1, 2), y**2)
-                y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
-                mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
-                log_prior = y_square - y_mu_double + mu_square + const
-
-                # CPU based implementation
-                attn = monotonic_align.maximum_path_cpu_2(log_prior, attn_mask.squeeze(1))
-
-                # GPU based implementation
-                # I cannot get it compiled with the rest of the model, so when compilation is enabled, I have to use the CPU version.
-                # attn = monotonic_align.maximum_path_gpu(log_prior, attn_mask)
-                
-                attn = attn.detach()  # b, t_text, T_mel
+            attn = self.compute_mas_alignment(mu_x, y, attn_mask)
 
         # Compute loss between predicted log-scaled durations and those obtained from MAS
         # refered to as prior loss in the paper
