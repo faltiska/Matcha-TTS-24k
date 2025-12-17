@@ -1,19 +1,40 @@
 ## Create an UV environment
 
+On windows, you need Microsoft Visual Studio Build Tools. Install it:
+```
+winget install Microsoft.VisualStudio.2022.BuildTools
+```
+then run this to set up the C++ compiler environment
+```
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+```
+It is required for running setup.py later, but also for training.
+
 ```
 uv venv --python 3.10
 .venv\Scripts\activate
 uv pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu130
-python setup.py build_ext --inplace --force
+or
+uv pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu130
+uv pip install -r requirements.txt
+uv pip install triton-windows
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git
+python setup.py build_ext --inplace --force
 ```
+
+You need the eSpeak application on Windows. Install it then set this env var:
+```
+set "PHONEMIZER_ESPEAK_LIBRARY=C:\Program Files\eSpeak NG\libespeak-ng.dll"
+```
+You can set env vars in your IntelliJ's terminal config, and have them set every time you launch one.
+
+You need CUDA Toolkit: https://developer.nvidia.com/cuda-12-4-0-download-archive
 
 ## Inference
 Set this env var on each terminal where you want to run inference:
 ```
 set "PHONEMIZER_ESPEAK_LIBRARY=C:\Program Files\eSpeak NG\libespeak-ng.dll"
 ```
-If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run it for you.
 
 Run inference with:
 ```
@@ -118,11 +139,18 @@ TorchInductor cache:
 - ~/.cache/torch/
 - /tmp/torchinductor_$USER/
 
-You could delete the folders to clear the cache:
+You could delete the folders to clear the cache.
+Linux: 
 ```
 rm -rf ~/.triton/cache/
 rm -rf ~/.cache/torch/
 rm -rf /tmp/torchinductor_$USER/
+```
+
+Windows:
+```
+%TEMP%\torchinductor_%USERNAME%
+%USERPROFILE%\.triton\cache
 ```
 
 # nVidia drivers
@@ -140,5 +168,3 @@ sudo apt update && sudo apt full-upgrade
 # Misc
 
 See original [readme](ORIGINAL-README.md) too.
-
-
