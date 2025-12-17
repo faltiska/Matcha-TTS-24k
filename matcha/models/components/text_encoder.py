@@ -240,7 +240,7 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e4)
         p_attn = torch.nn.functional.softmax(scores, dim=-1)
-        p_attn = self.drop(p_attn)
+        p_attn = self.drop(p_attn).to(value.dtype)
         output = torch.matmul(p_attn, value)
         output = output.transpose(2, 3).contiguous().view(b, d, t_t)
         return output, p_attn
