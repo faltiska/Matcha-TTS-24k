@@ -19,7 +19,7 @@ Run inference with:
 ```
 python -m matcha.cli --text "You're leaving?"
 python -m matcha.cli --text "You're leaving?" --vocoder vocos \
---checkpoint_path     logs/train/corpus-small-24k/runs/2025-12-14_16-03-29/checkpoints/checkpoint_epoch=109.ckpt \
+--checkpoint_path     <your-chekpoint.ckpt> \
 --spk 0,1,2,3
 ```
 

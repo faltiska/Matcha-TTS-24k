@@ -8,6 +8,7 @@ from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 from lightning.pytorch.utilities.model_helpers import is_overridden
+import logging
 
 from matcha import utils
 
@@ -63,9 +64,17 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     # Compile model for faster training if enabled
     if cfg.get("compile"):
-        log.info("Compiling model with torch.compile()...")
-        import logging
+        log.info("Compiling the model.")
+        
+        # Avoids some recompilation, as explained on this hint: torch.compile considers integer attributes of the nn.Module to be static. 
+        # If you are observing recompilation, you might want to make this integer dynamic using 
+        # torch._dynamo.config.allow_unspec_int_on_nn_module = True, or convert this integer into a tensor.
+        torch._dynamo.config.allow_unspec_int_on_nn_module = True
+
         logging.getLogger('torch._dynamo').setLevel(logging.ERROR)
+        logging.getLogger('torch._inductor').setLevel(logging.ERROR)
+
+        # export TORCH_LOGS="recompiles" to see recompilation reasons
         model = torch.compile(model)
 
     log.info("Instantiating callbacks...")
