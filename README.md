@@ -18,9 +18,7 @@ If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run 
 Run inference with:
 ```
 python -m matcha.cli --text "You're leaving?"
-python -m matcha.cli --text "You're leaving?" --vocoder vocos \
---checkpoint_path     <your-chekpoint.ckpt> \
---spk 0,1,2,3
+python -m matcha.cli --text "You're leaving?" --vocoder vocos --checkpoint_path <your-chekpoint.ckpt> --spk 0,1,2,3
 ```
 
 ## Training
@@ -85,8 +83,9 @@ Compared to the original MatchaTTS, I did the following:
 - I have implemented a corpus mel precomputation script
 - I have included a matmul precision auto-config
 - I have added 2 more ODE solvers 
-- I have implemented a GPU version of the maximum_path method used in the monotonic_align module
+- I have switched to the Super-MAS monotonic_align implementation
 - I found a series of performance improvements 
+- I made changes to get the entire Lightning module compiled, improving performance 
 
 # Learning gradients 
 

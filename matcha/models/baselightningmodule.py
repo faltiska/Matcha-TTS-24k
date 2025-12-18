@@ -104,15 +104,12 @@ class BaseLightningClass(LightningModule, ABC):
                 
                 log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
-    def on_train_batch_start(self, batch, batch_idx):
-        # trying to avoid the model recompilation caused by size mismatches.
-        # I expect each batch to be different, and torch has to compile this method as dynamic, 
-        # but I cannot mark training_step() or forward() methods with @torch.compile(dynamic=True)
+    def training_step(self, batch: Any, batch_idx: int):
+        # trying to avoid the repeated recompilation of the model caused by changing parameter sizes in get_losses.
+        torch._dynamo.maybe_mark_dynamic(batch["x"], 0)
         torch._dynamo.mark_dynamic(batch["x"], 1)
         torch._dynamo.mark_dynamic(batch["y"], 2)
-        return super().on_train_batch_start(batch, batch_idx)
-
-    def training_step(self, batch: Any, batch_idx: int):
+        
         loss_dict = self.get_losses(batch)
         bs = batch["x"].shape[0]
         self.log(
@@ -262,39 +259,3 @@ class BaseLightningClass(LightningModule, ABC):
         if self.trainer.global_step % 100 == 0:
             norms = grad_norm(self, norm_type=2)
             self.log_dict({"grad_norm/grad_2.0_norm_total": norms["grad_2.0_norm_total"]})
-
-    # I only added the overridden method so I can decorate it with torch.compiler.disable, which avoids model recompilation.
-    @torch.compiler.disable
-    def log(
-            self,
-            name: str,
-            value: Any,
-            prog_bar: bool = False,
-            logger: Optional[bool] = None,
-            on_step: Optional[bool] = None,
-            on_epoch: Optional[bool] = None,
-            reduce_fx: Union[str, Callable[[Any], Any]] = "mean",
-            enable_graph: bool = False,
-            sync_dist: bool = False,
-            sync_dist_group: Optional[Any] = None,
-            add_dataloader_idx: bool = True,
-            batch_size: Optional[int] = None,
-            metric_attribute: Optional[str] = None,
-            rank_zero_only: bool = False,
-    ) -> None:
-        super().log(
-            name=name,
-            value=value,
-            prog_bar=prog_bar,
-            logger=logger,
-            on_step=on_step,
-            on_epoch=on_epoch,
-            reduce_fx=reduce_fx,
-            enable_graph=enable_graph,
-            sync_dist=sync_dist,
-            sync_dist_group=sync_dist_group,
-            add_dataloader_idx=add_dataloader_idx,
-            batch_size=batch_size,
-            metric_attribute=metric_attribute,
-            rank_zero_only=rank_zero_only,
-        )
