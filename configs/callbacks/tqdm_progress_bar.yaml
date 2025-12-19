@@ -3,5 +3,5 @@
 
 tqdm_progress_bar:
   _target_: lightning.pytorch.callbacks.TQDMProgressBar
-  refresh_rate: 10  # Refresh every 10 batches
+  refresh_rate: 5  # Refresh every N batches
 
