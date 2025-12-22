@@ -1,4 +1,6 @@
 defaults:
+  # I am not sure yet EMA is doing any good. 
+  # - ema
   - model_checkpoint.yaml
   - model_summary.yaml
   - tqdm_progress_bar.yaml

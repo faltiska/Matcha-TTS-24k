@@ -1,0 +1,9 @@
+ # Grad Norm has stabilized at 1.5 after 30K steps, which means, the model has found a stable "valley."
+# It is probably bouncing back and forth across the very bottom of that valley. 
+# Because the steps are too large, it can't "sink" into the final, deepest point where the high-fidelity audio details live.
+# I can fix that by lowering the LR and adding EMA. 
+# EMA will average out these final small oscillations, which usually results in a significant drop in perceived 
+# "metallic" or "robotic" artifacts in the generated speech. 
+ema:
+  _target_: matcha.utils.callbacks.ema.LightningEMA
+  decay: 0.9999
