@@ -9,12 +9,6 @@ uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git
 ```
 
 ## Inference
-Set this env var on each terminal where you want to run inference:
-```
-set "PHONEMIZER_ESPEAK_LIBRARY=C:\Program Files\eSpeak NG\libespeak-ng.dll"
-```
-If in IntelliJ Idea, you can set it in the terminal settings, and Idea will run it for you.
-
 Run inference with:
 ```
 python -m matcha.cli --text "You're leaving?"
@@ -75,17 +69,18 @@ This will generate a profile report at the end of training, so maybe set it to r
 ## Improvements
 
 Compared to the original MatchaTTS, I did the following:
-- I have increased the decoder model capacity
-- I have increased the TextEncoder model capacity
-- I have switched to an AdamW optimizer
-- I have added Vocos using a model trained on 24KHz audio 
-- I have increased the TextEncoder model size
-- I have implemented a corpus mel precomputation script
-- I have included a matmul precision auto-config
-- I have added 2 more ODE solvers 
-- I have switched to the Super-MAS monotonic_align implementation
-- I found a series of performance improvements 
-- I made changes to get the entire Lightning module compiled, improving performance 
+- increased the decoder model capacity
+- increased the TextEncoder model capacity
+- switched to an AdamW optimizer
+- added Vocos using a model trained on 24KHz audio 
+- increased the TextEncoder model size
+- implemented a corpus mel precomputation script
+- included a matmul precision auto-config
+- added 2 more ODE solvers 
+- switched to the Super-MAS monotonic_align implementation
+- found a series of performance improvements 
+- made changes to get the model to compile
+- added an EMA callback
 
 # Learning gradients 
 
