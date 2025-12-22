@@ -72,6 +72,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         torch._dynamo.config.allow_unspec_int_on_nn_module = True
 
         logging.getLogger('torch._dynamo').setLevel(logging.ERROR)
+        logging.getLogger("torch._inductor.lowering").setLevel(logging.ERROR)
         logging.getLogger('torch._inductor').setLevel(logging.ERROR)
 
         # export TORCH_LOGS="recompiles" to see recompilation reasons
