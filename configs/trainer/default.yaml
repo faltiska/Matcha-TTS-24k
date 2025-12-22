@@ -10,11 +10,10 @@ max_epochs: -1
 accelerator: gpu
 devices: [0]
 
-# log more frequently than the number of batches per epoch
 log_every_n_steps: 10
 
 # Changed from 16-mixed
-precision: bf16-mixed
+precision: 16-mixed
 
 # perform a validation loop every N training epochs
 check_val_every_n_epoch: 4
@@ -23,15 +22,5 @@ check_val_every_n_epoch: 4
 # makes training slower but gives more reproducibility than just setting seeds
 deterministic: False
 
-# Reduced from 5.0
 # Protects against spikes in learning. Keeps the model weights from jumping too wildly.
-gradient_clip_val: 2
-
-# 'norm': The vector is scaled down as a whole.
-# 'value': Only values that exceed gradient_clip_val are clipped.
-# Helps the duration predictor, which has very small values 
-gradient_clip_algorithm: 'value'
-
-# Good for Small GPUs that cannot fit larger batches 
-# Good for the model, since it uses snake beta activations
-accumulate_grad_batches: 2
+gradient_clip_val: 5
