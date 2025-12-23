@@ -31,6 +31,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder,
         cfm,
         data_statistics,
+        optimizer=None, # parameter required by BaseLightningClass
+        scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
         use_precomputed_durations=False,
         plot_mel_on_validation_end=False,
