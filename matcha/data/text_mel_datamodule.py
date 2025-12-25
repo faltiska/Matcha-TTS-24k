@@ -126,6 +126,7 @@ class TextMelDataModule(LightningDataModule):
             shuffle=False,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
             persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            drop_last=True, # avoids some model recompilation caused by changing parameter sizes.
         )
 
     def teardown(self, stage: Optional[str] = None):

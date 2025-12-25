@@ -2,4 +2,4 @@ name: CFM
 
 solver: euler 
 
-sigma_min: 5e-4
+sigma_min: 1e-4

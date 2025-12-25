@@ -80,7 +80,6 @@ Compared to the original MatchaTTS, I did the following:
 - switched to the Super-MAS monotonic_align implementation
 - found a series of performance improvements 
 - made changes to get the model to compile
-- added an EMA callback
 
 # Learning gradients 
 

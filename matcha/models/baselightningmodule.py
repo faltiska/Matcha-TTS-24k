@@ -106,12 +106,6 @@ class BaseLightningClass(LightningModule, ABC):
     def training_step(self, batch: Any, batch_idx: int):
         # avoids repeated recompilation of the model caused by changing parameter sizes.
         torch._dynamo.mark_dynamic(batch["x"], 1)
-        torch._dynamo.mark_dynamic(batch["y"], 2)
-        if batch.get("durations") is not None:
-            torch._dynamo.mark_dynamic(batch["durations"], 1)
-            torch._dynamo.mark_dynamic(batch["durations"], 2)
-        torch._dynamo.maybe_mark_dynamic(batch["x_lengths"], 0)
-        torch._dynamo.maybe_mark_dynamic(batch["y_lengths"], 0)
         
         loss_dict = self.get_losses(batch)
         bs = batch["x"].shape[0]

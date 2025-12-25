@@ -4,6 +4,8 @@ import random
 
 import torch
 
+from matcha.utils import monotonic_align
+
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.models.components.flow_matching import CFM
@@ -119,7 +121,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
 
         w = torch.exp(logw) * x_mask
-        w_ceil = torch.ceil(w * length_scale)
+        w_ceil = torch.ceil(w) * length_scale
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
@@ -194,8 +196,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + const
 
-                attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
-                attn = attn.detach()
+                # attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
+                attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
 
         # Compute loss between predicted log-scaled durations and those obtained from MAS
         # refered to as prior loss in the paper

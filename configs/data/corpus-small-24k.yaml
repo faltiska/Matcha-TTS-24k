@@ -2,8 +2,8 @@ _target_: matcha.data.text_mel_datamodule.TextMelDataModule
 name: corpus-small-24k
 train_filelist_path: data/corpus-small-24k/train.csv
 valid_filelist_path: data/corpus-small-24k/validate.csv
-batch_size: 28
-num_workers: 24
+batch_size: 16
+num_workers: 16
 persistent_workers: true
 pin_memory: True
 phonemizers: [multilingual_phonemizer]

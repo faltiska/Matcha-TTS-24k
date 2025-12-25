@@ -244,18 +244,18 @@ class MultiHeadAttention(nn.Module):
 
         if self.proximal_bias:
             assert t_s == t_t, "Proximal bias is only available for self-attention."
-            scores = scores + self._attention_bias_proximal(t_s, scores.dtype, scores.device)
+            scores = scores + self._attention_bias_proximal(t_s).to(device=scores.device, dtype=scores.dtype)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e4)
         p_attn = torch.nn.functional.softmax(scores, dim=-1)
-        p_attn = self.drop(p_attn).to(value.dtype)
+        p_attn = self.drop(p_attn)
         output = torch.matmul(p_attn, value)
         output = output.transpose(2, 3).contiguous().view(b, d, t_t)
         return output, p_attn
 
     @staticmethod
-    def _attention_bias_proximal(length, dtype, device):
-        r = torch.arange(length, dtype=dtype, device=device)
+    def _attention_bias_proximal(length):
+        r = torch.arange(length, dtype=torch.float32)
         diff = torch.unsqueeze(r, 0) - torch.unsqueeze(r, 1)
         return torch.unsqueeze(torch.unsqueeze(-torch.log1p(torch.abs(diff)), 0), 0)
 

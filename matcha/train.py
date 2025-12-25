@@ -76,11 +76,11 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         logging.getLogger('torch._inductor').setLevel(logging.ERROR)
 
         # export TORCH_LOGS="recompiles" to see recompilation reasons
-        
-        # Don't compile the entire Lightning module it will be very slow because many of the Lightning methods
-        # will trigger a model recompilation. But also don't recompile just the Matcha model components as training will be slower.
-        # Best option is to compile get_losses because it kind of "aggregates" the model components.  
-        model.get_losses = torch.compile(model.get_losses)
+
+        # Don't compile the entire model, because it is a Lightning module
+        model.encoder = torch.compile(model.encoder)
+        model.decoder = torch.compile(model.decoder)
+        model.spk_emb = torch.compile(model.spk_emb)
 
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))

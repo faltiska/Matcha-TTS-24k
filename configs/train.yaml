@@ -7,7 +7,7 @@ defaults:
   - data: corpus-small-24k
   - model: matcha
   - callbacks: default
-  - logger: tensorboard # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
+  - logger: tensorboard
   - trainer: default
   - paths: default
   - extras: default
@@ -59,4 +59,4 @@ float32_matmul_precision: "high"
 plot_mel_on_validation_end: false
 
 # Set to true to compile the model for training
-compile: true
+compile: false
