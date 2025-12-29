@@ -45,10 +45,5 @@ def sequence_to_text(sequence):
     return result
 
 
-def to_phonemes(text, phonemizer_names):
-    for name in phonemizer_names:
-        phonemizer = getattr(phonemizers, name)
-        if not phonemizer:
-            raise UnknownPhonemizerException(f"Unknown phonemizer: {name}")
-        text = phonemizer(text)
-    return text
+def to_phonemes(text, language):
+    return phonemizers.multilingual_phonemizer(text, language=language)

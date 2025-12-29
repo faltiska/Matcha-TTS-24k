@@ -24,7 +24,7 @@ import torchaudio as ta
 from matcha.utils.model import normalize
 
 from matcha.mel.extractors import get_mel_extractor
-from matcha.text.phonemizers import multilingual_phonemizer
+from matcha.text import to_phonemes
 from matcha.text.symbols import symbols
 
 
@@ -194,12 +194,15 @@ def main():
     unknown_symbols = set()
     print(f"[precompute_corpus] Validating IPA symbols (language: {language})...")
     for parts in all_entries:
-        if len(parts) >= 3:
-            text = parts[2]
-            ipa = multilingual_phonemizer(text, language=language)
-            for char in ipa:
-                if char not in symbol_set:
-                    unknown_symbols.add(char)
+        if len(parts) < 4:
+            print(f"[test_corpus_ipa] WARNING: Skipping malformed line {i}: {parts}")
+            continue
+        language = parts[2]
+        text = parts[3]
+        ipa = to_phonemes(text, language=language)
+        for char in ipa:
+            if char not in symbol_set:
+                unknown_symbols.add(char)
     if unknown_symbols:
         print(f"[precompute_corpus] WARNING: Found {len(unknown_symbols)} unknown symbols: {sorted(unknown_symbols)}")
     else:

@@ -48,9 +48,9 @@ def plot_spectrogram_to_numpy(spectrogram, filename):
     plt.savefig(filename)
 
 
-def process_text(i: int, text: str, device: torch.device):
+def process_text(i: int, text: str, language: str, device: torch.device):
     print(f"[{i}] - Input text: {text}")
-    phonemes = to_phonemes(text, ["multilingual_phonemizer"])
+    phonemes = to_phonemes(text, language=language)
     phoneme_ids = to_phoneme_ids(phonemes)
     x = torch.tensor(
         intersperse(phoneme_ids, 0),
@@ -252,6 +252,7 @@ def cli():
     )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
+    parser.add_argument("--language", type=str, required=True, help="Language code (e.g., en-us, en-gb, ro)")
     parser.add_argument("--spk", type=str, default=None, help="Speaker ID or comma-separated list (e.g., 0 or 0,1,2)")
     parser.add_argument(
         "--solver",
@@ -354,7 +355,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id
     total_rtf_w = []
     sample_rate = getattr(model, "sample_rate")
     hop_length = getattr(model, "hop_length")
-    processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
+    processed_text = [process_text(i, text, args.language, "cpu") for i, text in enumerate(texts)]
     dataloader = torch.utils.data.DataLoader(
         BatchedSynthesisDataset(processed_text),
         batch_size=args.batch_size,
@@ -406,7 +407,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_
 
         print("".join(["="] * 100))
         text = text.strip()
-        text_processed = process_text(i, text, device)
+        text_processed = process_text(i, text, args.language, device)
 
         print(f"[🍵] Whisking Matcha-T(ea)TS for: {i}")
         start_t = dt.datetime.now()

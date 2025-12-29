@@ -37,7 +37,6 @@ class TextMelDataModule(LightningDataModule):
         batch_size,
         num_workers,
         pin_memory,
-        phonemizers,
         add_blank,
         n_spks,
         n_fft,
@@ -71,7 +70,6 @@ class TextMelDataModule(LightningDataModule):
         self.trainset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.train_filelist_path,
             self.hparams.n_spks,
-            self.hparams.phonemizers,
             self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
@@ -89,7 +87,6 @@ class TextMelDataModule(LightningDataModule):
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
             self.hparams.n_spks,
-            self.hparams.phonemizers,
             self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
@@ -145,7 +142,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         self,
         filelist_path,
         n_spks,
-        phonemizers,
         add_blank=True,
         n_fft=1024,
         n_mels=80,
@@ -164,7 +160,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.filelist_dir = self.filelist_path.parent
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.n_spks = n_spks
-        self.phonemizers = phonemizers
         self.add_blank = add_blank
         self.n_fft = n_fft
         self.n_mels = n_mels
@@ -194,18 +189,22 @@ class TextMelDataset(torch.utils.data.Dataset):
         random.seed(seed)
         random.shuffle(self.filepaths_and_text)
 
-    def get_datapoint(self, filepath_and_text):
+    def get_datapoint(self, csv_row):
+        if len(csv_row) < 4:
+            raise Exception(f"Malformed {csv_row=}")
+
         # rel_base_path now includes speaker subfolder, e.g., '1/filename'
-        rel_base_path = filepath_and_text[0]
-        spk = int(filepath_and_text[1])
-        text = filepath_and_text[2]
+        rel_base_path = csv_row[0]
+        spk = int(csv_row[1])
+        language = csv_row[2]
+        text = csv_row[3]
 
         # rel_base_base is like "1/abc"
         wav_path = self.filelist_dir / "wav" / (rel_base_path + ".wav")
         if not wav_path.exists():
             raise FileNotFoundError(f"WAV file not found: {wav_path}")
 
-        phonemes = to_phonemes(text, self.phonemizers)
+        phonemes = to_phonemes(text, language=language)
         phoneme_ids = to_phoneme_ids(phonemes)
         if self.add_blank:
             phoneme_ids = intersperse(phoneme_ids, 0)
