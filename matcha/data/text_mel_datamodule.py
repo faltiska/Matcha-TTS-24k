@@ -52,6 +52,7 @@ class TextMelDataModule(LightningDataModule):
         mel_dir: Optional[str] = None,
         persistent_workers: bool = True,
         mel_backend="vocos",
+        drop_last: bool = False,            
     ):
         super().__init__()
 
@@ -111,6 +112,7 @@ class TextMelDataModule(LightningDataModule):
             shuffle=True,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
             persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            drop_last=self.hparams.drop_last,
         )
 
     def val_dataloader(self):
@@ -122,6 +124,7 @@ class TextMelDataModule(LightningDataModule):
             shuffle=False,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
             persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            drop_last=self.hparams.drop_last,
         )
 
     def teardown(self, stage: Optional[str] = None):

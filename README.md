@@ -86,19 +86,24 @@ This will generate a profile report at the end of training, so maybe set it to r
 ## Improvements
 
 Compared to the original MatchaTTS, I did the following:
-- increased the decoder model capacity
-- increased the TextEncoder model capacity
-- switched to an AdamW optimizer
-- added Vocos using a model trained on 24KHz audio 
-- increased the TextEncoder model size
-- implemented a corpus mel precomputation script
-- switch to the torch built in ODE solver 
-- switched to the Super-MAS monotonic_align implementation
-- found a series of performance improvements 
-- made changes to get the model to compile
-
-Most important learning point after 2 weeks of struggling to get the compiled 
-model to train properly: leave the matmul precision on "highest".  
+- Switched to Vocos using a model trained on 24KHz audio
+  All other vocoders were trained on 22KHz audio files, and should have had an f_max of 11KHz
+  but f_max was set to 8KHz for all of them.  
+- Increased the decoder model capacity
+  I hope it will make room for the extra frequencies that came with using Vocos 24K.
+- Increased the spk_emb_dim in the encoder model
+  I hope it will capture the differences between speakers better
+- Switched to an AdamW optimizer
+- Implemented a mel precomputation script
+  Originally, the mels were computed during training, on the fly.
+  This speeds up training a bit
+- Switch to the torch built in ODE solver 
+  No need to maintain our own version, since the torch one supports all algorithms. 
+- Made some performance improvements to the CPU based monotonic_align implementation
+- Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
+  It is fast, but not really faster than the CPU version
+- Found a series of other performance improvements 
+- Made changes to get the model to compile, this is the biggest performance improvement.
 
 # PyTorch stuff
 
@@ -127,5 +132,3 @@ sudo apt update && sudo apt full-upgrade
 # Misc
 
 See original [readme](ORIGINAL-README.md) too.
-
-

@@ -196,8 +196,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + const
 
-                attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
-                # attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
+                # the GPU impl is about 5% faster, but triggers more model recompilations.
+                # attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
+                attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
                 
         # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
         # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
@@ -220,9 +221,4 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        # Compute alignment diagonality metric
-        with torch.no_grad():
-            attn_diag = torch.sum(attn * attn_mask.squeeze(1), dim=[1, 2]) / torch.sum(attn_mask.squeeze(1), dim=[1, 2])
-            attn_diag = attn_diag.mean()
-
-        return dur_loss, prior_loss, diff_loss, attn_diag
+        return dur_loss, prior_loss, diff_loss

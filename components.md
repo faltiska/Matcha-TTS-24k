@@ -3,11 +3,11 @@
 This document summarizes the core architecture and synthesis/training pipeline of Matcha-TTS.
 
 ## High-level
-- Non-autoregressive TTS that generates mel-spectrograms using Conditional Flow Matching (CFM), solved with a few fixed Euler ODE steps for fast inference.
+- Non-autoregressive TTS that generates mel-spectrograms using Conditional Flow Matching (CFM), solved with an ODE integration.
 - Two learnable stages:
   1) Text encoder with duration prediction and monotonic alignment
   2) Conditional flow decoder that maps noise to mel conditioned on encoder features
-- A separate vocoder (e.g., HiFi-GAN) converts the generated mel to waveform.
+- A separate vocoder (e.g., HiFi-GAN, Vocos) converts the generated mel to waveform.
 
 ## Core Components
 
@@ -37,7 +37,9 @@ Files: `matcha/models/components/flow_matching.py`, `matcha/models/components/de
 - Estimator network: a UNet-like `Decoder` that predicts the conditional flow field
 - Inference:
   - Start from noise `z`
-  - Integrate dx/dt = estimator(x, t, cond) over t ∈ [0, 1] using fixed-step Euler with `n_timesteps`
+  - Integrate dx/dt = estimator(x, t, cond) over t ∈ [0, 1] using the torchdiff built-in ODE implementation which offers multiple methods
+  - Solver method is specified in `cfm_params.solver`
+  - `n_timesteps` controls the number of integration steps
   - `temperature` scales the terminal noise
 - Multi-speaker conditioning is passed when applicable.
 
@@ -50,10 +52,11 @@ Files: `matcha/models/matcha_tts.py`
 ## Inference Pipeline
 1) Text → phoneme IDs → TextEncoder → `mu` (text-time), `logw`
 2) Durations → alignment path `attn` → expand to `mu_y` (mel-time)
-3) CFM decoder integrates from noise to mel with `n_timesteps` Euler steps and `temperature`
+3) CFM decoder integrates from noise to mel using the ODE solver
 4) Denormalize mel → external vocoder produces waveform
 
 ## Key Controls
+- `solver`: ODE integration method (configurable via `cfm_params.solver`)
 - `n_timesteps`: speed/quality trade-off for ODE integration
 - `temperature`: output stochasticity
 - `length_scale`: speaking rate control

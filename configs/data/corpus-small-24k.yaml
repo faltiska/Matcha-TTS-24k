@@ -2,12 +2,17 @@ _target_: matcha.data.text_mel_datamodule.TextMelDataModule
 name: corpus-small-24k
 train_filelist_path: data/corpus-small-24k/train.csv
 valid_filelist_path: data/corpus-small-24k/validate.csv
-batch_size: 17
-num_workers: 17
+batch_size: 27
+num_workers: 16
 persistent_workers: true
+# Set drop_last to true to drop the last batch which will most likely have a smaller
+# number of samples than set by batch_size, resulting in model recompilation. 
+# last_batch_size = num_samples % batch_size 
+# num_samples is the number of lines you have in your train.csv file.
+drop_last: true
 pin_memory: True
 add_blank: True
-n_spks: 5
+n_spks: 10
 n_fft: 1024
 n_feats: 100
 sample_rate: 24000

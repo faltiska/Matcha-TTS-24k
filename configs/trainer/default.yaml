@@ -20,7 +20,7 @@ check_val_every_n_epoch: 4
 
 # Reduced from 5.0
 # Protects against spikes in learning. Keeps the model weights from jumping too wildly.
-gradient_clip_val: 2
+gradient_clip_val: 4
 
 # Good for Small GPUs that cannot fit larger batches 
 # Good for the model, since it uses snake beta activations

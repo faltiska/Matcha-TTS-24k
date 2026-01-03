@@ -1,43 +1,29 @@
 # TextEncoder capacity increased from:
-#   n_channels: 256 -> 320
-#   filter_channels: 1024 -> 1280
-#   filter_channels_dp: 384 -> 512
-#   n_heads: 4 -> 8
-#   n_layers: 8 -> 10
-# TextEncoder model size increased from around 7.50 M params to 15 M
-
-# Constraint: n_channels must be divisible by n_heads (256 % 4 == 0).
-
-# Moderate settings, if needed: 
-#   n_channels: 256
-#   filter_channels: 1024
-#   filter_channels_dp: 384
-#   n_heads: 4
-#   n_layers: 8
-# resulting in a size of 16.56 M params
-
-# Higher settings, if needed: 
-#   n_channels: 320
-#   filter_channels: 1280 
-#   filter_channels_dp: 512
-#   n_heads: 8
-#   n_layers: 10
-# resulting in a size of 31.72M params.
+#   filter_channels: 768 -> 1024
+#   filter_channels_dp: 256 -> 384
+#   n_heads: 2 -> 8
+# TextEncoder model size increased to 12.4M params
 encoder_type: RoPE Encoder
 encoder_params:
   n_feats: ${model.n_feats}
-  n_channels: 320
-  filter_channels: 1280
-  filter_channels_dp: 512
+  # I am training with multiple speakers, so the total number of channels is: (n_channels + spk_emb_dim) = 256
+  # (n_channels + spk_emb_dim) / n_heads should best be a power of 2
+  n_channels: 192
+  # Changed from 768, because filter_channels should be 4x the effective number of channels
+  filter_channels: 1024
+  # Changed from 256 for smarter duration predictor to keep up with the number of speakers
+  filter_channels_dp: 384
+  # Changed n_heads from 2 to 8, for better prosody. Allows the encoder to produce a much more 
+  # accurate prior mu, reducing the "work" the CFM decoder has to do to reach the target mel.
   n_heads: 8
-  n_layers: 10
+  n_layers: 6
   kernel_size: 3
   p_dropout: 0.1
-  spk_emb_dim: 64
-  n_spks: 1
+  spk_emb_dim: ${model.spk_emb_dim}
   prenet: true
 
 duration_predictor_params:
   filter_channels_dp: ${model.encoder.encoder_params.filter_channels_dp}
   kernel_size: 3
   p_dropout: ${model.encoder.encoder_params.p_dropout}
+
