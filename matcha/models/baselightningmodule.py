@@ -60,7 +60,7 @@ class BaseLightningClass(LightningModule, ABC):
 
         # self(...) will invoke the __call__ method from the super class, 
         # which, in its turn, invokes the forward method from matcha_tts.py
-        outputs = self(
+        diff_loss, dur_loss, prior_loss = self(
             x=x,
             x_lengths=x_lengths,
             y=y,
@@ -69,13 +69,7 @@ class BaseLightningClass(LightningModule, ABC):
             durations=batch["durations"],
         )
 
-        loss_dict = {
-            "dur_loss": outputs[0],
-            "prior_loss": outputs[1],
-            "diff_loss": outputs[2],
-        }
-
-        return loss_dict
+        return diff_loss, dur_loss, prior_loss
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
@@ -105,36 +99,34 @@ class BaseLightningClass(LightningModule, ABC):
 
     def training_step(self, batch: Any, batch_idx: int):
         # avoids repeated recompilation of the model caused by changing parameter sizes.
-        torch._dynamo.maybe_mark_dynamic(batch["x"], 0)
         torch._dynamo.mark_dynamic(batch["x"], 1)
-        torch._dynamo.maybe_mark_dynamic(batch["y"], 2)
-        
-        loss_dict = self.get_losses(batch)
+
+        diff_loss, dur_loss, prior_loss = self.get_losses(batch)
         bs = batch["x"].shape[0]
-        total_loss = sum(loss_dict.values())
+        total_loss = dur_loss + prior_loss + diff_loss
         
         # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
         # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
         # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
         self.log("step", float(self.global_step), on_step=True, prog_bar=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_dur_loss", loss_dict["dur_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_prior_loss", loss_dict["prior_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_diff_loss", loss_dict["diff_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/train_diff_loss", diff_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/train_dur_loss", dur_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/train_prior_loss", prior_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
         self.log("loss/train", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, sync_dist=True, batch_size=bs)
 
-        return {"loss": total_loss, "log": loss_dict}
+        return {"loss": total_loss, "log": {"dur_loss": dur_loss, "prior_loss": prior_loss, "diff_loss": diff_loss}}
 
     def validation_step(self, batch: Any, batch_idx: int):
-        loss_dict = self.get_losses(batch)
+        diff_loss, dur_loss, prior_loss = self.get_losses(batch)
         bs = batch["x"].shape[0]
-        total_loss = sum(loss_dict.values())
+        total_loss = dur_loss + prior_loss + diff_loss
 
         # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
         # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
         # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
-        self.log("sub_loss/val_dur_loss", loss_dict["dur_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/val_prior_loss", loss_dict["prior_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/val_diff_loss", loss_dict["diff_loss"], on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/val_diff_loss", diff_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/val_dur_loss", dur_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
+        self.log("sub_loss/val_prior_loss", prior_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
         self.log( "loss/val", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, sync_dist=True, batch_size=bs)
 
         return total_loss
