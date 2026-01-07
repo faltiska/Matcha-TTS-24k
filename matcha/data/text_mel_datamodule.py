@@ -7,6 +7,7 @@ import torch
 import torchaudio as ta
 from lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import Sampler
 
 from matcha.text import to_phoneme_ids, to_phonemes
 from matcha.mel.extractors import get_mel_extractor
@@ -18,6 +19,90 @@ def parse_filelist(filelist_path, split_char="|"):
     with open(filelist_path, encoding="utf-8") as f:
         filepaths_and_text = [line.strip().split(split_char) for line in f]
     return filepaths_and_text
+
+
+class DynamicBatchSampler(Sampler):
+    """Sampler that creates batches based on total frame count rather than fixed sample count.
+    
+    Minimizes padding waste by sorting samples by length and grouping similar-length samples
+    together. Instead of fixed batch sizes, batches are sized to fit within a memory budget
+    (max_frames = max_length_in_batch × batch_size), allowing more short samples or fewer
+    long samples per batch.
+    """
+    
+    def __init__(self, dataset, max_frames):
+        self.dataset = dataset
+        self.max_frames = max_frames
+        self.lengths = self._get_lengths()
+        self.num_batches = self._estimate_batch_count()
+    
+    def _get_lengths(self):
+        """Get mel frame count for each sample."""
+        lengths = []
+        for i in range(len(self.dataset)):
+            csv_row = self.dataset.filepaths_and_text[i]
+            rel_base_path = csv_row[0]
+            
+            # Try loading from precomputed mel cache
+            if self.dataset.mel_dir:
+                mel_path = Path(self.dataset.mel_dir) / (rel_base_path + ".npy")
+                if mel_path.exists():
+                    arr = np.load(mel_path, mmap_mode='r')
+                    lengths.append((i, arr.shape[-1]))
+                    continue
+            
+            # Fallback: estimate from wav duration
+            wav_path = self.dataset.filelist_dir / "wav" / (rel_base_path + ".wav")
+            if wav_path.exists():
+                info = ta.info(str(wav_path))
+                frames = info.num_frames // self.dataset.hop_length
+                lengths.append((i, frames))
+            else:
+                raise FileNotFoundError(f"Neither mel file nor wav file found for sample {i}: {rel_base_path}")
+        
+        return lengths
+    
+    def _estimate_batch_count(self):
+        """Estimate number of batches by creating them once from sorted data."""
+        sorted_lengths = sorted(self.lengths, key=lambda x: x[1])
+        return len(self._create_batches(sorted_lengths))
+    
+    def _create_batches(self, lengths):
+        """Group samples into dynamic batches from provided lengths list."""
+        batches = []
+        current_batch = []
+        
+        for idx, length in lengths:
+            if current_batch:
+                # Calculate total frames if we add this sample
+                max_len = max(length, max(l for _, l in current_batch))
+                total_frames = max_len * (len(current_batch) + 1)
+            else:
+                total_frames = length
+            
+            if total_frames <= self.max_frames:
+                current_batch.append((idx, length))
+            else:
+                if current_batch:
+                    batches.append([idx for idx, _ in current_batch])
+                current_batch = [(idx, length)]
+        
+        if current_batch:
+            batches.append([idx for idx, _ in current_batch])
+        
+        return batches
+    
+    def __iter__(self):
+        lengths = self.lengths.copy()
+        random.shuffle(lengths)
+        sorted_lengths = sorted(lengths, key=lambda x: x[1])
+        batches = self._create_batches(sorted_lengths)
+        random.shuffle(batches)
+        for batch in batches:
+            yield batch
+    
+    def __len__(self):
+        return self.num_batches
 
 
 """
@@ -52,7 +137,8 @@ class TextMelDataModule(LightningDataModule):
         mel_dir: Optional[str] = None,
         persistent_workers: bool = True,
         mel_backend="vocos",
-        drop_last: bool = False,            
+        drop_last: bool = False,
+        max_frames_per_batch: Optional[int] = None,            
     ):
         super().__init__()
 
@@ -104,28 +190,56 @@ class TextMelDataModule(LightningDataModule):
         )
 
     def train_dataloader(self):
-        return DataLoader(
-            dataset=self.trainset,
-            batch_size=self.hparams.batch_size,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            shuffle=True,
-            collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-            drop_last=self.hparams.drop_last,
-        )
+        if self.hparams.max_frames_per_batch:
+            batch_sampler = DynamicBatchSampler(
+                self.trainset,
+                max_frames=self.hparams.max_frames_per_batch,
+            )
+            return DataLoader(
+                dataset=self.trainset,
+                batch_sampler=batch_sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            )
+        else:
+            return DataLoader(
+                dataset=self.trainset,
+                batch_size=self.hparams.batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                shuffle=True,
+                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+                drop_last=self.hparams.drop_last,
+            )
 
     def val_dataloader(self):
-        return DataLoader(
-            dataset=self.validset,
-            batch_size=self.hparams.batch_size,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            shuffle=False,
-            collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-            drop_last=self.hparams.drop_last,
-        )
+        if self.hparams.max_frames_per_batch:
+            batch_sampler = DynamicBatchSampler(
+                self.validset,
+                max_frames=self.hparams.max_frames_per_batch,
+            )
+            return DataLoader(
+                dataset=self.validset,
+                batch_sampler=batch_sampler,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            )
+        else:
+            return DataLoader(
+                dataset=self.validset,
+                batch_size=self.hparams.batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                shuffle=False,
+                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+                drop_last=self.hparams.drop_last,
+            )
 
     def teardown(self, stage: Optional[str] = None):
         """Clean up after fit or test."""
@@ -273,6 +387,11 @@ class TextMelDataset(torch.utils.data.Dataset):
 
 
 class TextMelBatchCollate:
+    """Collate function that pads variable-length samples to the longest sample in each batch.
+    
+    Pads phoneme sequences (x) and mel spectrograms (y) with zeros to match the longest
+    sample in the batch, and returns actual lengths so the model can ignore padding.
+    """
     def __init__(self, n_spks):
         self.n_spks = n_spks
 

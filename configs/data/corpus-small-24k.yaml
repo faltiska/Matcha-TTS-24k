@@ -2,14 +2,23 @@ _target_: matcha.data.text_mel_datamodule.TextMelDataModule
 name: corpus-small-24k
 train_filelist_path: data/corpus-small-24k/train.csv
 valid_filelist_path: data/corpus-small-24k/validate.csv
-batch_size: 27
+
+# Fixed batch size
+batch_size: 33
+
+# Dynamic batch size: batch by total frames instead of fixed sample count
+# Set to null to use fixed batch_size instead
+max_frames_per_batch: 18000
+
 num_workers: 16
 persistent_workers: true
+
 # Set drop_last to true to drop the last batch which will most likely have a smaller
 # number of samples than set by batch_size, resulting in model recompilation. 
 # last_batch_size = num_samples % batch_size 
 # num_samples is the number of lines you have in your train.csv file.
-drop_last: true
+drop_last: false
+
 pin_memory: True
 add_blank: True
 n_spks: 10
