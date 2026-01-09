@@ -71,21 +71,19 @@ class DynamicBatchSampler(Sampler):
         """Group samples into dynamic batches from provided lengths list."""
         batches = []
         current_batch = []
+        max_len = 0
         
         for idx, length in lengths:
-            if current_batch:
-                # Calculate total frames if we add this sample
-                max_len = max(length, max(l for _, l in current_batch))
-                total_frames = max_len * (len(current_batch) + 1)
-            else:
-                total_frames = length
+            new_max_len = max(length, max_len)
+            total_frames = new_max_len * (len(current_batch) + 1)
             
-            if total_frames <= self.max_frames:
-                current_batch.append((idx, length))
-            else:
-                if current_batch:
-                    batches.append([idx for idx, _ in current_batch])
-                current_batch = [(idx, length)]
+            if total_frames > self.max_frames:
+                batches.append([idx for idx, _ in current_batch])
+                current_batch = []
+                max_len = 0
+                
+            current_batch.append((idx, length))
+            max_len = max(max_len, length)
         
         if current_batch:
             batches.append([idx for idx, _ in current_batch])
