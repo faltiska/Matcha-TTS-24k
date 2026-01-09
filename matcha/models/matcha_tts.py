@@ -21,7 +21,6 @@ from super_monotonic_align import maximum_path
 
 log = utils.get_pylogger(__name__)
 
-
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
         self,
@@ -221,4 +220,4 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        return dur_loss, prior_loss, diff_loss
+        return diff_loss, dur_loss, prior_loss
