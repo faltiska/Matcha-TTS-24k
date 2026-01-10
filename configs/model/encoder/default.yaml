@@ -1,29 +1,34 @@
 # TextEncoder capacity increased from:
-#   filter_channels: 768 -> 1024
-#   filter_channels_dp: 256 -> 384
-#   n_heads: 2 -> 8
-# TextEncoder model size increased to 12.4M params
+#   filter_channels: 768 -> 864
+#   filter_channels_dp: 256 -> 320
+#   n_heads: 2 -> 6
+#   kernel_size: 3 -> 5
+# TextEncoder model size increased to 18.6M params
 encoder_type: RoPE Encoder
 encoder_params:
   n_feats: ${model.n_feats}
-  # I am training with multiple speakers, so the total number of channels is: (n_channels + spk_emb_dim) = 256
-  # (n_channels + spk_emb_dim) / n_heads should best be a power of 2
+  # I am training with multiple speakers, so the total number of channels is: (n_channels + spk_emb_dim) = 288
+  # (n_channels + spk_emb_dim) / n_heads should be a multiple of 8
   n_channels: 192
-  # Changed from 768, because filter_channels should be 4x the effective number of channels
-  filter_channels: 1024
+  # Changed from 768, because I want it to be 3x the total number of channels (and a multiple of 8)
+  filter_channels: 864
   # Changed from 256 for smarter duration predictor to keep up with the number of speakers
-  filter_channels_dp: 384
-  # Changed n_heads from 2 to 8, for better prosody. Allows the encoder to produce a much more 
+  filter_channels_dp: 320
+  # Changed n_heads from 2, for better prosody. Allows the encoder to produce a much more 
   # accurate prior mu, reducing the "work" the CFM decoder has to do to reach the target mel.
-  n_heads: 8
+  n_heads: 6
   n_layers: 6
-  kernel_size: 3
+  # Increased from 3. It controls receptive field in FFN layers.
+  # Each position sees itself + 2 neighbors on each side for local phonetic context
+  kernel_size: 5
   p_dropout: 0.1
+  # It is set to 96 in the other file
   spk_emb_dim: ${model.spk_emb_dim}
   prenet: true
 
 duration_predictor_params:
   filter_channels_dp: ${model.encoder.encoder_params.filter_channels_dp}
-  kernel_size: 3
+  # Changed from 3. It looks at the phoneme plus 2 neighbors on each side (5 phonemes total)
+  kernel_size: 5
   p_dropout: ${model.encoder.encoder_params.p_dropout}
 

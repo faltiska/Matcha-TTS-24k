@@ -1,7 +1,11 @@
 _target_: torch.optim.AdamW
 _partial_: true
 
-lr: 1e-4
+# If duration loss is not dropping during the first 20 epochs, and grad norm is much higher than 5,
+# it is probably a sign that the learning rate is too high. The model is relatively unstable in the early epochs. 
+# If the grad norm is not plotting, or is a perfectly flat line, it is probably a sign that the LR is too low. 
+# Can happen if you use large batches and/or accumulate multiple batches for gradient computation. 
+lr: 1.5e-4
 
 weight_decay: 1e-4
 betas: [0.9, 0.98]
