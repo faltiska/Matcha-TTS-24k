@@ -71,6 +71,17 @@ class BaseLightningClass(LightningModule, ABC):
 
         return diff_loss, dur_loss, prior_loss
 
+    def _log_losses(self, diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train"):
+        # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
+        # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
+        # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+
+        self.log(f"loss/{prefix}", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, batch_size=bs)
+        
+        self.log(f"sub_loss/{prefix}_diff", diff_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
+        self.log(f"sub_loss/{prefix}_dur", dur_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
+        self.log(f"sub_loss/{prefix}_prior", prior_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
+
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
@@ -105,14 +116,8 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
         
-        # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
-        # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
-        # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
-        self.log("step", float(self.global_step), on_step=True, prog_bar=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_diff_loss", diff_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_dur_loss", dur_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/train_prior_loss", prior_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("loss/train", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, sync_dist=True, batch_size=bs)
+        self.log("step", float(self.global_step), on_step=True, prog_bar=True, logger=True, batch_size=bs)
+        self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train")
 
         return {"loss": total_loss, "log": {"dur_loss": dur_loss, "prior_loss": prior_loss, "diff_loss": diff_loss}}
 
@@ -121,13 +126,7 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
-        # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
-        # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
-        # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
-        self.log("sub_loss/val_diff_loss", diff_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/val_dur_loss", dur_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log("sub_loss/val_prior_loss", prior_loss, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=bs)
-        self.log( "loss/val", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, sync_dist=True, batch_size=bs)
+        self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="val")
 
         return total_loss
 
@@ -176,8 +175,5 @@ class BaseLightningClass(LightningModule, ABC):
                 )
 
     def on_before_optimizer_step(self, optimizer):
-        # Log gradient norms less frequently to reduce overhead 
-        # (it was 21.6% of training time when I ran with the profiler enabled)
-        if self.trainer.global_step % 100 == 0:
-            norms = grad_norm(self, norm_type=2)
-            self.log_dict({"grad_norm/grad_2.0_norm_total": norms["grad_2.0_norm_total"]})
+        norms = grad_norm(self, norm_type=2)
+        self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
