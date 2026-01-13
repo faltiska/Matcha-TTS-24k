@@ -5,7 +5,7 @@ _partial_: true
 # it is probably a sign that the learning rate is too high. The model is relatively unstable in the early epochs. 
 # If the grad norm is not plotting, or is a perfectly flat line, it is probably a sign that the LR is too low. 
 # Can happen if you use large batches and/or accumulate multiple batches for gradient computation. 
-lr: 1.5e-4
+lr: 8e-5
 
 weight_decay: 1e-4
 betas: [0.9, 0.98]
