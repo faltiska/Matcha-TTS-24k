@@ -220,7 +220,4 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        # Duration predictor diagnostics: predicted durations in frames
-        predicted_durations = torch.exp(logw).squeeze(1) * x_mask.squeeze(1)  # [B, T_x] frames per phoneme
-        
-        return diff_loss, dur_loss, prior_loss, predicted_durations
+        return diff_loss, dur_loss, prior_loss
