@@ -323,7 +323,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         mel = self.get_mel(rel_base_path)
 
         if self.load_durations:
-            durations = self.get_durations(wav_path, phoneme_ids)
+            durations = self.get_durations(rel_base_path, phoneme_ids)
         else:
             durations = None
 
@@ -338,17 +338,15 @@ class TextMelDataset(torch.utils.data.Dataset):
 
         return sample
 
-    def get_durations(self, filepath, text):
-        filepath = Path(filepath)
-        data_dir, name = filepath.parent.parent, filepath.stem
+    def get_durations(self, rel_base_path, text):
+        dur_loc = self.filelist_dir / "durations" / (rel_base_path + ".npy")
 
         try:
-            dur_loc = data_dir / "durations" / f"{name}.npy"
             durs = torch.from_numpy(np.load(dur_loc).astype(int))
         except FileNotFoundError as e:
             raise FileNotFoundError(
-                f"Tried loading the durations but durations didn't exist at {dur_loc}, make sure you've generate the durations"
-                f" first using: python matcha/utils/get_durations_from_trained_model.py \n"
+                f"Tried loading the durations but durations didn't exist at {dur_loc}, make sure you've generated the durations"
+                f" first using: python -m matcha.utils.get_durations_from_trained_model or python -m matcha.utils.precompute_corpus --extract-durations\n"
             ) from e
 
         assert len(durs) == len(text), f"Length of durations {len(durs)} and text {len(text)} do not match"
