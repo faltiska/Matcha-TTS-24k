@@ -119,16 +119,18 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
 
-        w = torch.exp(logw) * x_mask
-        w_ceil = torch.ceil(w) * length_scale
-        y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
+        # Bug fix: removed torch.ceil() that was rounding up each phoneme duration.
+        # Rounding up caused systematic bias - speech was consistently too slow.
+        # generate_path can handle fractional durations (e.g., 2.37 frames) via cumsum.
+        w = torch.exp(logw) * x_mask * length_scale
+        y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).long()
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
 
         # Using obtained durations `w` construct alignment map `attn`
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
-        attn = generate_path(w_ceil.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
+        attn = generate_path(w.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
 
         # Align encoded text and get mu_y
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
