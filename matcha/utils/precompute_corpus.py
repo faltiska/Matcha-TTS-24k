@@ -1,4 +1,16 @@
 """
+A line in the corpus CSV files, looks like this:
+0/0001|0|en-us|Jack Holloway found himself squinting, the orange sun full in his eyes.
+
+First column has the form <speaker-id>/<file-name>, and it is a relative path to the file, without extension.It could either point to the mel file or the wav file.
+
+Mel files are at mel/<speaker-id>/<file-name>.npy
+Wav files are at wav/<speaker-id>/<file-name>.wav
+
+Second column is the speaker ID.
+Third is the speaker language.
+Fourth is the text.
+
 Precompute and cache normalized mel-spectrograms for a given dataset YAML config.
 
 This script reads all required parameters (filelists, mel params, normalization stats,
