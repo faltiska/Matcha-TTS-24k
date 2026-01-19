@@ -119,7 +119,7 @@ class BaseLightningClass(LightningModule, ABC):
         self.log("step", float(self.global_step), on_step=True, prog_bar=True, logger=True, batch_size=bs)
         self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train")
 
-        return {"loss": total_loss, "log": {"dur_loss": dur_loss, "prior_loss": prior_loss, "diff_loss": diff_loss}}
+        return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int):
         diff_loss, dur_loss, prior_loss = self.get_losses(batch)
