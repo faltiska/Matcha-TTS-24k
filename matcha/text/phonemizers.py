@@ -88,6 +88,10 @@ phonemizers["he"] = phonemizer.backend.EspeakBackend(
     logger=logger,
 )
 
+# eSpeak does not remove the dot after expanding some abbreviations, like "Dr.", making the TTS pause a bit.
+# Search for $dot here: https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/en_list
+# Happens in other languages too, https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/es_list, 
+# https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
 def multilingual_phonemizer(text, language):
     phonemizer = phonemizers[language]
     if not phonemizer:

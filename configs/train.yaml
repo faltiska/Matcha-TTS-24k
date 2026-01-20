@@ -54,4 +54,4 @@ seed: 1234
 plot_mel_on_validation_end: false
 
 # Set to true to compile the model for training
-compile: true
+compile: false

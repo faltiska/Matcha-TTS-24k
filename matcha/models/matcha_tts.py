@@ -222,4 +222,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        return diff_loss, dur_loss, prior_loss
+        # Gradient scaling: keeps prior_loss value unchanged for logging, 
+        # but amplifies its gradient 50x because the encoder gradient is so small, 
+        # it is dominated by the .
+        scaled_loss = prior_loss * 50 - prior_loss.detach() * 49
+        return diff_loss, dur_loss, scaled_loss
