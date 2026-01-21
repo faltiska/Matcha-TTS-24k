@@ -4,6 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from parse import parse
 import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -12,7 +13,7 @@ import soundfile as sf
 
 from matcha.cli import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-20_09-04-05/checkpoints/checkpoint_epoch=159.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-20_09-04-05/checkpoints/saved/checkpoint_epoch=479.ckpt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
@@ -36,11 +37,18 @@ app = FastAPI(title="Matcha-TTS Inference Server")
 
 class InferenceRequest(BaseModel):
     input: str
-    voice: int = 0
+    voice: int | str = 0  # Voice ID or Voice Mix in the form of "2(20)+5(80)" meaning 20% of voice 2 mixed with 80% of voice 5 
     response_format: str = "mp3"
     speed: float = 1.0
     steps: int = 20
-    voice_mix: dict[int, float] | None = None # {0: 0.1, 2: 0.9}
+
+
+def parse_voice_mix(voice_str: str):
+    """Parse voice mix string like '2(70)+6(30)' into (id1, weight1, id2, weight2)"""
+    parts = voice_str.split('+')
+    voice1 = parse("{:d}({:d})", parts[0])
+    voice2 = parse("{:d}({:d})", parts[1])
+    return voice1[0], voice1[1] / 100, voice2[0], voice2[1] / 100
 
 def convert_to_mp3(waveform, sample_rate):
     wav_buffer = io.BytesIO()
@@ -87,20 +95,29 @@ def get_voices():
 @app.post("/test/speak/evie")
 @torch.inference_mode()
 def synthesize(request: InferenceRequest):
+    print(f"[🍵] Request: {request.model_dump()}")
+    
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     text = request.input.strip()
     length_scale = request.speed
 
-    language = VOICES[request.voice]["lang"]
-
-    if request.voice_mix:
-        spk = torch.zeros(1, model.spk_emb_dim, device=DEVICE)
-        for spk_id, weight in request.voice_mix.items():
-            spk += weight * model.spk_emb(torch.tensor([spk_id], device=DEVICE, dtype=torch.long))
+    if '+' in request.voice:
+        id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
+        language = VOICES[id1]["lang"]
+        speaker1 = model.spk_emb(torch.tensor([id1], device=DEVICE, dtype=torch.long))
+        speaker2 = model.spk_emb(torch.tensor([id2], device=DEVICE, dtype=torch.long))
+        spk = weight1 * speaker1 + weight2 * speaker2
+        
+        # Temporarily disable spk_emb to pass mixed embeddings directly
+        original_n_spks = model.n_spks
+        model.n_spks = 0
     else:
-        spk = torch.tensor([request.voice], device=DEVICE, dtype=torch.long)
+        voice_id = int(request.voice)
+        language = VOICES[voice_id]["lang"]
+        spk = torch.tensor([voice_id], device=DEVICE, dtype=torch.long)
+        original_n_spks = None
 
     text_processed = process_text(1, text, language, DEVICE)
 
@@ -113,6 +130,11 @@ def synthesize(request: InferenceRequest):
         spks=spk,
         length_scale=length_scale,
     )
+    
+    # Restore n_spks if we modified it
+    if original_n_spks is not None:
+        model.n_spks = original_n_spks
+        
     output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, 0.00025)
 
     t = (dt.datetime.now() - start_t).total_seconds()
