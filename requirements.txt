@@ -46,3 +46,6 @@ gdown
 wget
 seaborn
 vocos
+parse
+
+nemo_text_processing  # nvidia nemo text normalization
