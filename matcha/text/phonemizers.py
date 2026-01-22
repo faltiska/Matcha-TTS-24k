@@ -53,7 +53,7 @@ def multilingual_phonemizer(text, language):
     if lang_code in normalizers:
         text = normalizers[lang_code].normalize(text)
     
-    phonemes = phonemizer.phonemize([text], strip=True, njobs=1)[0]
+    phonemes = phonemizer.phonemize([text])[0]
     return phonemes
 
 
@@ -94,16 +94,25 @@ if __name__ == "__main__":
             "La temperatura è -5°C o 23°F.",
         ]),
     ]
-    
+
     for lang, examples in test_cases:
         if lang not in normalizers:
             print(f"Skipping {lang} - not available")
             continue
         print(f"=== {lang.upper()} ===")
         for text in examples:
+            print(f"Original:   {text}")
+
             start = time()
             normalized = normalizers[lang].normalize(text)
             ms = int((time() - start) * 1000)
-            print(f"Original:   {text}")
             print(f"Normalized: {normalized} ({ms} ms)")
+            
+            start = time()
+            phonemes = phonemizer.phonemize([normalized])[0]
+            ms = int((time() - start) * 1000)
+            print(f"Phonemized: {phonemes} ({ms} ms)")
+
             print()
+        
+        
