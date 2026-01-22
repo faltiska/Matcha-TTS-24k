@@ -224,6 +224,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # Gradient scaling: keeps prior_loss value unchanged for logging, 
         # but amplifies its gradient 50x because the encoder gradient is so small, 
-        # it is dominated by the .
+        # it is dominated by the others. I can probably achieve the same thing with:
+        # def configure_optimizers(self):
+        #     optimizer = torch.optim.AdamW([
+        #         {'params': self.text_encoder.parameters(), 'lr': self.hparams.encoder_lr},
+        #         {'params': self.decoder.parameters(), 'lr': self.hparams.decoder_lr},
+        #         {'params': self.duration_predictor.parameters(), 'lr': self.hparams.duration_lr}
+        #     ])
+        #     return optimizer
         scaled_loss = prior_loss * 70 - prior_loss.detach() * 69
         return diff_loss, dur_loss, scaled_loss
