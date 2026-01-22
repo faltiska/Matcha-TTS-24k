@@ -2,7 +2,7 @@
 
 ```
 uv venv --python 3.10
-.venv\Scripts\activate
+source .venv/bin/activate
 uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --upgrade
   or 
 uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/nightly/cu130 --upgrade
