@@ -13,7 +13,7 @@ import soundfile as sf
 
 from matcha.cli import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-20_09-04-05/checkpoints/saved/checkpoint_epoch=479.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-21_15-43-17/checkpoints/saved/checkpoint_epoch=799.ckpt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
@@ -106,18 +106,13 @@ def synthesize(request: InferenceRequest):
     if '+' in request.voice:
         id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
         language = VOICES[id1]["lang"]
-        speaker1 = model.spk_emb(torch.tensor([id1], device=DEVICE, dtype=torch.long))
-        speaker2 = model.spk_emb(torch.tensor([id2], device=DEVICE, dtype=torch.long))
-        spk = weight1 * speaker1 + weight2 * speaker2
-        
-        # Temporarily disable spk_emb to pass mixed embeddings directly
-        original_n_spks = model.n_spks
-        model.n_spks = 0
+        voice_mix = [(id1, weight1), (id2, weight2)]
+        spk = 0
     else:
         voice_id = int(request.voice)
         language = VOICES[voice_id]["lang"]
-        spk = torch.tensor([voice_id], device=DEVICE, dtype=torch.long)
-        original_n_spks = None
+        voice_mix = None
+        spk = voice_id
 
     text_processed = process_text(1, text, language, DEVICE)
 
@@ -128,12 +123,9 @@ def synthesize(request: InferenceRequest):
         n_timesteps=request.steps,
         temperature=0.8,
         spks=spk,
+        voice_mix=voice_mix,
         length_scale=length_scale,
     )
-    
-    # Restore n_spks if we modified it
-    if original_n_spks is not None:
-        model.n_spks = original_n_spks
         
     output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, 0.00025)
 

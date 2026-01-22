@@ -73,8 +73,35 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.update_data_statistics(data_statistics)
 
+    def mix_speakers(self, speaker_mix):
+        """Mix multiple speaker embeddings with given weights.
+        
+        Args:
+            speaker_mix (list): List of (speaker_id, weight) tuples.
+                Example: [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
+        
+        Returns:
+            torch.Tensor: Mixed speaker embedding, shape: (1, spk_emb_dim)
+        """
+        if self.n_spks <= 1:
+            return None
+        
+        device = next(self.parameters()).device
+        mixed_emb = None
+        
+        for spk_id, weight in speaker_mix:
+            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
+            spk_emb = self.spk_emb(spk_tensor)
+            
+            if mixed_emb is None:
+                mixed_emb = weight * spk_emb
+            else:
+                mixed_emb += weight * spk_emb
+        
+        return mixed_emb
+
     @torch.inference_mode()
-    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=0, voice_mix=None, length_scale=1.0):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -88,8 +115,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size,)
             n_timesteps (int): number of steps to use for reverse diffusion in decoder.
             temperature (float, optional): controls variance of terminal distribution.
-            spks (bool, optional): speaker ids.
-                shape: (batch_size,)
+            spks (int, optional): speaker id (default: 0).
+            voice_mix (list, optional): List of (speaker_id, weight) tuples for mixing speakers.
+                Example: [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
+                If provided, spks parameter is ignored.
             length_scale (float, optional): controls speech pace.
                 Increase value to slow down generated speech and vice versa.
 
@@ -113,8 +142,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         t = dt.datetime.now()
 
         if self.n_spks > 1:
-            # Get speaker embedding
-            spks = self.spk_emb(spks.long())
+            if voice_mix is not None:
+                spks = self.mix_speakers(voice_mix)
+            else:
+                device = next(self.parameters()).device
+                spks = torch.tensor([spks], device=device, dtype=torch.long)
+                spks = self.spk_emb(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
@@ -123,7 +156,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Rounding up caused systematic bias - speech was consistently too slow.
         # generate_path can handle fractional durations (e.g., 2.37 frames) via cumsum.
         w = torch.exp(logw) * x_mask * length_scale
-        y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).long()
+        y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).round().long()
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
 

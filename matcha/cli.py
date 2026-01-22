@@ -319,11 +319,10 @@ def cli():
 
     spk_list = args.spk if args.spk[0] is not None else [None]
     for spk_id in spk_list:
-        spk = torch.tensor([spk_id], device=device, dtype=torch.long) if spk_id is not None else None
         if len(texts) == 1 or not args.batched:
-            unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id)
+            unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
         else:
-            batched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id)
+            batched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
 
 
 class BatchedSynthesisDataset(torch.utils.data.Dataset):
@@ -350,7 +349,7 @@ def batched_collate_fn(batch):
     return {"x": x, "x_lengths": x_lengths}
 
 
-def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id):
+def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
     total_rtf = []
     total_rtf_w = []
     sample_rate = getattr(model, "sample_rate")
@@ -372,7 +371,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id
             batch["x_lengths"].to(device),
             n_timesteps=args.steps,
             temperature=args.temperature,
-            spks=spk.expand(b) if spk is not None else spk,
+            spks=spk_id if spk_id is not None else 0,
             length_scale=args.speaking_rate,
         )
         inference_time = time.time() - inference_start
@@ -397,7 +396,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id
     print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
 
 
-def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_id):
+def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
     total_rtf = []
     total_rtf_w = []
     sample_rate = getattr(model, "sample_rate")
@@ -416,7 +415,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk, spk_
             text_processed["x_lengths"],
             n_timesteps=args.steps,
             temperature=args.temperature,
-            spks=spk,
+            spks=spk_id if spk_id is not None else 0,
             length_scale=args.speaking_rate,
         )
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
