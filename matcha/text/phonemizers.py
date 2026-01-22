@@ -25,8 +25,8 @@ normalizers = {}
 for lang in ['en', 'es', 'pt', 'de', 'fr', 'it']:
     try:
         normalizers[lang] = Normalizer(input_case='cased', lang=lang, cache_dir=str(cache_dir))
-    except:
-        pass  # Language not supported by NeMo
+    except Exception as e:
+        logger.warning(f"NeMo normalizer not available for {lang}: {e}")
 
 # Initializing the phonemizer globally significantly improves the speed.
 phonemizers = {}
@@ -62,6 +62,7 @@ if __name__ == "__main__":
     
     test_cases = [
         ('en', [
+            "I live for live broadcasts.",
             "Dr. Jones will see you at 15:00.",
             "The price is $5.00 as of Jan 21st, 2026.",
             "Call me at 555-1234 or visit 123 Main St.",
@@ -96,20 +97,22 @@ if __name__ == "__main__":
     ]
 
     for lang, examples in test_cases:
-        if lang not in normalizers:
-            print(f"Skipping {lang} - not available")
-            continue
+        lang_key = f"{lang}-us" if lang == 'en' else f"{lang}-fr" if lang == 'fr' else lang
         print(f"=== {lang.upper()} ===")
         for text in examples:
             print(f"Original:   {text}")
 
-            start = time()
-            normalized = normalizers[lang].normalize(text)
-            ms = int((time() - start) * 1000)
-            print(f"Normalized: {normalized} ({ms} ms)")
+            if lang in normalizers:
+                start = time()
+                normalized = normalizers[lang].normalize(text)
+                ms = int((time() - start) * 1000)
+                print(f"Normalized: {normalized} ({ms} ms)")
+            else:
+                normalized = text
+                print(f"Nemo normalization not available for {lang=}")
             
             start = time()
-            phonemes = phonemizer.phonemize([normalized])[0]
+            phonemes = phonemizers[lang_key].phonemize([normalized])[0]
             ms = int((time() - start) * 1000)
             print(f"Phonemized: {phonemes} ({ms} ms)")
 
