@@ -169,8 +169,6 @@ def validate_args(args):
         else:
             args.spk = [None]
 
-    if args.batched:
-        assert args.batch_size > 0, "Batch size must be greater than 0"
     assert args.speaking_rate > 0, "Speaking rate must be greater than 0"
 
     return args
@@ -286,10 +284,6 @@ def cli():
         default=os.getcwd(),
         help="Output folder to save results (default: current dir)",
     )
-    parser.add_argument("--batched", action="store_true", help="Batched inference (default: False)")
-    parser.add_argument(
-        "--batch_size", type=int, default=32, help="Batch size only useful when --batched (default: 32)"
-    )
 
     args = parser.parse_args()
 
@@ -319,84 +313,10 @@ def cli():
 
     spk_list = args.spk if args.spk[0] is not None else [None]
     for spk_id in spk_list:
-        if len(texts) == 1 or not args.batched:
-            unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
-        else:
-            batched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
+        synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
 
 
-class BatchedSynthesisDataset(torch.utils.data.Dataset):
-    def __init__(self, processed_texts):
-        self.processed_texts = processed_texts
-
-    def __len__(self):
-        return len(self.processed_texts)
-
-    def __getitem__(self, idx):
-        return self.processed_texts[idx]
-
-
-def batched_collate_fn(batch):
-    x = []
-    x_lengths = []
-
-    for b in batch:
-        x.append(b["x"].squeeze(0))
-        x_lengths.append(b["x_lengths"])
-
-    x = torch.nn.utils.rnn.pad_sequence(x, batch_first=True)
-    x_lengths = torch.concat(x_lengths, dim=0)
-    return {"x": x, "x_lengths": x_lengths}
-
-
-def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
-    total_rtf = []
-    total_rtf_w = []
-    sample_rate = getattr(model, "sample_rate")
-    hop_length = getattr(model, "hop_length")
-    processed_text = [process_text(i, text, args.language, "cpu") for i, text in enumerate(texts)]
-    dataloader = torch.utils.data.DataLoader(
-        BatchedSynthesisDataset(processed_text),
-        batch_size=args.batch_size,
-        collate_fn=batched_collate_fn,
-        num_workers=8,
-    )
-    for i, batch in enumerate(dataloader):
-        i = i + 1
-        start_t = dt.datetime.now()
-        b = batch["x"].shape[0]
-        inference_start = time.time()
-        output = model.synthesise(
-            batch["x"].to(device),
-            batch["x_lengths"].to(device),
-            n_timesteps=args.steps,
-            temperature=args.temperature,
-            spks=spk_id if spk_id is not None else 0,
-            length_scale=args.speaking_rate,
-        )
-        inference_time = time.time() - inference_start
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
-        t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * sample_rate / (output["waveform"].shape[-1])
-        print(f"[🍵-Batch: {i}] Inference time: {inference_time:.2f}s using {args.solver} solver with {args.steps} steps")
-        print(f"[🍵-Batch: {i}] Matcha-TTS RTF: {output['rtf']:.4f}")
-        print(f"[🍵-Batch: {i}] Matcha-TTS + VOCODER RTF: {rtf_w:.4f}")
-        total_rtf.append(output["rtf"])
-        total_rtf_w.append(rtf_w)
-        for j in range(output["mel"].shape[0]):
-            base_name = f"utterance_{j:03d}_speaker_{spk_id:03d}" if spk_id is not None else f"utterance_{j:03d}"
-            length = output["mel_lengths"][j]
-            new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * hop_length]}
-            location = save_to_folder(base_name, new_dict, args.output_folder, sample_rate)
-            print(f"[🍵-{j}] Waveform saved: {location}")
-
-    print("".join(["="] * 100))
-    print(f"[🍵] Average Matcha-TTS RTF: {np.mean(total_rtf):.4f} ± {np.std(total_rtf)}")
-    print(f"[🍵] Average Matcha-TTS + VOCODER RTF: {np.mean(total_rtf_w):.4f} ± {np.std(total_rtf_w)}")
-    print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
-
-
-def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
+def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
     total_rtf = []
     total_rtf_w = []
     sample_rate = getattr(model, "sample_rate")
