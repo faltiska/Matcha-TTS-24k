@@ -265,5 +265,5 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         #         {'params': self.duration_predictor.parameters(), 'lr': self.hparams.duration_lr}
         #     ])
         #     return optimizer
-        scaled_loss = prior_loss * 70 - prior_loss.detach() * 69
+        scaled_loss = prior_loss * 100 - prior_loss.detach() * 99
         return diff_loss, dur_loss, scaled_loss
