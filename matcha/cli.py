@@ -5,6 +5,10 @@ import time
 import warnings
 from pathlib import Path
 
+# Set HuggingFace cache BEFORE any imports that might use it
+cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
+os.environ["HF_HOME"] = str(cache_base / "huggingface")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
