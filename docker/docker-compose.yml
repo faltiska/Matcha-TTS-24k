@@ -1,0 +1,20 @@
+name: matcha-tts-gpu
+services:
+  matcha-tts:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    user: "1001:1001"
+    ports:
+      - "8880:8880"
+    environment:
+      - PYTHONPATH=/app
+      - USE_GPU=true
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
