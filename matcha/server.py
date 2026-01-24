@@ -1,8 +1,13 @@
 import datetime as dt
 import io
+import os
 import subprocess
 import time
 from pathlib import Path
+
+# Set HuggingFace cache BEFORE any imports that might use it
+cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
+os.environ["HF_HOME"] = str(cache_base / "huggingface")
 
 from parse import parse
 import torch
@@ -13,7 +18,7 @@ import soundfile as sf
 
 from matcha.cli import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-21_15-43-17/checkpoints/saved/checkpoint_epoch=799.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-23_18-52-01/checkpoints/saved/checkpoint_epoch=339.ckpt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
