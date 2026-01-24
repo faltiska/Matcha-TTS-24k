@@ -203,9 +203,9 @@ def main():
         mel_backend=cfg.get("mel_backend", "hifigan"),
     )
     
-    print("\n✓ Statistics computed:")
-    print(params)
-
+    print("\ndata_statistics:")
+    print(f"  mel_mean: {params.get('mel_mean')}")
+    print(f"  mel_std: {params.get('mel_std')}")
 
 if __name__ == "__main__":
     main()
