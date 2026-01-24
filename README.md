@@ -1,4 +1,4 @@
-## Create an UV environment
+## Environment preparation
 
 ```
 uv venv --python 3.10
@@ -9,13 +9,13 @@ uv pip install torch torchaudio torchvision torchcodec --index-url https://downl
 uv pip install -r requirements.txt --upgrade
 python setup.py build_ext --inplace --force
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
+uv pip install -e .
 ```
 
 ## Inference
 Run inference with:
 ```
-python -m matcha.cli --text "You're leaving?"
-python -m matcha.cli --text "You're leaving?" --vocoder vocos --checkpoint_path <your-chekpoint.ckpt> --spk 0,1,2,3
+python -m matcha.cli --text "You're leaving?" --vocoder vocos --checkpoint_path <your-chekpoint.ckpt> --spk 0 --language en-us
 ```
 
 ## Training
@@ -24,12 +24,14 @@ python -m matcha.cli --text "You're leaving?" --vocoder vocos --checkpoint_path 
 Filter out files that are longer than N seconds
 ```
 python -m matcha.utils.filter_by_wav_duration data/corpus-small-24k/train.csv 12
+python -m matcha.utils.filter_by_wav_duration data/corpus-small-24k/validate.csv 12
 ```
 
 Check if the corpus uses any unknown IPA symbol. 
 eSpeak could generate a symbol we do not have in our symbols.py map.
 ```
-python -m matcha.utils.test_corpus_ipa data/corpus-small-24k/train.csv
+python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/train.csv
+python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/validate.csv
 ```
 
 ### Calculate corpus statistics
