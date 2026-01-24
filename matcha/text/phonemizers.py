@@ -7,7 +7,13 @@ Only Hiragana or Katakana is supported for Japanese, not Kanji.
 
 import logging
 import re
+import os
 from pathlib import Path
+
+# Set cache directory for NeMo grammars
+cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
+cache_dir = cache_base / "nemo" / "grammars"
+cache_dir.mkdir(parents=True, exist_ok=True)
 
 import phonemizer
 from nemo_text_processing.text_normalization.normalize import Normalizer
@@ -15,10 +21,6 @@ from nemo_text_processing.text_normalization.normalize import Normalizer
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
 logger.setLevel(logging.ERROR) # eSpeak is very verbose
-
-# Set cache directory for NeMo grammars
-cache_dir = Path.home() / ".cache" / "nemo" / "grammars"
-cache_dir.mkdir(parents=True, exist_ok=True)
 
 # Initialize NeMo normalizers for supported languages
 normalizers = {}
