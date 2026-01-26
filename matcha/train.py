@@ -1,3 +1,10 @@
+import os
+from pathlib import Path
+
+# Set HuggingFace cache BEFORE any imports that might use it
+cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
+os.environ["HF_HOME"] = str(cache_base / "huggingface")
+
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
