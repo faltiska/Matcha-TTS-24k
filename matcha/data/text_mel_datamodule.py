@@ -1,4 +1,5 @@
 import random
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -29,51 +30,46 @@ class DynamicBatchSampler(Sampler):
     (max_frames = max_length_in_batch × batch_size), allowing more short samples or fewer
     long samples per batch.
     """
+
+    # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
+    # First batches contains very short utterances, and always bundling short utterances together
+    # may lead to some bias or overfitting. 
+    NUM_REDISTRIBUTION_BATCHES = 0  
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
         self.max_frames = max_frames
         self.lengths = self._get_lengths()
         self.num_batches = self._estimate_batch_count()
+        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches will be redistributed to other batches", file=sys.stderr)
     
     def _get_lengths(self):
-        """Get mel frame count for each sample."""
+        """
+        Get mel frame count for each sample, from the mel files.
+        Use precompute_corpus to generate the mels before training.
+        """
         lengths = []
         for i in range(len(self.dataset)):
             csv_row = self.dataset.filepaths_and_text[i]
             rel_base_path = csv_row[0]
             
-            # Try loading from precomputed mel cache
-            if self.dataset.mel_dir:
-                mel_path = Path(self.dataset.mel_dir) / (rel_base_path + ".npy")
-                if mel_path.exists():
-                    arr = np.load(mel_path, mmap_mode='r')
-                    lengths.append((i, arr.shape[-1]))
-                    continue
+            mel_path = Path(self.dataset.mel_dir) / (rel_base_path + ".npy")
+            arr = np.load(mel_path, mmap_mode='r')
+            lengths.append((i, arr.shape[-1]))
             
-            # Fallback: estimate from wav duration
-            wav_path = self.dataset.filelist_dir / "wav" / (rel_base_path + ".wav")
-            if wav_path.exists():
-                info = ta.info(str(wav_path))
-                frames = info.num_frames // self.dataset.hop_length
-                lengths.append((i, frames))
-            else:
-                raise FileNotFoundError(f"Neither mel file nor wav file found for sample {i}: {rel_base_path}")
-        
-        return lengths
+        return sorted(lengths, key=lambda x: x[1])
     
     def _estimate_batch_count(self):
         """Estimate number of batches by creating them once from sorted data."""
-        sorted_lengths = sorted(self.lengths, key=lambda x: x[1])
-        return len(self._create_batches(sorted_lengths))
+        return len(self._create_batches())
     
-    def _create_batches(self, lengths):
+    def _create_batches(self):
         """Group samples into dynamic batches from provided lengths list."""
         batches = []
         current_batch = []
         max_len = 0
         
-        for idx, length in lengths:
+        for idx, length in self.lengths:
             new_max_len = max(length, max_len)
             total_frames = new_max_len * (len(current_batch) + 1)
             
@@ -83,19 +79,65 @@ class DynamicBatchSampler(Sampler):
                 max_len = 0
                 
             current_batch.append((idx, length))
-            max_len = max(max_len, length)
+            max_len = max(length, max_len)
         
         if current_batch:
             batches.append([idx for idx, _ in current_batch])
         
+        if self.NUM_REDISTRIBUTION_BATCHES > 0:
+            return self._redistribute_short_samples(batches)
+        
+        return batches
+    
+    def _redistribute_short_samples(self, batches):
+        # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
+        must_redistribute = []
+        for i in range(self.NUM_REDISTRIBUTION_BATCHES):
+            must_redistribute.extend(batches[i])
+        batches = batches[self.NUM_REDISTRIBUTION_BATCHES:]
+        
+        # Shuffle must_redistribute so we distribute then in a different order each time
+        random.shuffle(must_redistribute)
+        
+        # Distribute samples round-robin to remaining batches
+        for i, sample_idx in enumerate(must_redistribute):
+            batches[i % len(batches)].append(sample_idx)
+        
+        return self._enforce_max_frames(batches)
+    
+    def _enforce_max_frames(self, batches):
+        """Enforce max_frames constraint by moving overflow samples to next batch."""
+        length_map = {idx: length for idx, length in self.lengths}
+        
+        i = 0
+        while i < len(batches):
+            batch = batches[i]
+            batch_lengths = [length_map[idx] for idx in batch]
+            max_len = max(batch_lengths)
+            total_frames = max_len * len(batch)
+            
+            # Move samples to next batch until we're under max_frames
+            while total_frames > self.max_frames and len(batch) > 1:
+                # Remove last sample
+                overflow_sample = batch.pop()
+                
+                # Add to next batch or create new batch if this is the last one
+                if i + 1 < len(batches):
+                    batches[i + 1].insert(0, overflow_sample)
+                else:
+                    batches.append([overflow_sample])
+                
+                # Recalculate
+                batch_lengths = [length_map[idx] for idx in batch]
+                max_len = max(batch_lengths)
+                total_frames = max_len * len(batch)
+            
+            i += 1
+        
         return batches
     
     def __iter__(self):
-        lengths = self.lengths.copy()
-        random.shuffle(lengths)
-        sorted_lengths = sorted(lengths, key=lambda x: x[1])
-        batches = self._create_batches(sorted_lengths)
-        random.shuffle(batches)
+        batches = self._create_batches()
         for batch in batches:
             yield batch
     
@@ -431,3 +473,48 @@ class TextMelBatchCollate:
             "x_texts": x_texts,
             "durations": durations if not torch.eq(durations, 0).all() else None,
         }
+
+
+if __name__ == "__main__":
+    """
+    Computes batch statistics to asses the space wasted on padding.
+    That shows the data loader efficiency in .
+    """
+    import sys
+    if len(sys.argv) < 3:
+        print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames>")
+        sys.exit(1)
+    
+    class MockDataset:
+        def __init__(self, filelist_path, mel_dir):
+            self.filepaths_and_text = parse_filelist(filelist_path)
+            self.mel_dir = mel_dir
+        def __len__(self):
+            return len(self.filepaths_and_text)
+    
+    filelist_path = sys.argv[1]
+    max_frames = int(sys.argv[2])
+    mel_dir = Path(filelist_path).parent / "mels"
+    
+    dataset = MockDataset(filelist_path, mel_dir)
+    sampler = DynamicBatchSampler(dataset, max_frames)
+    
+    print("batch_idx,samples,min_len,max_len,actual_frames,padding_pct")
+    
+    total_wasted = 0
+    total_frames = 0
+    length_map = {idx: length for idx, length in sampler.lengths}
+    for batch_idx, batch in enumerate(sampler):
+        lengths = [length_map[idx] for idx in batch]
+        min_len = min(lengths)
+        max_len = max(lengths)
+        batch_total_frames = max_len * len(batch)
+        batch_actual_frames = sum(lengths)
+        wasted_frames = batch_total_frames - batch_actual_frames
+        padding_pct = 100 * wasted_frames / batch_total_frames
+        total_wasted += wasted_frames
+        total_frames += batch_total_frames
+        
+        print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_actual_frames},{padding_pct:.2f}")
+    
+    print(f"\nTotal wasted frames: {total_wasted} / {total_frames} ({100*total_wasted/total_frames:.2f}%)", file=sys.stderr)

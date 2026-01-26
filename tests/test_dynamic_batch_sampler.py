@@ -3,6 +3,7 @@ import pytest
 from pathlib import Path
 from matcha.data.text_mel_datamodule import TextMelDataset, DynamicBatchSampler
 
+# pytest tests/test_dynamic_batch_sampler.py --max-frames 33000
 
 @pytest.fixture(scope="module")
 def dataset():
@@ -26,48 +27,47 @@ def dataset():
     )
 
 
-def test_all_samples_covered(dataset):
+def test_all_samples_covered(dataset, max_frames):
     """Each sample should appear exactly once per epoch."""
-    sampler = DynamicBatchSampler(dataset, max_frames=24000)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
     batches = list(sampler)
     all_indices = [idx for batch in batches for idx in batch]
     assert sorted(all_indices) == list(range(len(dataset)))
 
 
-def test_batch_respects_max_frames(dataset):
+def test_batch_respects_max_frames(dataset, max_frames):
     """No batch should exceed max_frames constraint."""
-    max_frames = 24000
     sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
     batches = list(sampler)
     
+    length_map = {idx: length for idx, length in sampler.lengths}
     for batch in batches:
-        # Get actual lengths from sampler's cached lengths
-        batch_lengths = [sampler.lengths[idx][1] for idx in batch]
+        batch_lengths = [length_map[idx] for idx in batch]
         max_len = max(batch_lengths)
         total_frames = max_len * len(batch)
         assert total_frames <= max_frames
 
 
-def test_deterministic_with_seed(dataset):
+def test_deterministic_with_seed(dataset, max_frames):
     """Same seed should produce same batch order."""
     random.seed(42)
-    sampler1 = DynamicBatchSampler(dataset, max_frames=24000)
+    sampler1 = DynamicBatchSampler(dataset, max_frames=max_frames)
     batches1 = list(sampler1)
     
     random.seed(42)
-    sampler2 = DynamicBatchSampler(dataset, max_frames=24000)
+    sampler2 = DynamicBatchSampler(dataset, max_frames=max_frames)
     batches2 = list(sampler2)
     
     assert batches1 == batches2
 
 
-def test_len_returns_batch_count(dataset):
+def test_len_returns_batch_count(dataset, max_frames):
     """__len__ should return number of batches."""
-    sampler = DynamicBatchSampler(dataset, max_frames=24000)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
     assert len(sampler) == len(list(sampler))
 
 
-def test_batches_created(dataset):
+def test_batches_created(dataset, max_frames):
     """Sampler should create multiple batches."""
-    sampler = DynamicBatchSampler(dataset, max_frames=24000)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
     assert len(sampler) > 0
