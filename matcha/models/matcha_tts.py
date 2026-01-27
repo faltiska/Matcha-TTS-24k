@@ -1,5 +1,7 @@
 import datetime as dt
 import math
+
+LOG_2_PI = math.log(2 * math.pi)
 import random
 
 import torch
@@ -49,6 +51,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
+        self.mas_const = -0.5 * LOG_2_PI * n_feats
 
         if n_spks > 1:
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -223,12 +226,15 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
             with torch.no_grad():
-                const = -0.5 * math.log(2 * math.pi) * self.n_feats
                 factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
                 y_square = torch.matmul(factor.transpose(1, 2), y**2)
-                y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
+                # Original code was:
+                #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
+                # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
+                # I've replaced it with just -mu_x
+                y_mu_double = torch.matmul(-mu_x.transpose(1, 2), y)
                 mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
-                log_prior = y_square - y_mu_double + mu_square + const
+                log_prior = y_square - y_mu_double + mu_square + self.mas_const
 
                 # the GPU impl is about 5% faster, but triggers more model recompilations.
                 attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
@@ -243,27 +249,37 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
         # Align encoded text with mel-spectrogram and get mu_y segment
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        mu_y = mu_y.transpose(1, 2)
+        # Original code was:
+        #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        #   mu_y = mu_y.transpose(1, 2)
+        # but that can be simplified as: 
+        mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Compute loss of the decoder
         diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks, cond=cond)
 
         if self.prior_loss:
-            prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
+            # Original code was: 
+            #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
+            # but that is just wasted computation.
+            # I could remove the constants without affecting the meaning of the loss.
+            # prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
+            prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + LOG_2_PI) * y_mask)
             prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
         else:
             prior_loss = 0
 
         # Gradient scaling: keeps prior_loss value unchanged for logging, 
-        # but amplifies its gradient 50x because the encoder gradient is so small, 
-        # it is dominated by the others. I can probably achieve the same thing with:
-        # def configure_optimizers(self):
-        #     optimizer = torch.optim.AdamW([
-        #         {'params': self.text_encoder.parameters(), 'lr': self.hparams.encoder_lr},
-        #         {'params': self.decoder.parameters(), 'lr': self.hparams.decoder_lr},
-        #         {'params': self.duration_predictor.parameters(), 'lr': self.hparams.duration_lr}
-        #     ])
-        #     return optimizer
+        # but amplifies its gradient, because it is to0 small, 
+        # I can probably achieve the same thing with:
+        #   def configure_optimizers(self):
+        #       optimizer = torch.optim.AdamW([
+        #           {'params': self.text_encoder.parameters(), 'lr': self.hparams.encoder_lr},
+        #           {'params': self.decoder.parameters(), 'lr': self.hparams.decoder_lr},
+        #           {'params': self.duration_predictor.parameters(), 'lr': self.hparams.duration_lr}
+        #       ])
+        #       return optimizer
+        # but this is simpler:  
+        #   scaled_loss = prior_loss * 30 - prior_loss.detach() * 29
         scaled_loss = prior_loss * 100 - prior_loss.detach() * 99
         return diff_loss, dur_loss, scaled_loss
