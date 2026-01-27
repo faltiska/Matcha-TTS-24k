@@ -34,14 +34,17 @@ class DynamicBatchSampler(Sampler):
     # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
     # First batches contains very short utterances, and always bundling short utterances together
     # may lead to some bias or overfitting. 
-    NUM_REDISTRIBUTION_BATCHES = 0  
+    NUM_REDISTRIBUTION_BATCHES = 4
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
         self.max_frames = max_frames
         self.lengths = self._get_lengths()
-        self.num_batches = self._estimate_batch_count()
-        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches will be redistributed to other batches", file=sys.stderr)
+        # I am creating them only once, despite the loss of variability
+        # because the number of batches may change with each call 
+        self.batches = self._create_batches()
+        self.num_batches = len(self.batches)
+        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches were be redistributed to others.", file=sys.stderr)
     
     def _get_lengths(self):
         """
@@ -58,10 +61,6 @@ class DynamicBatchSampler(Sampler):
             lengths.append((i, arr.shape[-1]))
             
         return sorted(lengths, key=lambda x: x[1])
-    
-    def _estimate_batch_count(self):
-        """Estimate number of batches by creating them once from sorted data."""
-        return len(self._create_batches())
     
     def _create_batches(self):
         """Group samples into dynamic batches from provided lengths list."""
@@ -85,10 +84,10 @@ class DynamicBatchSampler(Sampler):
             batches.append([idx for idx, _ in current_batch])
         
         if self.NUM_REDISTRIBUTION_BATCHES > 0:
-            return self._redistribute_short_samples(batches)
-        
+            batches = self._redistribute_short_samples(batches)
+
         return batches
-    
+
     def _redistribute_short_samples(self, batches):
         # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
         must_redistribute = []
@@ -137,8 +136,9 @@ class DynamicBatchSampler(Sampler):
         return batches
     
     def __iter__(self):
-        batches = self._create_batches()
-        for batch in batches:
+        random.shuffle(self.batches)
+        for batch in self.batches:
+            random.shuffle(batch)
             yield batch
     
     def __len__(self):
@@ -499,7 +499,7 @@ if __name__ == "__main__":
     dataset = MockDataset(filelist_path, mel_dir)
     sampler = DynamicBatchSampler(dataset, max_frames)
     
-    print("batch_idx,samples,min_len,max_len,actual_frames,padding_pct")
+    print("batch_idx,samples,min_len,max_len,total_frames,actual_frames,padding_pct")
     
     total_wasted = 0
     total_frames = 0
@@ -515,6 +515,6 @@ if __name__ == "__main__":
         total_wasted += wasted_frames
         total_frames += batch_total_frames
         
-        print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_actual_frames},{padding_pct:.2f}")
-    
+        print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_total_frames},{batch_actual_frames},{padding_pct:.2f}")
+        
     print(f"\nTotal wasted frames: {total_wasted} / {total_frames} ({100*total_wasted/total_frames:.2f}%)", file=sys.stderr)
