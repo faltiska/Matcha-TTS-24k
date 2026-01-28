@@ -14,7 +14,7 @@ from matcha.text import to_phoneme_ids, to_phonemes
 from matcha.mel.extractors import get_mel_extractor
 from matcha.utils.model import fix_len_compatibility, normalize
 from matcha.utils.utils import intersperse
-
+from math import ceil
 
 def parse_filelist(filelist_path, split_char="|"):
     with open(filelist_path, encoding="utf-8") as f:
@@ -35,6 +35,10 @@ class DynamicBatchSampler(Sampler):
     # First batches contains very short utterances, and always bundling short utterances together
     # may lead to some bias or overfitting. 
     NUM_REDISTRIBUTION_BATCHES = 4
+    # Controls how short samples get redistributed.
+    # Larger numbers mean more samples go to early batches. smaller numbers allow some samples to go
+    # to batches at the end too. Batches are sorted by sample length. 
+    DISTRIBUTION_BIAS = 8
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
@@ -97,11 +101,35 @@ class DynamicBatchSampler(Sampler):
         
         # Shuffle must_redistribute so we distribute then in a different order each time
         random.shuffle(must_redistribute)
+
+        num_batches = len(batches)
+        total_samples = len(must_redistribute)
+        print(f"DEBUG: Redistributing {total_samples} samples across {num_batches} batches", file=sys.stderr)
         
-        # Distribute samples round-robin to remaining batches
-        for i, sample_idx in enumerate(must_redistribute):
-            batches[i % len(batches)].append(sample_idx)
+        # Compute how many redistributed samples each batch should get, according to a decaying shape
+        # Earlier batches get more samples, later batches get fewer.
+        redistribution_shape = []
+        shape_sum = 0
+        for batch_idx in range(num_batches):
+            ratio = (num_batches - batch_idx) / num_batches
+            num_to_add = ratio ** self.DISTRIBUTION_BIAS
+            shape_sum = shape_sum + num_to_add 
+            redistribution_shape.append(num_to_add)
+            
+        # Make sure the shape does not have fewer samples than the total number we have to distribute
+        scale_factor = total_samples / shape_sum
+        for i in range(len(redistribution_shape)):
+            redistribution_shape[i] = ceil(redistribution_shape[i] * scale_factor) 
         
+        # Distribute according to the shape
+        for batch_idx, num_to_add in enumerate(redistribution_shape):
+            can_add = min(num_to_add, len(must_redistribute))
+            if can_add > 0:
+                batches[batch_idx].extend(must_redistribute[:can_add])
+                must_redistribute = must_redistribute[can_add:]
+            else:
+                break
+
         return self._enforce_max_frames(batches)
     
     def _enforce_max_frames(self, batches):
@@ -504,7 +532,8 @@ if __name__ == "__main__":
     total_wasted = 0
     total_frames = 0
     length_map = {idx: length for idx, length in sampler.lengths}
-    for batch_idx, batch in enumerate(sampler):
+    # Don't iterate on the sampler itself, cause it returns shuffled batches.
+    for batch_idx, batch in enumerate(sampler.batches):
         lengths = [length_map[idx] for idx in batch]
         min_len = min(lengths)
         max_len = max(lengths)
