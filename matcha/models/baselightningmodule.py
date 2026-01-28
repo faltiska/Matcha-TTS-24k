@@ -173,6 +173,10 @@ class BaseLightningClass(LightningModule, ABC):
                     self.current_epoch,
                     dataformats="HWC",
                 )
+          
+        # I noticed VRAM usage suddenly increased, could not explain it
+        # so I thought I would clean it up periodically
+        torch.cuda.empty_cache()
 
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)
