@@ -85,6 +85,15 @@ class BaseLightningClass(LightningModule, ABC):
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
+        # Override LR from checkpoint with config LR
+        config_lr = self.hparams.optimizer.keywords.get("lr")
+        if config_lr is not None:
+            for opt_state in checkpoint.get("optimizer_states", []):
+                for param_group in opt_state.get("param_groups", []):
+                    old_lr = param_group["lr"]
+                    param_group["lr"] = config_lr
+                    log.info(f"Overriding checkpoint LR {old_lr} with new value from config {config_lr}")
+        
         # Check if a new speaker was added to the corpus
         if "spk_emb.weight" in checkpoint["state_dict"]:
             old_spk_emb = checkpoint["state_dict"]["spk_emb.weight"]
@@ -181,3 +190,6 @@ class BaseLightningClass(LightningModule, ABC):
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)
         self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
+        
+        param_group = optimizer.param_groups[0]
+        self.log("grad_norm/learning_rate", param_group["lr"], on_step=True, on_epoch=False, logger=True)
