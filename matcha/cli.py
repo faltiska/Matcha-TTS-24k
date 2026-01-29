@@ -1,16 +1,17 @@
 import argparse
 import datetime as dt
+import io
 import os
+import subprocess
 import time
 import warnings
 from pathlib import Path
+import numpy as np
 
 # Set HuggingFace cache BEFORE any imports that might use it
 cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
 os.environ["HF_HOME"] = str(cache_base / "huggingface")
 
-import matplotlib.pyplot as plt
-import numpy as np
 import soundfile as sf
 import torch
 
@@ -35,21 +36,10 @@ VOCODER_URLS = {
 }
 
 MULTISPEAKER_MODEL = {
-    "matcha_vctk": {"vocoder": "hifigan_univ_v1", "speaking_rate": 0.85, "spk": 0, "spk_range": (0, 107)}
+    "matcha_vctk": {"vocoder": "hifigan_univ_v1", "speaking_rate": 1.0, "spk": 0, "spk_range": (0, 107)}
 }
 
-SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "hifigan_T2_v1", "speaking_rate": 0.95, "spk": None}}
-
-
-def plot_spectrogram_to_numpy(spectrogram, filename):
-    fig, ax = plt.subplots(figsize=(12, 3))
-    im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none")
-    plt.colorbar(im, ax=ax)
-    plt.xlabel("Frames")
-    plt.ylabel("Channels")
-    plt.title("Synthesised Mel-Spectrogram")
-    fig.canvas.draw()
-    plt.savefig(filename)
+SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "hifigan_T2_v1", "speaking_rate": 1.0, "spk": None}}
 
 
 def process_text(i: int, text: str, language: str, device: torch.device):
@@ -119,7 +109,6 @@ def load_vocoder(vocoder_name, checkpoint_path, device):
 def load_matcha(model_name, checkpoint_path, device):
     print(f"[!] Loading {model_name}!")
     model = MatchaTTS.load_from_checkpoint(checkpoint_path, map_location=device, weights_only=False, strict=False).eval()
-    model = torch.compile(model)
     print(f"[+] {model_name} loaded!")
     return model
 
@@ -140,10 +129,24 @@ def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
 def save_to_folder(filename: str, output: dict, folder: str, sample_rate: int = 22050):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
-    plot_spectrogram_to_numpy(output["mel"].squeeze().float().cpu().numpy(), f"{filename}.png")
-    np.save(folder / f"{filename}", output["mel"].cpu().numpy())
-    sf.write(folder / f"{filename}.wav", output["waveform"], sample_rate, "PCM_24")
-    return folder.resolve() / f"{filename}.wav"
+    
+    # Convert to MP3
+    waveform = output["waveform"].cpu().numpy()
+    wav_buffer = io.BytesIO()
+    sf.write(wav_buffer, waveform, sample_rate, format="WAV", subtype="PCM_16")
+    wav_buffer.seek(0)
+    
+    process = subprocess.Popen(
+        ["ffmpeg", "-i", "pipe:0", "-f", "mp3", "-ab", "192k", "pipe:1"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL
+    )
+    mp3_data, _ = process.communicate(input=wav_buffer.read())
+    
+    mp3_path = folder / f"{filename}.mp3"
+    mp3_path.write_bytes(mp3_data)
+    return mp3_path
 
 
 def validate_args(args):
@@ -265,8 +268,8 @@ def cli():
     parser.add_argument(
         "--temperature",
         type=float,
-        default=0.5,
-        help="Variance of the x0 noise (default: 0.5)",
+        default=0.8,
+        help="Variance of the x0 noise (default: 0.8)",
     )
     parser.add_argument(
         "--speaking_rate",
@@ -274,7 +277,7 @@ def cli():
         default=None,
         help="change the speaking rate, a higher value means slower speaking rate (default: 1.0)",
     )
-    parser.add_argument("--steps", type=int, default=10, help="Number of ODE steps  (default: 10)")
+    parser.add_argument("--steps", type=int, default=20, help="Number of ODE steps  (default: 20)")
     parser.add_argument("--cpu", action="store_true", help="Use CPU for inference (default: use GPU if available)")
     parser.add_argument(
         "--denoiser_strength",
