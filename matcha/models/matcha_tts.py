@@ -264,7 +264,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # but that is just wasted computation.
             # I could remove the constants without affecting the meaning of the loss.
             # prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + LOG_2_PI) * y_mask)
+            prior_loss = torch.sum(((y - mu_y) ** 2 + LOG_2_PI) * y_mask)
             prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
         else:
             prior_loss = 0
@@ -281,5 +281,5 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         #       return optimizer
         # but this is simpler:  
         #   scaled_loss = prior_loss * 30 - prior_loss.detach() * 29
-        scaled_loss = prior_loss * 100 - prior_loss.detach() * 99
+        scaled_loss = prior_loss * 50 - prior_loss.detach() * 49.5
         return diff_loss, dur_loss, scaled_loss
