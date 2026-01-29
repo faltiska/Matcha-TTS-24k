@@ -1,11 +1,9 @@
 ## Environment preparation
 
 ```
-uv venv --python 3.10
+uv venv .venv --python 3.13
 source .venv/bin/activate
 uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --upgrade
-  or 
-uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/nightly/cu130 --upgrade
 uv pip install -r requirements.txt --upgrade
 python setup.py build_ext --inplace --force
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
