@@ -29,6 +29,8 @@ class DynamicBatchSampler(Sampler):
     together. Instead of fixed batch sizes, batches are sized to fit within a memory budget
     (max_frames = max_length_in_batch × batch_size), allowing more short samples or fewer
     long samples per batch.
+    
+    The "frames" in this class are time steps in the mel spectrogram.
     """
 
     # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
