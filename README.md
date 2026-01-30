@@ -4,6 +4,8 @@
 uv venv .venv --python 3.13
 source .venv/bin/activate
 uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --upgrade
+  or use the 2.9.1 version, it was slightly faster than 0.10.0
+uv pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 torchcodec==0.9.1 --index-url https://download.pytorch.org/whl/cu130 --upgrade
 uv pip install -r requirements.txt --upgrade
 python setup.py build_ext --inplace --force
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
@@ -82,6 +84,11 @@ Profile your trainer with:
 python -m matcha.train +trainer.profiler="simple"
 ```
 This will generate a profile report at the end of training, so maybe set it to run for just a small number of epochs.
+
+See how much audio you have in the corpus:
+```
+python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
+```
 
 ## Improvements
 
