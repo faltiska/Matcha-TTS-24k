@@ -71,17 +71,6 @@ class BaseLightningClass(LightningModule, ABC):
 
         return diff_loss, dur_loss, prior_loss
 
-    def _log_losses(self, diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train"):
-        # I am passing batch_size explicitly to avoid a warning from lightning/pytorch/utilities/data.py 
-        # Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 28. 
-        # To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
-
-        self.log(f"loss/{prefix}", total_loss, on_step=True, on_epoch=True, logger=True, prog_bar=True, batch_size=bs)
-        
-        self.log(f"sub_loss/{prefix}_diff", diff_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
-        self.log(f"sub_loss/{prefix}_dur", dur_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
-        self.log(f"sub_loss/{prefix}_prior", prior_loss, on_step=True, on_epoch=True, logger=True, batch_size=bs)
-
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
@@ -125,8 +114,14 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
         
-        self.log("step", self.global_step, on_step=True, prog_bar=True, logger=True, batch_size=bs)
-        self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train")
+        metrics = {
+            f"loss/train": total_loss,
+            f"sub_loss/train_diff": diff_loss,
+            f"sub_loss/train_dur": dur_loss,
+            f"sub_loss/train_prior": prior_loss,
+            "step": self.global_step,
+        }
+        self.log_dict(metrics, on_step=True, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss
 
@@ -135,7 +130,13 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
-        self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="val")
+        metrics = {
+            f"loss/val": total_loss,
+            f"sub_loss/val_diff": diff_loss,
+            f"sub_loss/val_dur": dur_loss,
+            f"sub_loss/val_prior": prior_loss,
+        }
+        self.log_dict(metrics, on_step=True, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss
 
@@ -190,6 +191,3 @@ class BaseLightningClass(LightningModule, ABC):
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)
         self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
-        
-        param_group = optimizer.param_groups[0]
-        self.log("grad_norm/learning_rate", param_group["lr"], on_step=True, on_epoch=False, logger=True)
