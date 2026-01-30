@@ -125,7 +125,7 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
         
-        self.log("step", float(self.global_step), on_step=True, prog_bar=True, logger=True, batch_size=bs)
+        self.log("step", self.global_step, on_step=True, prog_bar=True, logger=True, batch_size=bs)
         self._log_losses(diff_loss, dur_loss, prior_loss, total_loss, bs, prefix="train")
 
         return total_loss
