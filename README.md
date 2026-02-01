@@ -89,6 +89,13 @@ See how much audio you have in the corpus:
 ```
 python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
 ```
+### Fine tune a speaker or add a new one:
+```
+python -m matcha.finetune_speaker \
+    +new_speaker_train_csv=data/new_speaker/train.csv \
+    +new_speaker_val_csv=data/new_speaker/val.csv \
+    +new_speaker_id=10
+```
 
 ## Improvements
 
