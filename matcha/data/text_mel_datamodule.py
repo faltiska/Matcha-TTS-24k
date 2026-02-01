@@ -48,9 +48,9 @@ class DynamicBatchSampler(Sampler):
         self.lengths = self._get_lengths()
         # I am creating them only once, despite the loss of variability
         # because the number of batches may change with each call 
-        self.batches = self._create_batches()
+        self.batches, self.num_batches_received = self._create_batches()
         self.num_batches = len(self.batches)
-        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches were be redistributed to others.", file=sys.stderr)
+        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches were be redistributed to the next {self.num_batches_received} batches.", file=sys.stderr)
     
     def _get_lengths(self):
         """
@@ -89,10 +89,11 @@ class DynamicBatchSampler(Sampler):
         if current_batch:
             batches.append([idx for idx, _ in current_batch])
         
+        num_batches_received = 0
         if self.NUM_REDISTRIBUTION_BATCHES > 0:
-            batches = self._redistribute_short_samples(batches)
+            batches, num_batches_received = self._redistribute_short_samples(batches)
 
-        return batches
+        return batches, num_batches_received
 
     def _redistribute_short_samples(self, batches):
         # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
@@ -124,15 +125,18 @@ class DynamicBatchSampler(Sampler):
             redistribution_shape[i] = ceil(redistribution_shape[i] * scale_factor) 
         
         # Distribute according to the shape
+        num_batches_received = 0
         for batch_idx, num_to_add in enumerate(redistribution_shape):
             can_add = min(num_to_add, len(must_redistribute))
             if can_add > 0:
                 batches[batch_idx].extend(must_redistribute[:can_add])
                 must_redistribute = must_redistribute[can_add:]
+                num_batches_received += 1
             else:
                 break
 
-        return self._enforce_max_frames(batches)
+        batches = self._enforce_max_frames(batches)
+        return batches, num_batches_received
     
     def _enforce_max_frames(self, batches):
         """Enforce max_frames constraint by moving overflow samples to next batch."""
