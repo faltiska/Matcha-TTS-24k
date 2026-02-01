@@ -18,10 +18,8 @@ precision: bf16-mixed
 # Perform a validation loop every N training epochs
 check_val_every_n_epoch: 10
 
-# Reduced from 5.0
 # Protects against spikes in learning. Keeps the model weights from jumping too wildly.
-gradient_clip_val: 4
+gradient_clip_val: 5
 
-# Good for Small GPUs that cannot fit larger batches 
-# Good for the model, since it uses snake beta activations
-accumulate_grad_batches: 2
+# Set it to 2 or 4 for small GPUs that cannot fit large batches in memory
+accumulate_grad_batches: 1
