@@ -261,25 +261,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         if self.prior_loss:
             # Original code was: 
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
-            # but that is just wasted computation.
-            # I could remove the constants without affecting the meaning of the loss.
-            # prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            prior_loss = torch.sum(((y - mu_y) ** 2 + LOG_2_PI) * y_mask)
+            # but I could remove the constants without affecting the meaning of the loss.
+            #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
+            # Also, the values are too small, 0.05 the after first epoch tending to 0.0001
+            # Such small gradients are not allowing the model to learn, do I should not square them up:
+            prior_loss = torch.sum(torch.abs(y - mu_y) * y_mask)
             prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
         else:
             prior_loss = 0
 
-        # Gradient scaling: keeps prior_loss value unchanged for logging, 
-        # but amplifies its gradient, because it is to0 small, 
-        # I can probably achieve the same thing with:
-        #   def configure_optimizers(self):
-        #       optimizer = torch.optim.AdamW([
-        #           {'params': self.text_encoder.parameters(), 'lr': self.hparams.encoder_lr},
-        #           {'params': self.decoder.parameters(), 'lr': self.hparams.decoder_lr},
-        #           {'params': self.duration_predictor.parameters(), 'lr': self.hparams.duration_lr}
-        #       ])
-        #       return optimizer
-        # but this is simpler:  
-        #   scaled_loss = prior_loss * 30 - prior_loss.detach() * 29
-        scaled_loss = prior_loss * 50 - prior_loss.detach() * 49.5
-        return diff_loss, dur_loss, scaled_loss
+        return diff_loss, dur_loss, prior_loss
