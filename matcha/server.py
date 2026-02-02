@@ -18,7 +18,7 @@ import soundfile as sf
 
 from matcha.cli import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-01-23_18-52-01/checkpoints/saved/checkpoint_epoch=339.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-02_07-59-35/checkpoints/saved/checkpoint_epoch=209.ckpt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
@@ -30,7 +30,7 @@ VOICES = [
     {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
     {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
     {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
+    {"id": "4", "lang": "en-gb", "gender": "malen",   "name": "Brian"},
     {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
     {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
     {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
