@@ -30,7 +30,7 @@ def generate_path(duration, mask):
     b, t_x, t_y = mask.shape
     # Duration could have fractional numbers during inference, because there's an exp(duration) there.
     # During training, It will only have integers, because they are coming from MAS.
-    cum_duration = torch.cumsum(duration, 1)
+    cum_duration = torch.cumsum(duration, 1).round()
 
     cum_duration_flat = cum_duration.view(b * t_x)
     path = sequence_mask(cum_duration_flat, t_y).to(mask.dtype)
