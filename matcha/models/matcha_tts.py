@@ -191,7 +191,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             "rtf": rtf,
         }
 
-    def forward(self, x, x_lengths, y, y_lengths, spks=None, cond=None, durations=None):
+    def forward(self, x, x_lengths, y, y_lengths, spks=None, durations=None):
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -256,7 +256,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks, cond=cond)
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks)
 
         if self.prior_loss:
             # Original code was: 
@@ -264,7 +264,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
             # Also, the values are too small, 0.05 the after first epoch tending to 0.0001
-            # Such small gradients are not allowing the model to learn, do I should not square them up:
+            # Such small gradients are not allowing the model to learn, so I am not squaring them up anymore.
+            # This had a positive effect on duration estimation too, which started showing much smaller losses.  
+            # Before this change, I could not get duration loss below 0.15, not even 400K steps.
             prior_loss = torch.sum(torch.abs(y - mu_y) * y_mask)
             prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
         else:

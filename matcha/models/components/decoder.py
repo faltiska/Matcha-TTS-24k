@@ -360,7 +360,7 @@ class Decoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
-    def forward(self, x, mask, mu, t, spks=None, cond=None):
+    def forward(self, x, mask, mu, t, spks=None):
         """Forward pass of the UNet1DConditional model.
 
         Args:
@@ -368,7 +368,6 @@ class Decoder(nn.Module):
             mask (_type_): shape (batch_size, 1, time)
             t (_type_): shape (batch_size)
             spks (_type_, optional): shape: (batch_size, condition_channels). Defaults to None.
-            cond (_type_, optional): placeholder for future use. Defaults to None.
 
         Raises:
             ValueError: _description_
