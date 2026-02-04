@@ -96,7 +96,7 @@ def measure_trailing_silence(wav_path: Path, effective_silence_threshold: float,
         absolute_silence_duration = (windows_below_absolute_silence_threshold * window_frames) / sr
         
         if debug:
-            print(f"\n{wav_path.name}: sr={sr}, soft={effective_silence_duration*1000:.1f}ms, hard={absolute_silence_duration*1000:.1f}ms")
+            print(f"\n{wav_path.name}: sr={sr}, effective={effective_silence_duration*1000:.1f}ms, absolute={absolute_silence_duration*1000:.1f}ms")
         
         return effective_silence_duration, absolute_silence_duration
     except Exception as e:
@@ -155,7 +155,7 @@ def main():
     train_filelist = _resolve_path(str(cfg["train_filelist_path"]))
 
     # Print header first
-    print(f"\nTrailing Silence Statistics (soft: {args.effective_silence_threshold} dB, hard: {args.absolute_silence_threshold} dB)")
+    print(f"\nTrailing Silence Statistics (effective: {args.effective_silence_threshold} dB, absolute: {args.absolute_silence_threshold} dB)")
     print("=" * 98)
     print(f"{'Speaker':<10} {'Count':<8} {'Effective Mean':<16} {'Effective Std':<16} {'Absolute Mean':<16} {'Absolute Std':<16}")
     print("-" * 98)
