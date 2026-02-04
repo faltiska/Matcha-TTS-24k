@@ -50,12 +50,21 @@ def multilingual_phonemizer(text, language):
     if not phonemizer:
         raise Exception(f"Unsupported {language=}")
     
-    # Apply NeMo normalization if available for this language
+    # Apply NeMo normalization if available for this language.
+    # The eSpeak normalization will still be applied during phonemization; in case of languages 
+    # supported by Nemo, it will probably not do anything, as it's already normalized, which for 
+    # those not supported, eSpeak will take care of it.
     lang_code = language.split('-')[0]  # en-us -> en, fr-fr -> fr
     if lang_code in normalizers:
-        text = normalizers[lang_code].normalize(text)
+        normalizer = normalizers[lang_code]
+        text = normalizer.normalize(text)
+
+    text = text.rstrip()
+    if not text.endswith(('.', '?', '!')):
+        text = text + '.'
     
     phonemes = phonemizer.phonemize([text])[0]
+
     return phonemes
 
 
@@ -70,6 +79,9 @@ if __name__ == "__main__":
             "Call me at 555-1234 or visit 123 Main St.",
             "The temperature is -5°C or 23°F.",
             "He scored 95% on the test.",
+            "Word   ",
+            "Word\n\n",
+            "Word\t",
         ]),
         ('es', [
             "El Dr. García llegará a las 15:00.",
@@ -96,27 +108,39 @@ if __name__ == "__main__":
             "Il prezzo è €5,00 dal 21 gennaio 2026.",
             "La temperatura è -5°C o 23°F.",
         ]),
+        ('ro', [
+            "Dr. Popescu vă va vedea la ora 15:00.",
+            "Prețul este 5,00 lei din 21 ianuarie 2026.",
+            "Temperatura este -5°C sau 23°F.",
+            "Sunați-mă la 555-1234 sau vizitați Str. Principală nr. 123.",
+            "Oare?",
+            "Doare!",
+            "N-are.",
+            "Cuvânt   ",
+            "Cuvânt\n\n",
+            "Cuvânt\t",
+        ]),
     ]
 
     for lang, examples in test_cases:
         lang_key = f"{lang}-us" if lang == 'en' else f"{lang}-fr" if lang == 'fr' else lang
         print(f"=== {lang.upper()} ===")
         for text in examples:
-            print(f"Original:   {text}")
+            print(f"Original:   <{text}>")
 
             if lang in normalizers:
                 start = time()
                 normalized = normalizers[lang].normalize(text)
                 ms = int((time() - start) * 1000)
-                print(f"Normalized: {normalized} ({ms} ms)")
+                print(f"Normalized: <{normalized}> ({ms} ms)")
             else:
                 normalized = text
                 print(f"Nemo normalization not available for {lang=}")
             
             start = time()
-            phonemes = phonemizers[lang_key].phonemize([normalized])[0]
+            phonemes = multilingual_phonemizer(text, lang_key)
             ms = int((time() - start) * 1000)
-            print(f"Phonemized: {phonemes} ({ms} ms)")
+            print(f"Phonemized: <{phonemes}> ({ms} ms)")
 
             print()
         
