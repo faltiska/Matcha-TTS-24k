@@ -1,70 +1,53 @@
-# Matcha-TTS Architecture and Components
+# Matcha-TTS Components
 
-This document summarizes the core architecture and synthesis/training pipeline of Matcha-TTS.
+## What Each Module Does During Inference
 
-## High-level
-- Non-autoregressive TTS that generates mel-spectrograms using Conditional Flow Matching (CFM), solved with an ODE integration.
-- Two learnable stages:
-  1) Text encoder with duration prediction and monotonic alignment
-  2) Conditional flow decoder that maps noise to mel conditioned on encoder features
-- A separate vocoder (e.g., HiFi-GAN, Vocos) converts the generated mel to waveform.
+## Text Processing
+**Text Encoder** - Takes your written text and converts it into phonetic features that capture what sounds to make and their 
+linguistic context. Contains a transformer-based encoder that processes phoneme sequences.
 
-## Core Components
+**Duration Predictor** - A simple CNN that predicts how long each phoneme should last. Takes the encoder's contextual features 
+and outputs timing information.
 
-### 1) TextEncoder
-Files: `matcha/models/components/text_encoder.py`
-- Token embedding (+ optional convolutional prenet)
-- Transformer-style encoder stack with:
-  - Multi-Head Attention
-  - Rotary Positional Embeddings (RoPE)
-  - LayerNorm + FFN blocks
-- Outputs:
-  - mu (prior mel-like features per text frame) via `proj_m`
-  - logw (log token durations) via `DurationPredictor`
-- Multi-speaker support: if `n_spks > 1`, a learned speaker embedding is concatenated as extra channels.
+## Audio Generation Pipeline
 
-### 2) Alignment and Length Expansion
-Files: `matcha/models/matcha_tts.py`, `matcha/utils/monotonic_align`
-- Converts predicted durations exp(logw) into an alignment path `attn`:
-  - In inference: use predicted durations to build path
-  - In training: Monotonic Alignment Search (MAS) over a Gaussian prior around `mu` to obtain supervision
-- Expands text-frame `mu` to mel-frame `mu_y` using the alignment `attn`
-- `length_scale` adjusts speaking rate by scaling durations.
+**Alignment** - Uses the duration predictions to create a timing map that aligns phonetic features with mel-spectrogram time 
+frames. This tells the system exactly when each sound should occur.
 
-### 3) Conditional Flow Matching (CFM) Decoder
-Files: `matcha/models/components/flow_matching.py`, `matcha/models/components/decoder.py`
-- Establishes an ODE from noise to target mel conditioned on `mu_y` and masks
-- Estimator network: a UNet-like `Decoder` that predicts the conditional flow field
-- Inference:
-  - Start from noise `z`
-  - Integrate dx/dt = estimator(x, t, cond) over t ∈ [0, 1] using the torchdiff built-in ODE implementation which offers multiple methods
-  - Solver method is specified in `cfm_params.solver`
-  - `n_timesteps` controls the number of integration steps
-  - `temperature` scales the terminal noise
-- Multi-speaker conditioning is passed when applicable.
+**Flow Matching Decoder** - A diffusion-style model that generates the final mel-spectrogram. It starts with random noise and 
+uses the aligned phonetic features as conditioning information to gradually transform the noise into realistic speech patterns 
+through ODE integration (a mathematical process that solves the transformation step-by-step). The conditioning tells it what 
+sounds to generate and when.
 
-## Training Objectives
-Files: `matcha/models/matcha_tts.py`
-- Duration loss: between predicted `logw` and MAS-derived durations
-- Prior loss: encourages target mel `y` to match `N(mu_y, I)` (i.e., Gaussian around encoder-expanded prior)
-- Flow matching loss: MSE between the estimator’s vector field and the true conditional flow on randomly sampled `t`
+**Speaker Embedding** - For multi-speaker models, speaker characteristics are concatenated to the feature channels at multiple 
+points in both the encoder and decoder, allowing the same text to be spoken in different voices.
 
-## Inference Pipeline
-1) Text → phoneme IDs → TextEncoder → `mu` (text-time), `logw`
-2) Durations → alignment path `attn` → expand to `mu_y` (mel-time)
-3) CFM decoder integrates from noise to mel using the ODE solver
-4) Denormalize mel → external vocoder produces waveform
+## Audio Output
+**Vocoder** - Converts the mel-spectrogram into actual audio waveform:
+- **HiFiGAN** - Older vocoder for 22kHz audio
+- **Vocos** - Newer vocoder for 24kHz audio (better quality)
 
 ## Key Controls
-- `solver`: ODE integration method (configurable via `cfm_params.solver`)
-- `n_timesteps`: speed/quality trade-off for ODE integration
-- `temperature`: output stochasticity
-- `length_scale`: speaking rate control
-- Speaker ID (if multi-speaker): selects speaker embedding
+- **Number of steps** - More steps = higher quality but slower generation
+- **Temperature** - Controls randomness/variation in the output
+- **Speaking rate** - Speed up or slow down speech by scaling durations
+- **ODE solver method** - Different mathematical approaches for the transformation process
 
-## Shapes (typical)
-- Text `x`: (B, T_text), lengths `x_lengths`
-- Encoder `mu`: (B, n_feats, T_text)
-- Expanded `mu_y` and decoder output mel: (B, n_feats, T_mel)
-- Masks: `x_mask` (B, 1, T_text), `y_mask` (B, 1, T_mel)
-- Speaker embedding (if used): learned embedding concatenated as channels
+## The Complete Flow
+1. Text → phonetic features (encoder) + timing predictions (duration predictor)
+2. Alignment maps phonetic features to mel-spectrogram timeframes
+3. Decoder uses aligned features to condition an ODE integration process: noise → realistic mel-spectrogram
+4. Vocoder converts mel-spectrogram → playable audio
+
+The key insight: The encoder provides the "what and when" (phonetic content + timing), while the decoder provides the "how" 
+(detailed acoustic realization through conditioned generation).
+
+## Where to Find Each Component
+
+- **Text Encoder & Duration Predictor**: `matcha/models/components/text_encoder.py`
+- **Flow Matching Decoder**: `matcha/models/components/flow_matching.py` and `matcha/models/components/decoder.py`
+- **Alignment**: `matcha/models/matcha_tts.py` and `matcha/utils/monotonic_align/`
+- **Main Model**: `matcha/models/matcha_tts.py`
+- **HiFiGAN Vocoder**: `matcha/hifigan/models.py`
+- **Vocos Vocoder**: `matcha/vocos24k/wrapper.py`
+- **CLI Interface**: `matcha/cli.py`
