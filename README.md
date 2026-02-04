@@ -34,6 +34,20 @@ python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/train.csv
 python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/validate.csv
 ```
 
+Measure trailing silence per speaker to check for inconsistencies.
+Different speakers may have different amounts of trailing silence, which can cause the model to learn silence duration as a spurious feature for speaker identification 
+instead of actual voice characteristics.
+```
+python -m matcha.utils.measure_silence -i configs/data/corpus-small-24k.yaml
+```
+If you see significant variation in trailing silence between speakers (e.g., some speakers with ~300ms and others with ~900ms), you should normalize it.
+Backup your wav files first, then add silence to reach a consistent target duration:
+```
+python -m matcha.utils.add_silence -i configs/data/corpus-small-24k.yaml --target_silence 0.8
+```
+The script measures current silence at -60dB threshold and adds only what's needed to reach the target.
+After running, verify the normalization by measuring again - all speakers should now have the same trailing silence duration.
+
 ### Calculate corpus statistics
 Delete the mels folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
@@ -111,7 +125,7 @@ Compared to the original MatchaTTS, I did the following:
 - Implemented a mel precomputation script
   Originally, the mels were computed during training, on the fly.
   This speeds up training a bit
-- Switch to the torch built in ODE solver 
+- Switched to the torch built in ODE solver 
   No need to maintain our own version, since the torch one supports all algorithms. 
 - Made some performance improvements to the CPU based monotonic_align implementation
 - Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
