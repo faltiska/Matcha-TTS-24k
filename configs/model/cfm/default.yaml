@@ -1,5 +1,6 @@
 name: CFM
 
-solver: euler 
+# recommended: euler, midpoint or rk4
+solver: midpoint 
 
 sigma_min: 1e-4

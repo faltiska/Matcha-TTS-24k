@@ -277,7 +277,7 @@ def cli():
         default=None,
         help="change the speaking rate, a higher value means slower speaking rate (default: 1.0)",
     )
-    parser.add_argument("--steps", type=int, default=20, help="Number of ODE steps  (default: 20)")
+    parser.add_argument("--steps", type=int, default=15, help="Number of ODE steps  (default: 20)")
     parser.add_argument("--cpu", action="store_true", help="Use CPU for inference (default: use GPU if available)")
     parser.add_argument(
         "--denoiser_strength",
