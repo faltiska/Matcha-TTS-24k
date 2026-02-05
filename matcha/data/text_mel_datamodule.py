@@ -36,11 +36,11 @@ class DynamicBatchSampler(Sampler):
     # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
     # First batches contains very short utterances, and always bundling short utterances together
     # may lead to some bias or overfitting. 
-    NUM_REDISTRIBUTION_BATCHES = 4
+    NUM_REDISTRIBUTION_BATCHES = 5
     # Controls how short samples get redistributed.
     # Larger numbers mean more samples go to early batches. smaller numbers allow some samples to go
     # to batches at the end too. Batches are sorted by sample length. 
-    DISTRIBUTION_BIAS = 8
+    DISTRIBUTION_BIAS = 6
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
