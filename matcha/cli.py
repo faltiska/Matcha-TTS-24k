@@ -15,14 +15,8 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.hifigan.config import v1
-from matcha.hifigan.denoiser import Denoiser
-from matcha.hifigan.env import AttrDict
-from matcha.hifigan.models import Generator as HiFiGAN
-from matcha.models.matcha_tts import MatchaTTS
-from matcha.text import sequence_to_text, to_phoneme_ids, to_phonemes
-from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
-from matcha.vocos24k.wrapper import load_model as load_vocos
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
+from matcha.utils.utils import assert_model_downloaded, get_user_data_dir
 
 MATCHA_URLS = {
     "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
@@ -30,32 +24,14 @@ MATCHA_URLS = {
 }
 
 VOCODER_URLS = {
-    "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
-    "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
     "vocos": "https://huggingface.co/charactr/vocos-mel-24khz",
 }
 
 MULTISPEAKER_MODEL = {
-    "matcha_vctk": {"vocoder": "hifigan_univ_v1", "speaking_rate": 1.0, "spk": 0, "spk_range": (0, 107)}
+    "matcha_vctk": {"vocoder": "vocos", "speaking_rate": 1.0, "spk": 0, "spk_range": (0, 107)}
 }
 
-SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "hifigan_T2_v1", "speaking_rate": 1.0, "spk": None}}
-
-
-def process_text(i: int, text: str, language: str, device: torch.device):
-    print(f"[{i}] - Input text: {text}")
-    phonemes = to_phonemes(text, language=language)
-    phoneme_ids = to_phoneme_ids(phonemes)
-    x = torch.tensor(
-        intersperse(phoneme_ids, 0),
-        dtype=torch.long,
-        device=device,
-    )[None]
-    x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=device)
-    x_phones = sequence_to_text(x.squeeze(0).tolist())
-    print(f"[{i}] - Phonetised text: {x_phones[1::2]}")
-
-    return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": x_phones}
+SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "vocos", "speaking_rate": 1.0, "spk": None}}
 
 
 def get_texts(args):
@@ -78,52 +54,6 @@ def assert_required_models_available(args):
     vocoder_path = save_dir / f"{args.vocoder}"
     assert_model_downloaded(vocoder_path, VOCODER_URLS[args.vocoder])
     return {"matcha": model_path, "vocoder": vocoder_path}
-
-
-def load_hifigan(checkpoint_path, device):
-    h = AttrDict(v1)
-    hifigan = HiFiGAN(h).to(device)
-    hifigan.load_state_dict(torch.load(checkpoint_path, map_location=device)["generator"])
-    _ = hifigan.eval()
-    hifigan.remove_weight_norm()
-    return hifigan
-
-
-def load_vocoder(vocoder_name, checkpoint_path, device):
-    print(f"[!] Loading {vocoder_name}!")
-    if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
-        vocoder = load_hifigan(checkpoint_path, device)
-        denoiser = Denoiser(vocoder, mode="zeros")
-    elif vocoder_name == "vocos":
-        vocoder = load_vocos(device)
-        denoiser = None
-    else:
-        raise NotImplementedError(
-            f"Vocoder {vocoder_name} not implemented! define a load_<<vocoder_name>> method for it"
-        )
-
-    print(f"[+] {vocoder_name} loaded!")
-    return vocoder, denoiser
-
-
-def load_matcha(model_name, checkpoint_path, device):
-    print(f"[!] Loading {model_name}!")
-    model = MatchaTTS.load_from_checkpoint(checkpoint_path, map_location=device, weights_only=False, strict=False).eval()
-    print(f"[+] {model_name} loaded!")
-    return model
-
-
-def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
-    audio = vocoder(mel)
-
-    max_abs = audio.abs().max()
-    if max_abs > 1.0:
-        audio = audio / max_abs * 0.95
-        
-    if denoiser is not None:
-        audio = denoiser(audio.squeeze(), strength=denoiser_strength).cpu().squeeze()
-
-    return audio.cpu().squeeze()
 
 
 def save_to_folder(filename: str, output: dict, folder: str, sample_rate: int = 22050):
@@ -166,7 +96,7 @@ def validate_args(args):
     else:
         # When using a custom model
         if args.vocoder is None:
-            args.vocoder = "hifigan_T2_v1"
+            args.vocoder = "vocos"
             warn_ = f"[-] Using custom model checkpoint, but no vocoder specified, defaulting to {args.vocoder}."
             warnings.warn(warn_, UserWarning)
         if args.speaking_rate is None:
@@ -308,7 +238,7 @@ def cli():
     
     # Set audio params if not present (for old checkpoints)
     if not hasattr(model, "sample_rate"):
-        model.sample_rate = 24000 if args.vocoder == "vocos" else 22050
+        model.sample_rate = 24000
     if not hasattr(model, "hop_length"):
         model.hop_length = 256
     

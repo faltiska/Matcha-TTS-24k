@@ -16,9 +16,10 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 import soundfile as sf
 
-from matcha.cli import load_matcha, load_vocoder, process_text, to_waveform
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-04_11-42-43/checkpoints/saved/checkpoint_epoch=079.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-05_10-24-26/checkpoints/saved/checkpoint_epoch=279.ckpt"
+CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
@@ -132,7 +133,7 @@ def synthesize(request: InferenceRequest):
         length_scale=length_scale,
     )
         
-    output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, 0.00025)
+    output["waveform"] = to_waveform(output["mel"], vocoder)
 
     t = (dt.datetime.now() - start_t).total_seconds()
     sample_rate = getattr(model, "sample_rate")
@@ -143,6 +144,14 @@ def synthesize(request: InferenceRequest):
     waveform = output["waveform"].cpu().numpy()
     mp3_data = convert_to_mp3(waveform, sample_rate)
     return Response(content=mp3_data, media_type="audio/mpeg")
+
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
 
 # Run it with python -m matcha.server
 if __name__ == "__main__":
