@@ -271,3 +271,5 @@ docker service update matcha --replicas 2
 - take the Nemo grammar files and the Vocos model from the local cache, don't download it after docker container starts
 - check what is so large in the docker image, even before including those
 - try to get GPU to work with Rancher Desktop (install nVidia WSL Toolkit manually)
+- improve server.py to make it ready for prod
+- add PSR script
