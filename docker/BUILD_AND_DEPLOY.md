@@ -1,6 +1,15 @@
 # MatchaTTS Production Deployment
 
 ## Prerequisites
+
+### Local development
+```
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo apt  install docker.io
+```
+
+### In AWS
 - AWS EC2 g4dn.xlarge instance (T4 GPU, 16GB VRAM)
 - Deep Learning Base OSS Nvidia Driver GPU AMI (Amazon Linux 2023)
 - Docker with NVIDIA runtime configured
