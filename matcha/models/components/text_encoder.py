@@ -352,7 +352,7 @@ class TextEncoder(nn.Module):
         self.n_spks = n_spks
 
         self.emb = torch.nn.Embedding(n_vocab, self.n_channels)
-        torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels**-0.5)
+        torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels ** -0.5)
 
         if encoder_params.prenet:
             self.prenet = ConvReluNorm(
