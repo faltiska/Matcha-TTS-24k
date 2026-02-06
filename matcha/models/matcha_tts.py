@@ -227,13 +227,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
             with torch.no_grad():
                 factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-                y_square = torch.matmul(factor.transpose(1, 2), y**2)
+                y_square = torch.matmul(factor.transpose(1, 2), y ** 2)
                 # Original code was:
                 #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
                 # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
                 # I've replaced it with just -mu_x
                 y_mu_double = torch.matmul(-mu_x.transpose(1, 2), y)
-                mu_square = torch.sum(factor * (mu_x**2), 1).unsqueeze(-1)
+                mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + self.mas_const
 
                 # the GPU impl is about 5% faster, but triggers more model recompilations.
