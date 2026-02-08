@@ -19,7 +19,7 @@ precision: bf16-mixed
 check_val_every_n_epoch: 10
 
 # Protects against spikes in learning. Keeps the model weights from jumping too wildly.
-gradient_clip_val: 1
+gradient_clip_val: 4
 
 # Set it to 2 or 4 for small GPUs that cannot fit large batches in memory
 accumulate_grad_batches: 1
