@@ -28,30 +28,7 @@ class BaseLightningClass(LightningModule, ABC):
         self.register_buffer("mel_std", torch.tensor(data_statistics["mel_std"]))
 
     def configure_optimizers(self) -> Any:
-        optimizer = self.hparams.optimizer(params=self.parameters())
-        if self.hparams.scheduler not in (None, {}):
-            scheduler_args = {}
-            # Manage last epoch for exponential schedulers
-            if "last_epoch" in inspect.signature(self.hparams.scheduler.scheduler).parameters:
-                if hasattr(self, "ckpt_loaded_epoch"):
-                    current_epoch = self.ckpt_loaded_epoch - 1
-                else:
-                    current_epoch = -1
-
-            scheduler_args.update({"optimizer": optimizer})
-            scheduler = self.hparams.scheduler.scheduler(**scheduler_args)
-            scheduler.last_epoch = current_epoch
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": scheduler,
-                    "interval": self.hparams.scheduler.lightning_args.interval,
-                    "frequency": self.hparams.scheduler.lightning_args.frequency,
-                    "name": "learning_rate",
-                },
-            }
-
-        return {"optimizer": optimizer}
+        return self.hparams.optimizer(params=self.parameters())
 
     def get_losses(self, batch):
         x, x_lengths = batch["x"], batch["x_lengths"]
