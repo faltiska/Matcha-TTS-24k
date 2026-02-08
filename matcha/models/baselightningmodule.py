@@ -74,18 +74,14 @@ class BaseLightningClass(LightningModule, ABC):
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
-        # When starting from a checkpoint, Lightning will use the LR from the checkpoint
-        # The only way to change it manually when resuming from a checkpoint is to explicitly override it as follows.
-        # But we should only do that if no LR scheduler is configured.
-        has_scheduler = self.hparams.scheduler not in (None, {})
-        if not has_scheduler:
+        # Override LR from checkpoint with config LR
+        config_lr = self.hparams.optimizer.keywords.get("lr")
+        if config_lr is not None:
             for opt_state in checkpoint.get("optimizer_states", []):
                 for param_group in opt_state.get("param_groups", []):
                     old_lr = param_group["lr"]
-                    config_lr = self.hparams.optimizer.keywords.get("lr")
-                    if old_lr != config_lr:
-                        log.info(f"Overriding checkpoint LR {old_lr} with new value from config {config_lr}")
-                        param_group["lr"] = config_lr
+                    param_group["lr"] = config_lr
+                    log.info(f"Overriding checkpoint LR {old_lr} with new value from config {config_lr}")
         
         # Check if a new speaker was added to the corpus
         if "spk_emb.weight" in checkpoint["state_dict"]:
@@ -110,13 +106,6 @@ class BaseLightningClass(LightningModule, ABC):
                 
                 log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
-    def on_train_start(self) -> None:
-        """Log the actual LR after scheduler has been configured."""
-        current_lr = self.optimizers().param_groups[0]["lr"]
-        has_scheduler = self.hparams.scheduler not in (None, {})
-        if has_scheduler:
-            log.info(f"Scheduler set the LR to {current_lr}.")
-
     def training_step(self, batch: Any, batch_idx: int):
         # avoids repeated recompilation of the model caused by changing parameter sizes.
         torch._dynamo.mark_dynamic(batch["x"], 1)
@@ -125,15 +114,11 @@ class BaseLightningClass(LightningModule, ABC):
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
         
-        # Log current LR
-        current_lr = self.optimizers().param_groups[0]["lr"]
-        
         metrics = {
             f"loss/train": total_loss,
             f"sub_loss/train_diff": diff_loss,
             f"sub_loss/train_dur": dur_loss,
             f"sub_loss/train_prior": prior_loss,
-            "learning_rate": current_lr,
             "step": self.global_step,
         }
         self.log_dict(metrics, on_step=True, on_epoch=True, logger=True, batch_size=bs)
