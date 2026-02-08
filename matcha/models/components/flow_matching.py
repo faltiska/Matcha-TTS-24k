@@ -84,7 +84,10 @@ class BASECFM(torch.nn.Module, ABC):
         # sample noise p(x_0)
         z = torch.randn_like(x1)
 
+        # "y" is an interpolated sample between pure noise and the target spectrogram at timestep t.
+        # It represents what the mel-spectrogram looks like at time t during the diffusion process.
         y = (1 - (1 - self.sigma_min) * t) * z + t * x1
+        # "u" is the target velocity - the optimal direction to flow from noise to target.
         u = x1 - (1 - self.sigma_min) * z
         
         pred = self.estimator(y, mask, mu, t.squeeze(), spks)
@@ -96,13 +99,8 @@ class BASECFM(torch.nn.Module, ABC):
 
         # Applying the mask to both the prediction and the target, ensures the loss is based only
         # on the actual speech frames and the padding does not contribute to the loss:
-        # loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
-        #
-        # I am not using that formula because MSE produces very small gradients.
-        # Changing from MSE to L1 (absolute error) makes gradient magnitude
-        # consistent with the encoder's prior_loss.
-        loss = torch.sum(torch.abs(pred - u) * mask) / (torch.sum(mask) * u.shape[1])
-
+        loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
+        
         return loss, y
 
 
