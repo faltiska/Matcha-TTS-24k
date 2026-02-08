@@ -1,9 +1,0 @@
-scheduler:
-  _target_: torch.optim.lr_scheduler.MultiStepLR
-  _partial_: true
-  milestones: [130, 230, 320, 410]  # Epochs at which to reduce LR
-  gamma: 0.5  # Multiply LR by this factor at each milestone (0.5 = halve the LR)
-
-lightning_args:
-  interval: epoch  # Apply scheduler every epoch (not every step)
-  frequency: 10  # Apply scheduler every 1 epoch
