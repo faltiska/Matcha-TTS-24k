@@ -41,16 +41,7 @@ def generate_path(duration, mask):
 
 
 def duration_loss(logw, logw_, lengths):
-    # Original code was: 
-    # loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
-    # It computed the MSE between predicted and calculated log-scaled durations.
-    # Switching to an L1 loss made the gradients a bit larger, which add more 
-    # bias toward duration learning. I have changed Prior Loss and Diffusion Loss
-    # to be L1, which improved Prior Loss a lot, which in turn allowed Duration
-    # to learn more without any change here, but made the Diffusion Loss lag behind.
-    # To fix that I changed the Diffusion Loss to L1 too, but so now I have to change 
-    # Duration as well, to maintain the balance. 
-    loss = torch.sum(torch.abs(logw - logw_)) / torch.sum(lengths)
+    loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
     return loss
 
 
