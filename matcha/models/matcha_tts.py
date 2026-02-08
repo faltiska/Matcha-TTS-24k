@@ -255,8 +255,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # but that can be simplified as: 
         mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
+        # Detach mu_y to prevent diffusion gradients from flowing back to the encoder. We do not want 
+        # the Encoder to learn to produce mels that make the Decoder's job easier. We want the Encoder to learn 
+        # how to produce mels that match the ground truth.
+        # Diffusion still learns from the diff_loss, it is not affected by this detach.
+        detached_mu_y = mu_y.detach()
+
         # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y, spks=spks)
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=spks)
 
         if self.prior_loss:
             # Original code was: 
