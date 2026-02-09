@@ -31,4 +31,5 @@ duration_predictor_params:
   # Changed from 3. It looks at the phoneme plus 2 neighbors on each side (5 phonemes total)
   kernel_size: 5
   p_dropout: ${model.encoder.encoder_params.p_dropout}
+  n_layers: 4
 
