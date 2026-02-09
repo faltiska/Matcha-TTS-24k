@@ -15,10 +15,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 import soundfile as sf
+import numpy as np
 
 from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-05_10-24-26/checkpoints/saved/checkpoint_epoch=279.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/best_result/checkpoints/saved/checkpoint_epoch=409.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -127,22 +128,20 @@ def synthesize(request: InferenceRequest):
         text_processed["x"],
         text_processed["x_lengths"],
         n_timesteps=request.steps,
-        temperature=0.8,
+        temperature=0.5,
         spks=spk,
         voice_mix=voice_mix,
         length_scale=length_scale,
     )
         
-    output["waveform"] = to_waveform(output["mel"], vocoder)
-
+    waveform = to_waveform(output["mel"], vocoder)
+    
     t = (dt.datetime.now() - start_t).total_seconds()
     sample_rate = getattr(model, "sample_rate")
-    rtf = t * sample_rate / output["waveform"].shape[-1]
-
+    rtf = t * sample_rate / waveform.shape[-1]
     print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf:.4f}")
 
-    waveform = output["waveform"].cpu().numpy()
-    mp3_data = convert_to_mp3(waveform, sample_rate)
+    mp3_data = convert_to_mp3(waveform.cpu().numpy(), sample_rate)
     return Response(content=mp3_data, media_type="audio/mpeg")
 
 

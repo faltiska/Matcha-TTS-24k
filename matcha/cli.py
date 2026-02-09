@@ -56,12 +56,11 @@ def assert_required_models_available(args):
     return {"matcha": model_path, "vocoder": vocoder_path}
 
 
-def save_to_folder(filename: str, output: dict, folder: str, sample_rate: int = 22050):
+def save_to_folder(filename: str, waveform: dict, folder: str, sample_rate: int = 22050):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
     
     # Convert to MP3
-    waveform = output["waveform"].cpu().numpy()
     wav_buffer = io.BytesIO()
     sf.write(wav_buffer, waveform, sample_rate, format="WAV", subtype="PCM_16")
     wav_buffer.seek(0)
@@ -275,15 +274,15 @@ def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
             spks=spk_id if spk_id is not None else 0,
             length_scale=args.speaking_rate,
         )
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        waveform = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
         # RTF with vocoder
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * sample_rate / (output["waveform"].shape[-1])
+        rtf_w = t * sample_rate / (waveform.shape[-1])
         print(f"[🍵-{i}] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, output, args.output_folder, sample_rate)
+        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, sample_rate)
         print(f"[+] Waveform saved: {location}")
 
     print("".join(["="] * 100))
