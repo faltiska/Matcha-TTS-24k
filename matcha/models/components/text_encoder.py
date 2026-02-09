@@ -68,31 +68,44 @@ class ConvReluNorm(nn.Module):
 
 
 class DurationPredictor(nn.Module):
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout):
+    """Predicts phoneme durations using stacked convolutional layers.
+    
+    The number of layers was fixed at 2 originally, and I made it configurable via n_layers parameter
+    in configs/model/encoder/default.yaml.
+    
+    Having 4 layers instead of 2 improved the duration estimations dramatically.
+    """
+    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2):
         super().__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
         self.p_dropout = p_dropout
 
         self.drop = torch.nn.Dropout(p_dropout)
-        self.conv_1 = torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
-        self.norm_1 = LayerNorm(filter_channels)
-        self.conv_2 = torch.nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
-        self.norm_2 = LayerNorm(filter_channels)
+        self.conv_layers = torch.nn.ModuleList()
+        self.norm_layers = torch.nn.ModuleList()
+
+        self.conv_layers.append(
+            torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+        )
+        self.norm_layers.append(LayerNorm(filter_channels))
+
+        for _ in range(n_layers - 1):
+            self.conv_layers.append(
+                torch.nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+            )
+            self.norm_layers.append(LayerNorm(filter_channels))
+
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
     def forward(self, x, x_mask):
-        x = self.conv_1(x * x_mask)
-        x = torch.relu(x)
-        x = self.norm_1(x)
-        x = self.drop(x)
-        x = self.conv_2(x * x_mask)
-        x = torch.relu(x)
-        x = self.norm_2(x)
-        x = self.drop(x)
+        for conv, norm in zip(self.conv_layers, self.norm_layers):
+            x = conv(x * x_mask)
+            x = torch.relu(x)
+            x = norm(x)
+            x = self.drop(x)
         x = self.proj(x * x_mask)
         return x * x_mask
-
 
 class RotaryPositionalEmbeddings(nn.Module):
     """
