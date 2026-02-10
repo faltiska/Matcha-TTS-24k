@@ -155,9 +155,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
 
-        # Bug fix: removed torch.ceil() that was rounding up each phoneme duration.
-        # Rounding up caused systematic bias - speech was consistently too slow.
-        # generate_path can handle fractional durations (e.g., 2.37 frames) via cumsum.
+        # Original code was:
+        #  w = torch.exp(logw) * x_mask
+        #  w_ceil = torch.ceil(w) * length_scale
+        #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
+        # I think torch.ceil() that was rounding up each phoneme duration.
+        # causing the generated speech to be consistently too slow.
+        # But generate_path can handle fractional durations so I can pass w as is.
         w = torch.exp(logw) * x_mask * length_scale
         y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).round().long()
         y_max_length = y_lengths.max()
@@ -226,15 +230,21 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
             with torch.no_grad():
-                factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-                y_square = torch.matmul(factor.transpose(1, 2), y ** 2)
+                # This computes the distance between every text token and ground truth mel frame 
+                # using a  Gaussian log-likelihood formula 
+                # factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
+                # y_square = torch.matmul(factor.transpose(1, 2), y ** 2)
                 # Original code was:
                 #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
                 # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
                 # I've replaced it with just -mu_x
-                y_mu_double = torch.matmul(-mu_x.transpose(1, 2), y)
-                mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
-                log_prior = y_square - y_mu_double + mu_square + self.mas_const
+                # y_mu_double = torch.matmul(-mu_x.transpose(1, 2), y)
+                # mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
+                # log_prior = y_square - y_mu_double + mu_square + self.mas_const
+
+                # Alternative: this computes the pairwise distance between every text token and ground truth mel frame
+                # I switched to L1-based MAS scoring to match the L1 formula I use for prior loss
+                log_prior = -torch.cdist(mu_x.transpose(1, 2), y.transpose(1, 2), p=1)
 
                 # the GPU impl is about 5% faster, but triggers more model recompilations.
                 attn = maximum_path(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
