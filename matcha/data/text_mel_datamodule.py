@@ -36,21 +36,21 @@ class DynamicBatchSampler(Sampler):
     # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
     # First batches contains very short utterances, and always bundling short utterances together
     # may lead to some bias or overfitting. 
-    NUM_REDISTRIBUTION_BATCHES = 4
+    NUM_REDISTRIBUTION_BATCHES = 6
     # Controls how short samples get redistributed.
     # Larger numbers mean more samples go to early batches. smaller numbers allow some samples to go
     # to batches at the end too. Batches are sorted by sample length. 
     DISTRIBUTION_BIAS = 4
+    # Amount of random jitter added to lengths during sorting (as fraction of length)
+    JITTER_FACTOR = 0.1
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
         self.max_frames = max_frames
         self.lengths = self._get_lengths()
-        # I am creating them only once, despite the loss of variability
-        # because the number of batches may change with each call 
-        self.batches, self.num_batches_received = self._create_batches()
-        self.num_batches = len(self.batches)
-        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches were be redistributed to the next {self.num_batches_received} batches.", file=sys.stderr)
+        batches, num_batches_received = self._create_batches()
+        self.num_batches = len(batches)
+        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches will be redistributed to the next {num_batches_received} batches.", file=sys.stderr)
     
     def _get_lengths(self):
         """
@@ -68,13 +68,37 @@ class DynamicBatchSampler(Sampler):
             
         return sorted(lengths, key=lambda x: x[1])
     
+
+    def _jittered_sort(self, lengths):
+        """Sort by length with small random variations, then restore exact original lengths.
+        
+        Adds ±JITTER_FACTOR noise to lengths for sorting only, creating variety in batch composition
+        across epochs while preserving accurate length values for frame calculations.
+        """
+        real_lengths = {idx: length for idx, length in lengths}
+        
+        noisy_lengths = []
+        for idx, length in lengths:
+            noise = random.uniform(-length * self.JITTER_FACTOR, length * self.JITTER_FACTOR)
+            noisy_lengths.append((idx, length + noise))
+        
+        noisy_lengths.sort(key=lambda x: x[1])
+        
+        sorted_lengths = []
+        for idx, _ in noisy_lengths:
+            sorted_lengths.append((idx, real_lengths[idx]))
+        
+        return sorted_lengths
+    
     def _create_batches(self):
         """Group samples into dynamic batches from provided lengths list."""
+        sorted_lengths = self._jittered_sort(self.lengths)
+        
         batches = []
         current_batch = []
         max_len = 0
         
-        for idx, length in self.lengths:
+        for idx, length in sorted_lengths:
             new_max_len = max(length, max_len)
             total_frames = new_max_len * (len(current_batch) + 1)
             
@@ -92,10 +116,16 @@ class DynamicBatchSampler(Sampler):
         num_batches_received = 0
         if self.NUM_REDISTRIBUTION_BATCHES > 0:
             batches, num_batches_received = self._redistribute_short_samples(batches)
+        
+        batches = self._enforce_max_frames(batches)
 
         return batches, num_batches_received
 
     def _redistribute_short_samples(self, batches):
+        # Skip if not enough batches
+        if len(batches) <= self.NUM_REDISTRIBUTION_BATCHES:
+            return batches, 0
+        
         # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
         must_redistribute = []
         for i in range(self.NUM_REDISTRIBUTION_BATCHES):
@@ -107,7 +137,6 @@ class DynamicBatchSampler(Sampler):
 
         num_batches = len(batches)
         total_samples = len(must_redistribute)
-        print(f"DEBUG: Redistributing {total_samples} samples across {num_batches} batches", file=sys.stderr)
         
         # Compute how many redistributed samples each batch should get, according to a decaying shape
         # Earlier batches get more samples, later batches get fewer.
@@ -135,7 +164,6 @@ class DynamicBatchSampler(Sampler):
             else:
                 break
 
-        batches = self._enforce_max_frames(batches)
         return batches, num_batches_received
     
     def _enforce_max_frames(self, batches):
@@ -170,8 +198,9 @@ class DynamicBatchSampler(Sampler):
         return batches
     
     def __iter__(self):
-        random.shuffle(self.batches)
-        for batch in self.batches:
+        batches, _ = self._create_batches()
+        random.shuffle(batches)
+        for batch in batches:
             random.shuffle(batch)
             yield batch
     
@@ -511,12 +540,15 @@ class TextMelBatchCollate:
 
 if __name__ == "__main__":
     """
-    Computes batch statistics to asses the space wasted on padding.
-    That shows the data loader efficiency in .
+    Computes batch statistics to assess the space wasted on padding.
+    Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> > output.csv
+    Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 > output.csv
+    CSV output goes to file, summary goes to console.
     """
     import sys
     if len(sys.argv) < 3:
-        print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames>")
+        print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> > output.csv")
+        print("Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 > output.csv")
         sys.exit(1)
     
     class MockDataset:
@@ -537,9 +569,13 @@ if __name__ == "__main__":
     
     total_wasted = 0
     total_frames = 0
-    length_map = {idx: length for idx, length in sampler.lengths}
-    # Don't iterate on the sampler itself, cause it returns shuffled batches.
-    for batch_idx, batch in enumerate(sampler.batches):
+    batch_count = 0
+    
+    # Build length map from initial lengths before iterator modifies them
+    initial_lengths = sampler._get_lengths()
+    length_map = {idx: length for idx, length in initial_lengths}
+    
+    for batch_idx, batch in enumerate(sampler):
         lengths = [length_map[idx] for idx in batch]
         min_len = min(lengths)
         max_len = max(lengths)
@@ -549,7 +585,8 @@ if __name__ == "__main__":
         padding_pct = 100 * wasted_frames / batch_total_frames
         total_wasted += wasted_frames
         total_frames += batch_total_frames
+        batch_count += 1
         
         print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_total_frames},{batch_actual_frames},{padding_pct:.2f}")
         
-    print(f"\nTotal wasted frames: {total_wasted} / {total_frames} ({100*total_wasted/total_frames:.2f}%)", file=sys.stderr)
+    print(f"\nNum batches: {batch_count}, Padding waste: {100*total_wasted/total_frames:.2f}%", file=sys.stderr)
