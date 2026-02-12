@@ -42,15 +42,13 @@ class DynamicBatchSampler(Sampler):
     # to batches at the end too. Batches are sorted by sample length. 
     DISTRIBUTION_BIAS = 4
     # Amount of random jitter added to lengths during sorting (as fraction of length)
-    JITTER_FACTOR = 0.1
+    JITTER_FACTOR = 0.15
     
     def __init__(self, dataset, max_frames):
         self.dataset = dataset
         self.max_frames = max_frames
         self.lengths = self._get_lengths()
-        batches, num_batches_received = self._create_batches()
-        self.num_batches = len(batches)
-        print(f"DynamicBatchSampler: {self.num_batches} batches, First {self.NUM_REDISTRIBUTION_BATCHES} batches will be redistributed to the next {num_batches_received} batches.", file=sys.stderr)
+        self.create_batches()
     
     def _get_lengths(self):
         """
@@ -90,11 +88,11 @@ class DynamicBatchSampler(Sampler):
         
         return sorted_lengths
     
-    def _create_batches(self):
+    def create_batches(self):
         """Group samples into dynamic batches from provided lengths list."""
         sorted_lengths = self._jittered_sort(self.lengths)
         
-        batches = []
+        self.batches = []
         current_batch = []
         max_len = 0
         
@@ -103,7 +101,7 @@ class DynamicBatchSampler(Sampler):
             total_frames = new_max_len * (len(current_batch) + 1)
             
             if total_frames > self.max_frames:
-                batches.append([idx for idx, _ in current_batch])
+                self.batches.append([idx for idx, _ in current_batch])
                 current_batch = []
                 max_len = 0
                 
@@ -111,31 +109,29 @@ class DynamicBatchSampler(Sampler):
             max_len = max(length, max_len)
         
         if current_batch:
-            batches.append([idx for idx, _ in current_batch])
+            self.batches.append([idx for idx, _ in current_batch])
         
-        num_batches_received = 0
         if self.NUM_REDISTRIBUTION_BATCHES > 0:
-            batches, num_batches_received = self._redistribute_short_samples(batches)
+            self._redistribute_short_samples()
         
-        batches = self._enforce_max_frames(batches)
+        self._enforce_max_frames()
+        self.num_batches = len(self.batches)
 
-        return batches, num_batches_received
-
-    def _redistribute_short_samples(self, batches):
+    def _redistribute_short_samples(self):
         # Skip if not enough batches
-        if len(batches) <= self.NUM_REDISTRIBUTION_BATCHES:
-            return batches, 0
+        if len(self.batches) <= self.NUM_REDISTRIBUTION_BATCHES:
+            return
         
         # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
         must_redistribute = []
         for i in range(self.NUM_REDISTRIBUTION_BATCHES):
-            must_redistribute.extend(batches[i])
-        batches = batches[self.NUM_REDISTRIBUTION_BATCHES:]
+            must_redistribute.extend(self.batches[i])
+        self.batches = self.batches[self.NUM_REDISTRIBUTION_BATCHES:]
         
         # Shuffle must_redistribute so we distribute then in a different order each time
         random.shuffle(must_redistribute)
 
-        num_batches = len(batches)
+        num_batches = len(self.batches)
         total_samples = len(must_redistribute)
         
         # Compute how many redistributed samples each batch should get, according to a decaying shape
@@ -158,21 +154,21 @@ class DynamicBatchSampler(Sampler):
         for batch_idx, num_to_add in enumerate(redistribution_shape):
             can_add = min(num_to_add, len(must_redistribute))
             if can_add > 0:
-                batches[batch_idx].extend(must_redistribute[:can_add])
+                self.batches[batch_idx].extend(must_redistribute[:can_add])
                 must_redistribute = must_redistribute[can_add:]
                 num_batches_received += 1
             else:
                 break
 
-        return batches, num_batches_received
+        print(f"DynamicBatchSampler: First {self.NUM_REDISTRIBUTION_BATCHES} batches were redistributed to the next {num_batches_received} batches.", file=sys.stderr)
     
-    def _enforce_max_frames(self, batches):
+    def _enforce_max_frames(self):
         """Enforce max_frames constraint by moving overflow samples to next batch."""
         length_map = {idx: length for idx, length in self.lengths}
         
         i = 0
-        while i < len(batches):
-            batch = batches[i]
+        while i < len(self.batches):
+            batch = self.batches[i]
             batch_lengths = [length_map[idx] for idx in batch]
             max_len = max(batch_lengths)
             total_frames = max_len * len(batch)
@@ -183,10 +179,10 @@ class DynamicBatchSampler(Sampler):
                 overflow_sample = batch.pop()
                 
                 # Add to next batch or create new batch if this is the last one
-                if i + 1 < len(batches):
-                    batches[i + 1].insert(0, overflow_sample)
+                if i + 1 < len(self.batches):
+                    self.batches[i + 1].insert(0, overflow_sample)
                 else:
-                    batches.append([overflow_sample])
+                    self.batches.append([overflow_sample])
                 
                 # Recalculate
                 batch_lengths = [length_map[idx] for idx in batch]
@@ -194,13 +190,10 @@ class DynamicBatchSampler(Sampler):
                 total_frames = max_len * len(batch)
             
             i += 1
-        
-        return batches
     
     def __iter__(self):
-        batches, _ = self._create_batches()
-        random.shuffle(batches)
-        for batch in batches:
+        random.shuffle(self.batches)
+        for batch in self.batches:
             random.shuffle(batch)
             yield batch
     
@@ -319,30 +312,16 @@ class TextMelDataModule(LightningDataModule):
             )
 
     def val_dataloader(self):
-        if self.hparams.max_frames_per_batch:
-            batch_sampler = DynamicBatchSampler(
-                self.validset,
-                max_frames=self.hparams.max_frames_per_batch,
-            )
-            return DataLoader(
-                dataset=self.validset,
-                batch_sampler=batch_sampler,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-            )
-        else:
-            return DataLoader(
-                dataset=self.validset,
-                batch_size=self.hparams.batch_size,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                shuffle=False,
-                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-                drop_last=self.hparams.drop_last,
-            )
+        return DataLoader(
+            dataset=self.validset,
+            batch_size=self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+            collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
+            drop_last=self.hparams.drop_last,
+        )
 
     def teardown(self, stage: Optional[str] = None):
         """Clean up after fit or test."""
@@ -589,4 +568,4 @@ if __name__ == "__main__":
         
         print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_total_frames},{batch_actual_frames},{padding_pct:.2f}")
         
-    print(f"\nNum batches: {batch_count}, Padding waste: {100*total_wasted/total_frames:.2f}%", file=sys.stderr)
+    print(f"\nTotal samples: {len(dataset)}, Num batches: {batch_count}, Padding waste: {100*total_wasted/total_frames:.2f}%", file=sys.stderr)

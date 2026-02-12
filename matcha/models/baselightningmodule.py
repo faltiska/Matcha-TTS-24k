@@ -83,6 +83,11 @@ class BaseLightningClass(LightningModule, ABC):
                 
                 log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
+    def on_train_epoch_start(self):
+        sampler = self.trainer.train_dataloader.batch_sampler
+        if hasattr(sampler, 'create_batches'):
+            sampler.create_batches()
+
     def training_step(self, batch: Any, batch_idx: int):
         # avoids repeated recompilation of the model caused by changing parameter sizes.
         torch._dynamo.mark_dynamic(batch["x"], 1)
