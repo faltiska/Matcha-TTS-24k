@@ -49,7 +49,8 @@ class DynamicBatchSampler(Sampler):
         self.max_frames = max_frames
         self.lengths = self._get_lengths()
         self.create_batches()
-    
+        print(f"DynamicBatchSampler: First {self.NUM_REDISTRIBUTION_BATCHES} batches were redistributed to the next {self.redistribution_spread} batches.", file=sys.stderr)
+
     def _get_lengths(self):
         """
         Get mel frame count for each sample, from the mel files.
@@ -150,17 +151,15 @@ class DynamicBatchSampler(Sampler):
             redistribution_shape[i] = ceil(redistribution_shape[i] * scale_factor) 
         
         # Distribute according to the shape
-        num_batches_received = 0
+        self.redistribution_spread = 0
         for batch_idx, num_to_add in enumerate(redistribution_shape):
             can_add = min(num_to_add, len(must_redistribute))
             if can_add > 0:
                 self.batches[batch_idx].extend(must_redistribute[:can_add])
                 must_redistribute = must_redistribute[can_add:]
-                num_batches_received += 1
+                self.redistribution_spread += 1
             else:
                 break
-
-        print(f"DynamicBatchSampler: First {self.NUM_REDISTRIBUTION_BATCHES} batches were redistributed to the next {num_batches_received} batches.", file=sys.stderr)
     
     def _enforce_max_frames(self):
         """Enforce max_frames constraint by moving overflow samples to next batch."""
