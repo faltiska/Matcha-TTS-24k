@@ -60,6 +60,15 @@ class BaseLightningClass(LightningModule, ABC):
                     param_group["lr"] = config_lr
                     log.info(f"Overriding checkpoint LR {old_lr} with new value from config {config_lr}")
         
+        # Override weight decay from checkpoint with config weight decay
+        config_weight_decay = self.hparams.optimizer.keywords.get("weight_decay")
+        if config_weight_decay is not None:
+            for opt_state in checkpoint.get("optimizer_states", []):
+                for param_group in opt_state.get("param_groups", []):
+                    old_wd = param_group.get("weight_decay", 0.0)
+                    param_group["weight_decay"] = config_weight_decay
+                    log.info(f"Overriding checkpoint weight decay {old_wd} with new value from config {config_weight_decay}")
+        
         # Check if a new speaker was added to the corpus
         if "spk_emb.weight" in checkpoint["state_dict"]:
             old_spk_emb = checkpoint["state_dict"]["spk_emb.weight"]
