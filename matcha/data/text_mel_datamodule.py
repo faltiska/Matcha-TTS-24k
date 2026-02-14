@@ -31,25 +31,34 @@ class DynamicBatchSampler(Sampler):
     long samples per batch.
     
     The "frames" in this class are time steps in the mel spectrogram.
+    This class is not compatible with DDP.
     """
 
-    # The samples from the first NUM_REDISTRIBUTION_BATCHES will be redistributed to other batches. 
-    # First batches contains very short utterances, and always bundling short utterances together
-    # may lead to some bias or overfitting. 
-    NUM_REDISTRIBUTION_BATCHES = 6
-    # Controls how short samples get redistributed.
-    # Larger numbers mean more samples go to early batches. smaller numbers allow some samples to go
-    # to batches at the end too. Batches are sorted by sample length. 
-    DISTRIBUTION_BIAS = 4
-    # Amount of random jitter added to lengths during sorting (as fraction of length)
-    JITTER_FACTOR = 0.15
-    
-    def __init__(self, dataset, max_frames):
+    def __init__(self, dataset, max_frames, num_redistribution_batches, distribution_bias, jitter_factor):
+        """
+        :param dataset: Dataset containing filepaths_and_text and mel_dir attributes
+        :param max_frames: Maximum total frames allowed per batch
+        :param num_redistribution_batches: 
+                    Number of initial batches to redistribute. First batches contain very short utterances, 
+                    and always bundling short utterances together may lead to some bias or overfitting. 
+        :param distribution_bias: 
+                    Controls how short samples get redistributed.
+                    Larger numbers mean more samples go to early batches, smaller numbers allow some samples to go
+                    to batches at the end too. Batches are sorted by sample length. 
+        :param jitter_factor: 
+                    Amount of random jitter added to lengths during sorting, as fraction of length, resulting in
+                    a fuzzy sorted set which is "almost but not really" sorted.
+        """
         self.dataset = dataset
         self.max_frames = max_frames
+        self.num_redistribution_batches = num_redistribution_batches
+        self.distribution_bias = distribution_bias
+        self.jitter_factor = jitter_factor
         self.lengths = self._get_lengths()
+        self.redistribution_spread = 0
         self.create_batches()
-        print(f"DynamicBatchSampler: First {self.NUM_REDISTRIBUTION_BATCHES} batches were redistributed to the next {self.redistribution_spread} batches.", file=sys.stderr)
+        if self.num_redistribution_batches > 0:
+            print(f"DynamicBatchSampler: First {self.num_redistribution_batches} batches were redistributed to the next {self.redistribution_spread} batches.", file=sys.stderr)
 
     def _get_lengths(self):
         """
@@ -71,14 +80,14 @@ class DynamicBatchSampler(Sampler):
     def _jittered_sort(self, lengths):
         """Sort by length with small random variations, then restore exact original lengths.
         
-        Adds ±JITTER_FACTOR noise to lengths for sorting only, creating variety in batch composition
+        Adds ±jitter_factor noise to lengths for sorting only, creating variety in batch composition
         across epochs while preserving accurate length values for frame calculations.
         """
         real_lengths = {idx: length for idx, length in lengths}
         
         noisy_lengths = []
         for idx, length in lengths:
-            noise = random.uniform(-length * self.JITTER_FACTOR, length * self.JITTER_FACTOR)
+            noise = random.uniform(-length * self.jitter_factor, length * self.jitter_factor)
             noisy_lengths.append((idx, length + noise))
         
         noisy_lengths.sort(key=lambda x: x[1])
@@ -112,7 +121,7 @@ class DynamicBatchSampler(Sampler):
         if current_batch:
             self.batches.append([idx for idx, _ in current_batch])
         
-        if self.NUM_REDISTRIBUTION_BATCHES > 0:
+        if self.num_redistribution_batches > 0:
             self._redistribute_short_samples()
         
         self._enforce_max_frames()
@@ -120,14 +129,14 @@ class DynamicBatchSampler(Sampler):
 
     def _redistribute_short_samples(self):
         # Skip if not enough batches
-        if len(self.batches) <= self.NUM_REDISTRIBUTION_BATCHES:
+        if len(self.batches) <= self.num_redistribution_batches:
             return
         
-        # Take out self.NUM_REDISTRIBUTION_BATCHES and flatten their content into must_redistribute
+        # Take out self.num_redistribution_batches and flatten their content into must_redistribute
         must_redistribute = []
-        for i in range(self.NUM_REDISTRIBUTION_BATCHES):
+        for i in range(self.num_redistribution_batches):
             must_redistribute.extend(self.batches[i])
-        self.batches = self.batches[self.NUM_REDISTRIBUTION_BATCHES:]
+        self.batches = self.batches[self.num_redistribution_batches:]
         
         # Shuffle must_redistribute so we distribute then in a different order each time
         random.shuffle(must_redistribute)
@@ -141,7 +150,7 @@ class DynamicBatchSampler(Sampler):
         shape_sum = 0
         for batch_idx in range(num_batches):
             ratio = (num_batches - batch_idx) / num_batches
-            num_to_add = ratio ** self.DISTRIBUTION_BIAS
+            num_to_add = ratio ** self.distribution_bias
             shape_sum = shape_sum + num_to_add 
             redistribution_shape.append(num_to_add)
             
@@ -162,7 +171,10 @@ class DynamicBatchSampler(Sampler):
                 break
     
     def _enforce_max_frames(self):
-        """Enforce max_frames constraint by moving overflow samples to next batch."""
+        """
+        Enforce max_frames constraint by moving overflow samples to next batch.
+        It also takes the opportunity to shuffle the samples around, to avoid overfitting.
+        """
         length_map = {idx: length for idx, length in self.lengths}
         
         i = 0
@@ -174,16 +186,16 @@ class DynamicBatchSampler(Sampler):
             
             # Move samples to next batch until we're under max_frames
             while total_frames > self.max_frames and len(batch) > 1:
-                # Remove last sample
-                overflow_sample = batch.pop()
-                
-                # Add to next batch or create new batch if this is the last one
+                # Pick a random sample from the batch
+                random_sample_idx = random.randrange(len(batch))
+                # Take it out of the batch
+                overflow_sample = batch.pop(random_sample_idx)
+                # Add it to next batch (or create new batch if we're at the last one)
                 if i + 1 < len(self.batches):
-                    self.batches[i + 1].insert(0, overflow_sample)
+                    self.batches[i + 1].append(overflow_sample)
                 else:
                     self.batches.append([overflow_sample])
                 
-                # Recalculate
                 batch_lengths = [length_map[idx] for idx in batch]
                 max_len = max(batch_lengths)
                 total_frames = max_len * len(batch)
@@ -191,10 +203,14 @@ class DynamicBatchSampler(Sampler):
             i += 1
     
     def __iter__(self):
-        random.shuffle(self.batches)
-        for batch in self.batches:
-            random.shuffle(batch)
-            yield batch
+        try:
+            random.shuffle(self.batches)
+            for batch in self.batches:
+                random.shuffle(batch)
+                yield batch
+        except Exception as e:
+            print(f"\nERROR in DynamicBatchSampler.__iter__(): {e}", file=sys.stderr)
+            raise
     
     def __len__(self):
         return self.num_batches
@@ -285,41 +301,37 @@ class TextMelDataModule(LightningDataModule):
         )
 
     def train_dataloader(self):
-        if self.hparams.max_frames_per_batch:
-            batch_sampler = DynamicBatchSampler(
-                self.trainset,
-                max_frames=self.hparams.max_frames_per_batch,
-            )
-            return DataLoader(
-                dataset=self.trainset,
-                batch_sampler=batch_sampler,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-            )
-        else:
-            return DataLoader(
-                dataset=self.trainset,
-                batch_size=self.hparams.batch_size,
-                num_workers=self.hparams.num_workers,
-                pin_memory=self.hparams.pin_memory,
-                shuffle=True,
-                collate_fn=TextMelBatchCollate(self.hparams.n_spks),
-                persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-                drop_last=self.hparams.drop_last,
-            )
-
-    def val_dataloader(self):
+        batch_sampler = DynamicBatchSampler(
+            self.trainset,
+            max_frames=self.hparams.max_frames_per_batch,
+            num_redistribution_batches = 6, 
+            distribution_bias = 4,
+            jitter_factor = 0.15
+        )
         return DataLoader(
-            dataset=self.validset,
-            batch_size=self.hparams.batch_size,
+            dataset=self.trainset,
+            batch_sampler=batch_sampler,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=False,
             collate_fn=TextMelBatchCollate(self.hparams.n_spks),
             persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
-            drop_last=self.hparams.drop_last,
+        )
+
+    def val_dataloader(self):
+        batch_sampler = DynamicBatchSampler(
+            self.validset,
+            max_frames=self.hparams.max_frames_per_batch,
+            num_redistribution_batches = 0,
+            distribution_bias = 0,
+            jitter_factor = 0
+        )
+        return DataLoader(
+            dataset=self.validset,
+            batch_sampler=batch_sampler,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            collate_fn=TextMelBatchCollate(self.hparams.n_spks),
+            persistent_workers=(self.hparams.persistent_workers and self.hparams.num_workers > 0),
         )
 
     def teardown(self, stage: Optional[str] = None):
@@ -519,14 +531,15 @@ class TextMelBatchCollate:
 if __name__ == "__main__":
     """
     Computes batch statistics to assess the space wasted on padding.
-    Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> > output.csv
-    Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 > output.csv
+    Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> <batch_size> > output.csv
+    Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 32 > output.csv
     CSV output goes to file, summary goes to console.
     """
     import sys
-    if len(sys.argv) < 3:
-        print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> > output.csv")
-        print("Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 > output.csv")
+    if len(sys.argv) < 4:
+        print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> <batch_size> > output.csv")
+        print("Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 32 > output.csv")
+        print("Unit test it with: python -m pytest tests/test_dynamic_batch_sampler.py -v")
         sys.exit(1)
     
     class MockDataset:
@@ -538,23 +551,53 @@ if __name__ == "__main__":
     
     filelist_path = sys.argv[1]
     max_frames = int(sys.argv[2])
+    batch_size = int(sys.argv[3])
     mel_dir = Path(filelist_path).parent / "mels"
     
     dataset = MockDataset(filelist_path, mel_dir)
-    sampler = DynamicBatchSampler(dataset, max_frames)
+    
+    # Calculate default sampler waste (fixed batch size)
+    initial_lengths = []
+    for i in range(len(dataset)):
+        csv_row = dataset.filepaths_and_text[i]
+        rel_base_path = csv_row[0]
+        mel_path = Path(dataset.mel_dir) / (rel_base_path + ".npy")
+        arr = np.load(mel_path, mmap_mode='r')
+        initial_lengths.append((i, arr.shape[-1]))
+    
+    all_lengths = [length for _, length in initial_lengths]
+    default_total_wasted = 0
+    default_total_frames = 0
+    default_num_batches = 0
+    default_max_frames = 0
+    for i in range(0, len(all_lengths), batch_size):
+        batch_lengths = all_lengths[i:i+batch_size]
+        if batch_lengths:
+            max_len = max(batch_lengths)
+            batch_frames = max_len * len(batch_lengths)
+            default_max_frames = max(default_max_frames, batch_frames)
+            default_total_frames += batch_frames
+            default_total_wasted += batch_frames - sum(batch_lengths)
+            default_num_batches += 1
+    
+    default_sampler_waste = 100 * default_total_wasted / default_total_frames if default_total_frames > 0 else 0
+    
+    # Now test DynamicBatchSampler
+    sampler = DynamicBatchSampler(dataset, max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     
     print("batch_idx,samples,min_len,max_len,total_frames,actual_frames,padding_pct")
     
     total_wasted = 0
     total_frames = 0
     batch_count = 0
+    batch_sizes = []
     
     # Build length map from initial lengths before iterator modifies them
-    initial_lengths = sampler._get_lengths()
     length_map = {idx: length for idx, length in initial_lengths}
     
     for batch_idx, batch in enumerate(sampler):
         lengths = [length_map[idx] for idx in batch]
+        batch_sizes.append(len(batch))
         min_len = min(lengths)
         max_len = max(lengths)
         batch_total_frames = max_len * len(batch)
@@ -566,5 +609,58 @@ if __name__ == "__main__":
         batch_count += 1
         
         print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_total_frames},{batch_actual_frames},{padding_pct:.2f}")
+    
+    avg_batch_size = sum(batch_sizes) / len(batch_sizes)
+    min_batch_size = min(batch_sizes)
+    dynamic_waste = 100*total_wasted/total_frames
+    print(f"\nDynamic sampler: Num batches: {batch_count}, Avg batch size: {avg_batch_size:.1f}, Min batch size: {min_batch_size}, Padding frames: {total_wasted:,} ({dynamic_waste:.2f}%)", file=sys.stderr)
+    print(f"Default sampler: Num batches: {default_num_batches}, Max batch frames: {default_max_frames:,}, Padding frames: {default_total_wasted:,} ({default_sampler_waste:.2f}%)", file=sys.stderr)
+    
+    # Compute pairwise co-occurrence across 10 epochs to measure batch diversity
+    print(f"\nComputing batch diversity (pairwise co-occurrence) over 10 epochs...", file=sys.stderr)
+    
+    def compute_pairwise_cooccurrence(epochs_batches):
+        """Measure how often sample pairs appear together across epochs."""
+        pair_counts = {}
         
-    print(f"\nTotal samples: {len(dataset)}, Num batches: {batch_count}, Padding waste: {100*total_wasted/total_frames:.2f}%", file=sys.stderr)
+        for epoch_batches in epochs_batches:
+            for batch in epoch_batches:
+                for i in range(len(batch)):
+                    for j in range(i + 1, len(batch)):
+                        pair = tuple(sorted([batch[i], batch[j]]))
+                        pair_counts[pair] = pair_counts.get(pair, 0) + 1
+        
+        total_pairs = len(pair_counts)
+        repeated_pairs = sum(1 for count in pair_counts.values() if count > 1)
+        
+        return {
+            'repeat_rate': repeated_pairs / total_pairs if total_pairs else 0,
+            'avg_cooccurrence': sum(pair_counts.values()) / total_pairs if total_pairs else 0,
+        }
+    
+    # Test DynamicBatchSampler diversity - reuse existing sampler instance
+    dynamic_epochs = []
+    for epoch in range(10):
+        sampler.create_batches()
+        epoch_batches = [batch[:] for batch in sampler.batches]  # Copy batches
+        dynamic_epochs.append(epoch_batches)
+    
+    dynamic_stats = compute_pairwise_cooccurrence(dynamic_epochs)
+    
+    # Test default sampler diversity
+    default_epochs = []
+    for epoch in range(10):
+        indices = list(range(len(dataset)))
+        random.shuffle(indices)
+        epoch_batches = [indices[i:i+batch_size] for i in range(0, len(indices), batch_size)]
+        default_epochs.append(epoch_batches)
+    
+    default_stats = compute_pairwise_cooccurrence(default_epochs)
+    
+    print(f"\nDynamic sampler diversity:", file=sys.stderr)
+    print(f"  Pair repeat rate: {dynamic_stats['repeat_rate']*100:.2f}%", file=sys.stderr)
+    print(f"  Avg times 2 samples co-occur: {dynamic_stats['avg_cooccurrence']:.2f}", file=sys.stderr)
+    
+    print(f"\nDefault sampler diversity:", file=sys.stderr)
+    print(f"  Pair repeat rate: {default_stats['repeat_rate']*100:.2f}%", file=sys.stderr)
+    print(f"  Avg times 2 samples co-occur: {default_stats['avg_cooccurrence']:.2f}", file=sys.stderr)

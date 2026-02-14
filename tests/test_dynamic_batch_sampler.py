@@ -29,7 +29,7 @@ def dataset():
 
 def test_all_samples_covered(dataset, max_frames):
     """Each sample should appear exactly once per epoch."""
-    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     batches = list(sampler)
     all_indices = [idx for batch in batches for idx in batch]
     assert sorted(all_indices) == list(range(len(dataset)))
@@ -37,7 +37,7 @@ def test_all_samples_covered(dataset, max_frames):
 
 def test_batch_respects_max_frames(dataset, max_frames):
     """No batch should exceed max_frames constraint."""
-    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     batches = list(sampler)
     
     length_map = {idx: length for idx, length in sampler.lengths}
@@ -51,11 +51,11 @@ def test_batch_respects_max_frames(dataset, max_frames):
 def test_deterministic_with_seed(dataset, max_frames):
     """Same seed should produce same batch order."""
     random.seed(42)
-    sampler1 = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler1 = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     batches1 = list(sampler1)
     
     random.seed(42)
-    sampler2 = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler2 = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     batches2 = list(sampler2)
     
     assert batches1 == batches2
@@ -63,11 +63,128 @@ def test_deterministic_with_seed(dataset, max_frames):
 
 def test_len_returns_batch_count(dataset, max_frames):
     """__len__ should return number of batches."""
-    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     assert len(sampler) == len(list(sampler))
 
 
 def test_batches_created(dataset, max_frames):
     """Sampler should create multiple batches."""
-    sampler = DynamicBatchSampler(dataset, max_frames=max_frames)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
     assert len(sampler) > 0
+
+
+def test_zero_redistribution_batches(dataset, max_frames):
+    """With num_redistribution_batches=0, no redistribution should occur."""
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=0, distribution_bias=0, jitter_factor=0)
+    assert sampler.redistribution_spread == 0
+    batches = list(sampler)
+    all_indices = [idx for batch in batches for idx in batch]
+    assert sorted(all_indices) == list(range(len(dataset)))
+
+
+def test_zero_jitter_factor(dataset, max_frames):
+    """With jitter_factor=0, batches should be strictly sorted by length."""
+    random.seed(42)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=0, distribution_bias=0, jitter_factor=0)
+    sampler.create_batches()
+    
+    length_map = {idx: length for idx, length in sampler.lengths}
+    # Check first batch has shortest samples (before shuffling in __iter__)
+    first_batch = sampler.batches[0]
+    first_batch_lengths = [length_map[idx] for idx in first_batch]
+    
+    # All samples in first batch should be shorter than samples in last batch
+    last_batch = sampler.batches[-1]
+    last_batch_lengths = [length_map[idx] for idx in last_batch]
+    
+    assert max(first_batch_lengths) <= max(last_batch_lengths)
+
+
+def test_different_distribution_bias(dataset, max_frames):
+    """Different distribution_bias values should affect redistribution."""
+    random.seed(42)
+    sampler1 = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=2, jitter_factor=0.15)
+    
+    random.seed(42)
+    sampler2 = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=8, jitter_factor=0.15)
+    
+    # Both should cover all samples
+    batches1 = list(sampler1)
+    batches2 = list(sampler2)
+    all_indices1 = sorted([idx for batch in batches1 for idx in batch])
+    all_indices2 = sorted([idx for batch in batches2 for idx in batch])
+    assert all_indices1 == all_indices2 == list(range(len(dataset)))
+
+
+def test_jitter_creates_variety_across_epochs(dataset, max_frames):
+    """Jitter should create different batch compositions across epochs."""
+    random.seed(42)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=0, distribution_bias=0, jitter_factor=0.15)
+    
+    sampler.create_batches()
+    epoch1_batches = [batch[:] for batch in sampler.batches]
+    
+    sampler.create_batches()
+    epoch2_batches = [batch[:] for batch in sampler.batches]
+    
+    # Batches should be different due to jitter
+    assert epoch1_batches != epoch2_batches
+    
+    # But all samples should still be covered
+    epoch1_indices = sorted([idx for batch in epoch1_batches for idx in batch])
+    epoch2_indices = sorted([idx for batch in epoch2_batches for idx in batch])
+    assert epoch1_indices == epoch2_indices == list(range(len(dataset)))
+
+
+def test_iter_shuffles_batches(dataset, max_frames):
+    """__iter__ should shuffle batch order and samples within batches."""
+    random.seed(42)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
+    
+    original_batches = [batch[:] for batch in sampler.batches]
+    
+    random.seed(42)
+    iterated_batches = list(sampler)
+    
+    all_original = sorted([idx for batch in original_batches for idx in batch])
+    all_iterated = sorted([idx for batch in iterated_batches for idx in batch])
+    assert all_original == all_iterated == list(range(len(dataset)))
+
+
+def test_enforce_max_frames_moves_overflow(dataset, max_frames):
+    """_enforce_max_frames should move overflow samples to next batch."""
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
+    
+    length_map = {idx: length for idx, length in sampler.lengths}
+    
+    for batch in sampler.batches:
+        batch_lengths = [length_map[idx] for idx in batch]
+        max_len = max(batch_lengths)
+        total_frames = max_len * len(batch)
+        assert total_frames <= max_frames, f"Batch exceeds max_frames: {total_frames} > {max_frames}"
+
+
+def test_redistribution_spreads_short_samples(dataset, max_frames):
+    """Redistribution should spread short samples across multiple batches."""
+    random.seed(42)
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0)
+    
+    shortest_indices = [idx for idx, _ in sampler.lengths[:50]]
+    
+    first_batch_short_count = sum(1 for idx in sampler.batches[0] if idx in shortest_indices)
+    assert first_batch_short_count < len(shortest_indices), "All short samples still in first batch"
+
+
+def test_create_batches_is_idempotent_with_same_seed(dataset, max_frames):
+    """Calling create_batches with same seed should produce same result."""
+    sampler = DynamicBatchSampler(dataset, max_frames=max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
+    
+    random.seed(100)
+    sampler.create_batches()
+    batches1 = [batch[:] for batch in sampler.batches]
+    
+    random.seed(100)
+    sampler.create_batches()
+    batches2 = [batch[:] for batch in sampler.batches]
+    
+    assert batches1 == batches2
