@@ -16,6 +16,10 @@ from matcha.utils.model import fix_len_compatibility, normalize
 from matcha.utils.utils import intersperse
 from math import ceil
 
+NUM_REDISTRIBUTION_BATCHES = 8
+DISTRIBUTION_BIAS = 4
+JITTER_FACTOR = 0.15
+
 def parse_filelist(filelist_path, split_char="|"):
     with open(filelist_path, encoding="utf-8") as f:
         filepaths_and_text = [line.strip().split(split_char) for line in f]
@@ -180,24 +184,23 @@ class DynamicBatchSampler(Sampler):
         i = 0
         while i < len(self.batches):
             batch = self.batches[i]
-            batch_lengths = [length_map[idx] for idx in batch]
-            max_len = max(batch_lengths)
+            sample_lengths = [length_map[idx] for idx in batch]
+            max_len = max(sample_lengths)
             total_frames = max_len * len(batch)
             
             # Move samples to next batch until we're under max_frames
             while total_frames > self.max_frames and len(batch) > 1:
-                # Pick a random sample from the batch
-                random_sample_idx = random.randrange(len(batch))
-                # Take it out of the batch
-                overflow_sample = batch.pop(random_sample_idx)
-                # Add it to next batch (or create new batch if we're at the last one)
+                # Find the largest sample and take it out of the batch
+                largest_sample_idx = sample_lengths.index(max_len)
+                largest_sample = batch.pop(largest_sample_idx)
+                sample_lengths.pop(largest_sample_idx)
+                # Move it to next batch (or create new batch if we're at the last one)
                 if i + 1 < len(self.batches):
-                    self.batches[i + 1].append(overflow_sample)
+                    self.batches[i + 1].append(largest_sample)
                 else:
-                    self.batches.append([overflow_sample])
+                    self.batches.append([largest_sample])
                 
-                batch_lengths = [length_map[idx] for idx in batch]
-                max_len = max(batch_lengths)
+                max_len = max(sample_lengths)
                 total_frames = max_len * len(batch)
             
             i += 1
@@ -304,9 +307,9 @@ class TextMelDataModule(LightningDataModule):
         batch_sampler = DynamicBatchSampler(
             self.trainset,
             max_frames=self.hparams.max_frames_per_batch,
-            num_redistribution_batches = 6, 
-            distribution_bias = 4,
-            jitter_factor = 0.15
+            num_redistribution_batches=NUM_REDISTRIBUTION_BATCHES,
+            distribution_bias=DISTRIBUTION_BIAS,
+            jitter_factor=JITTER_FACTOR
         )
         return DataLoader(
             dataset=self.trainset,
@@ -583,7 +586,12 @@ if __name__ == "__main__":
     default_sampler_waste = 100 * default_total_wasted / default_total_frames if default_total_frames > 0 else 0
     
     # Now test DynamicBatchSampler
-    sampler = DynamicBatchSampler(dataset, max_frames, num_redistribution_batches=6, distribution_bias=4, jitter_factor=0.15)
+    sampler = DynamicBatchSampler(
+        dataset, 
+        max_frames=max_frames, 
+        num_redistribution_batches=NUM_REDISTRIBUTION_BATCHES, 
+        distribution_bias=DISTRIBUTION_BIAS, 
+        jitter_factor=JITTER_FACTOR)
     
     print("batch_idx,samples,min_len,max_len,total_frames,actual_frames,padding_pct")
     
