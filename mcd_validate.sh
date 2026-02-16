@@ -1,0 +1,1 @@
+python -m matcha.utils.compute_mcd ./mcd_validation
