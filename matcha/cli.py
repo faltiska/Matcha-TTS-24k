@@ -1,9 +1,6 @@
 import argparse
 import datetime as dt
-import io
 import os
-import subprocess
-import time
 import warnings
 from pathlib import Path
 import numpy as np
@@ -59,23 +56,9 @@ def assert_required_models_available(args):
 def save_to_folder(filename: str, waveform: dict, folder: str, sample_rate: int = 22050):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
-    
-    # Convert to MP3
-    wav_buffer = io.BytesIO()
-    sf.write(wav_buffer, waveform, sample_rate, format="WAV", subtype="PCM_16")
-    wav_buffer.seek(0)
-    
-    process = subprocess.Popen(
-        ["ffmpeg", "-i", "pipe:0", "-f", "mp3", "-ab", "192k", "pipe:1"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL
-    )
-    mp3_data, _ = process.communicate(input=wav_buffer.read())
-    
-    mp3_path = folder / f"{filename}.mp3"
-    mp3_path.write_bytes(mp3_data)
-    return mp3_path
+    wav_path = folder / f"{filename}.wav"
+    sf.write(wav_path, waveform, sample_rate, format="WAV", subtype="PCM_16")
+    return wav_path
 
 
 def validate_args(args):
@@ -197,7 +180,7 @@ def cli():
     parser.add_argument(
         "--temperature",
         type=float,
-        default=0.8,
+        default=0.6,
         help="Variance of the x0 noise (default: 0.8)",
     )
     parser.add_argument(
@@ -206,7 +189,7 @@ def cli():
         default=None,
         help="change the speaking rate, a higher value means slower speaking rate (default: 1.0)",
     )
-    parser.add_argument("--steps", type=int, default=15, help="Number of ODE steps  (default: 20)")
+    parser.add_argument("--steps", type=int, default=20, help="Number of ODE steps  (default: 20)")
     parser.add_argument("--cpu", action="store_true", help="Use CPU for inference (default: use GPU if available)")
     parser.add_argument(
         "--denoiser_strength",
