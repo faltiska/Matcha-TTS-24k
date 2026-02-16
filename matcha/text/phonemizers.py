@@ -45,6 +45,32 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # Search for $dot here: https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/en_list
 # Happens in other languages too, https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/es_list, 
 # https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
+
+def cleanup_text(text):
+    text = re.sub('[\"„“”«»]', '', text)
+    text = re.sub(r'\s*[<>()[\]{}]\s*', ', ', text)
+    text = re.sub(r',\s*,', ',', text)
+    text = re.sub(r',\s*([.?!])', r'\1', text)
+
+    text = text.rstrip()
+    if not text.endswith(('.', '?', '!')):
+        text = text + '.'
+
+    return text
+
+
+def normalize_text(lang_code, text):
+    if lang_code in normalizers:
+        normalizer = normalizers[lang_code]
+        # Nemo handles the smart left single quotes incorrectly, as if it was the standard single quotes
+        # The smart right single quote is frequently used as a single quote, so I just need to remove the left one.
+        # The right one is correctly handled by eSpeak.
+        # E.g. "don’t" instead of "don't".
+        text = re.sub('‘', '', text)
+        text = normalizer.normalize(text)
+    return text
+
+
 def multilingual_phonemizer(text, language):
     phonemizer = phonemizers[language]
     if not phonemizer:
@@ -55,20 +81,20 @@ def multilingual_phonemizer(text, language):
     # supported by Nemo, it will probably not do anything, as it's already normalized, which for 
     # those not supported, eSpeak will take care of it.
     lang_code = language.split('-')[0]  # en-us -> en, fr-fr -> fr
-    if lang_code in normalizers:
-        normalizer = normalizers[lang_code]
-        text = normalizer.normalize(text)
+    text = normalize_text(lang_code, text)
 
-    text = text.rstrip()
-    if not text.endswith(('.', '?', '!')):
-        text = text + '.'
-    
+    text = cleanup_text(text)
+
     phonemes = phonemizer.phonemize([text])[0]
 
     return phonemes
 
 
 if __name__ == "__main__":
+    """
+    Run me with:
+     python -m matcha.text.phonemizers
+    """
     from time import time
     
     test_cases = [
@@ -82,6 +108,8 @@ if __name__ == "__main__":
             "Word   ",
             "Word\n\n",
             "Word\t",
+            'He said “hello” to me and I\'ve said hello ‘back’.',
+            "The value is <10> or (20) or [30] or {40}.",
         ]),
         ('es', [
             "El Dr. García llegará a las 15:00.",
@@ -92,6 +120,7 @@ if __name__ == "__main__":
             "Le Dr. Dupont vous verra à 15h00.",
             "Le prix est de 5,00€ au 21 janvier 2026.",
             "La température est de -5°C ou 23°F.",
+            "Elle a dit «bonjour» à lui.",
         ]),
         ('de', [
             "Dr. Müller sieht Sie um 15:00 Uhr.",
@@ -130,12 +159,15 @@ if __name__ == "__main__":
 
             if lang in normalizers:
                 start = time()
-                normalized = normalizers[lang].normalize(text)
+                normalized = normalize_text(lang, text)
                 ms = int((time() - start) * 1000)
                 print(f"Normalized: <{normalized}> ({ms} ms)")
             else:
                 normalized = text
                 print(f"Nemo normalization not available for {lang=}")
+            
+            cleaned = cleanup_text(normalized)
+            print(f"Cleaned:    <{cleaned}>")
             
             start = time()
             phonemes = multilingual_phonemizer(text, lang_key)
