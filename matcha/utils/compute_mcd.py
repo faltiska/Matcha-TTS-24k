@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pyworld")
+
 import argparse
 from pathlib import Path
 import tempfile
@@ -14,6 +17,14 @@ Original files: original_utterance_*_speaker_*.wav
 
 Script mcd_generate.sh generates speech using phrases from the validation set.
 Script mcd_validate.sh runs this python file to compare them against the originals.
+
+Interpretation:
+  < 5.0 dB  = Excellent (very close to original)
+  5-7 dB    = Good (noticeable but acceptable)
+  7-10 dB   = Fair (clear acoustic differences)
+  > 10 dB   = Poor (significant timbre/quality issues)
+
+Lower MCD = better acoustic match to ground truth.
 """
 
 def trim_silence(audio: torch.Tensor, sr: int, threshold_db: float = -60.0) -> torch.Tensor:
@@ -79,9 +90,6 @@ def main():
     
     mcd_toolbox = Calculate_MCD(MCD_mode="dtw")
     
-    print(f"\nComparing {len(gen_files)} generated/original wav pairs (silence-trimmed)\n")
-    print("=" * 70)
-    
     results = []
     
     for gen_file in gen_files:
@@ -99,21 +107,12 @@ def main():
         results.append((gen_file.stem, mcd_value))
         print(f"{gen_file.stem:40s} MCD: {mcd_value:6.2f} dB")
     
-    print("=" * 70)
+    print("-" * 70)
     if results:
         avg_mcd = sum(r[1] for r in results) / len(results)
         print(f"{'Average':40s} MCD: {avg_mcd:6.2f} dB\n")
     else:
         print("\nNo matching pairs found\n")
     
-    if results:
-        print("Interpretation:")
-        print("  < 5.0 dB  = Excellent (very close to original)")
-        print("  5-7 dB    = Good (noticeable but acceptable)")
-        print("  7-10 dB   = Fair (clear acoustic differences)")
-        print("  > 10 dB   = Poor (significant timbre/quality issues)")
-        print("\nLower MCD = better acoustic match to ground truth")
-
-
 if __name__ == "__main__":
     main()
