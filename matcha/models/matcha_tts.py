@@ -159,7 +159,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         #  w = torch.exp(logw) * x_mask
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-        # I think torch.ceil() that was rounding up each phoneme duration.
+        # I think torch.ceil() that was rounding up each phoneme duration,
         # causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
         w = torch.exp(logw) * x_mask * length_scale
