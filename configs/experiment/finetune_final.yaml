@@ -1,0 +1,39 @@
+# @package _global_
+# That tells a Hydra to merge the values in this file at the root level of the config tree
+# Without it: Values would be nested under experiment.finetune_final.optimizer.lr
+
+# Final fine-tuning stage overrides
+# Use with: python -m matcha.train experiment=finetune_final
+
+defaults:
+  - override /model/encoder: default
+  - override /model/decoder: default
+  - override /model/optimizer: adamw
+
+# Lower learning rate, no weight decay, no dropout
+model:
+  optimizer:
+    lr: 1e-5
+    weight_decay: 0
+  encoder:
+    encoder_params:
+      p_dropout: 0
+    duration_predictor_params:
+      p_dropout: 0
+  decoder:
+    dropout: 0
+
+# Training duration for fine-tuning
+trainer:
+  max_epochs: 679
+  check_val_every_n_epoch: 1
+
+# Resume from checkpoint
+ckpt_path: logs/train/corpus-small-24k/runs/2026-02-16_11-22-14/checkpoints/saved/checkpoint_epoch=579.ckpt
+
+# Checkpoint every epoch
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 1
+    save_top_k: 20
+  
