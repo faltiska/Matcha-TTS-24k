@@ -66,6 +66,8 @@ if __name__ == "__main__":
     vocoder = load_model()
     mcd_toolbox = Calculate_MCD(MCD_mode="dtw")
     results = []
+    out_dir = Path("vocos_test_output")
+    out_dir.mkdir(exist_ok=True)
     
     for spk, audio_rel_path in samples:
         wav_path = Path("data/corpus-small-24k/wav") / f"{audio_rel_path}.wav"
@@ -79,13 +81,12 @@ if __name__ == "__main__":
         with torch.no_grad():
             y_hat = vocoder(mel).squeeze()
         
-        gen_path = Path(f"vocos_gen.wav")
+        gen_path = out_dir / f"spk{spk}_{wav_path.stem}_vocos.wav"
         ta.save(str(gen_path), torch.clamp(y_hat, -1.0, 1.0).cpu().unsqueeze(0), sample_rate)
         
         mcd_value = mcd_toolbox.calculate_mcd(str(gen_path), str(wav_path))
         results.append(mcd_value)
         print(f"Speaker {spk} {wav_path.name:30s} MCD: {mcd_value:6.2f} dB")
-        gen_path.unlink()
     
     print("-" * 70)
     if results:
