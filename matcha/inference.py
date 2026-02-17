@@ -2,7 +2,7 @@ import torch
 from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, to_phoneme_ids, to_phonemes
 from matcha.utils.utils import intersperse
-from matcha.vocos24k.wrapper import load_model as load_vocos
+from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 
 
 def process_text(i: int, text: str, language: str, device: torch.device):

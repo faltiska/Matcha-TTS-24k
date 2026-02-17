@@ -75,8 +75,8 @@ which will output a file called vocoder-test.wav in the project root.
 
 For a 24KHz corpus, and Vocos:
 ```
-python -m matcha.vocos24k.wrapper --wav input.wav --data-config  configs/data/corpus-small-24k.yaml
-python -m matcha.vocos24k.wrapper --mel input.mel --data-config  configs/data/corpus-small-24k.yaml
+python -m matcha.vocos24k.vocos_wrapper --wav input.wav --data-config  configs/data/corpus-small-24k.yaml
+python -m matcha.vocos24k.vocos_wrapper --mel input.mel --data-config  configs/data/corpus-small-24k.yaml
 ```
 which will output a file called vocoder-test24k.wav
 

@@ -49,5 +49,5 @@ The key insight: The encoder provides the "what and when" (phonetic content + ti
 - **Alignment**: `matcha/models/matcha_tts.py` and `matcha/utils/monotonic_align/`
 - **Main Model**: `matcha/models/matcha_tts.py`
 - **HiFiGAN Vocoder**: `matcha/hifigan/models.py`
-- **Vocos Vocoder**: `matcha/vocos24k/wrapper.py`
+- **Vocos Vocoder**: `matcha/vocos24k/vocos_wrapper.py`
 - **CLI Interface**: `matcha/cli.py`
