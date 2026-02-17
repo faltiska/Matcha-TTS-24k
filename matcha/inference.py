@@ -3,6 +3,7 @@ from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, to_phoneme_ids, to_phonemes
 from matcha.utils.utils import intersperse
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
+from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 
 
 def process_text(i: int, text: str, language: str, device: torch.device):
@@ -25,6 +26,9 @@ def load_vocoder(vocoder_name, checkpoint_path, device):
     print(f"[!] Loading {vocoder_name}!")
     if vocoder_name == "vocos":
         vocoder = load_vocos(device)
+        denoiser = None
+    elif vocoder_name == "bigvgan":
+        vocoder = load_bigvgan(device)
         denoiser = None
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented!")

@@ -22,6 +22,7 @@ MATCHA_URLS = {
 
 VOCODER_URLS = {
     "vocos": "https://huggingface.co/charactr/vocos-mel-24khz",
+    "bigvgan": "https://huggingface.co/nvidia/bigvgan_v2_24khz_100band_256x",
 }
 
 MULTISPEAKER_MODEL = {
