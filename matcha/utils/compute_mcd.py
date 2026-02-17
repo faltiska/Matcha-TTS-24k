@@ -83,23 +83,24 @@ def main():
     
     folder = Path(args.folder)
     
-    gen_files = sorted(folder.glob("utterance_*_speaker_*.wav"))
-    if not gen_files:
-        print(f"Error: No utterance_*_speaker_*.wav files found in {folder}")
+    orig_files = sorted(folder.glob("original_*.wav"))
+    if not orig_files:
+        print(f"Error: No original_*.wav files found in {folder}")
         return
     
     mcd_toolbox = Calculate_MCD(MCD_mode="dtw")
     
     results = []
     
-    for gen_file in gen_files:
-        orig_file = folder / f"original_{gen_file.name}"
+    for orig_file in orig_files:
+        gen_filename = orig_file.name.replace("original_", "", 1)
+        gen_file = folder / gen_filename
         
-        if not orig_file.exists():
-            print(f"{gen_file.name:40s} -> SKIPPED (no matching original)")
+        if not gen_file.exists():
+            print(f"{orig_file.name:40s} -> SKIPPED (no matching generated file)")
             continue
         
-        # Trim silence from both files in place
+        # Trim silence from both files, in place
         trim_audio_file(gen_file, gen_file)
         trim_audio_file(orig_file, orig_file)
         
