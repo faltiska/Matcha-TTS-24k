@@ -1,8 +1,11 @@
 _target_: torch.optim.AdamW
 _partial_: true
 
+# I can train pretty much all the way to the end using 1e-4
 lr: 1e-4
 
-weight_decay: 1e-4
-betas: [0.9, 0.98]
+# Original code was using Adam without decay, but I think I need 5e-3 to fight overfitting.
+weight_decay: 1e-3
+
+betas: [0.9, 0.99]
 eps: 1e-8
