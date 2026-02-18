@@ -57,19 +57,20 @@ hann_window_cache = {}
 
 
 def mel_spectrogram(
-        y: torch.Tensor,
-        n_fft: int,
-        num_mels: int,
-        sampling_rate: int,
-        hop_size: int,
-        win_size: int,
-        fmin: int,
-        fmax: int = None,
-        center: bool = False,
+    y: torch.Tensor,
+    n_fft: int,
+    num_mels: int,
+    sampling_rate: int,
+    hop_size: int,
+    win_size: int,
+    fmin: int,
+    fmax: int = None,
+    center: bool = False,
 ) -> torch.Tensor:
     """
     Calculate the mel spectrogram of an input signal.
     This function uses slaney norm for the librosa mel filterbank (using librosa.filters.mel) and uses Hann window for STFT (using torch.stft).
+
     Args:
         y (torch.Tensor): Input signal.
         n_fft (int): FFT size.
@@ -80,6 +81,7 @@ def mel_spectrogram(
         fmin (int): Minimum frequency for mel filterbank.
         fmax (int): Maximum frequency for mel filterbank. If None, defaults to half the sampling rate (fmax = sr / 2.0) inside librosa_mel_fn
         center (bool): Whether to pad the input to center the frames. Default is False.
+
     Returns:
         torch.Tensor: Mel spectrogram.
     """
@@ -129,9 +131,11 @@ def mel_spectrogram(
 def get_mel_spectrogram(wav, h):
     """
     Generate mel spectrogram from a waveform using given hyperparameters.
+
     Args:
         wav (torch.Tensor): Input waveform.
         h: Hyperparameters object with attributes n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax.
+
     Returns:
         torch.Tensor: Mel spectrogram.
     """
@@ -185,25 +189,25 @@ def get_dataset_filelist(a):
 
 class MelDataset(torch.utils.data.Dataset):
     def __init__(
-            self,
-            training_files,
-            hparams,
-            segment_size,
-            n_fft,
-            num_mels,
-            hop_size,
-            win_size,
-            sampling_rate,
-            fmin,
-            fmax,
-            split=True,
-            shuffle=True,
-            n_cache_reuse=1,
-            device=None,
-            fmax_loss=None,
-            fine_tuning=False,
-            base_mels_path=None,
-            is_seen=True,
+        self,
+        training_files,
+        hparams,
+        segment_size,
+        n_fft,
+        num_mels,
+        hop_size,
+        win_size,
+        sampling_rate,
+        fmin,
+        fmax,
+        split=True,
+        shuffle=True,
+        n_cache_reuse=1,
+        device=None,
+        fmax_loss=None,
+        fine_tuning=False,
+        base_mels_path=None,
+        is_seen=True,
     ):
         self.audio_files = training_files
         random.seed(1234)
@@ -297,7 +301,7 @@ class MelDataset(torch.utils.data.Dataset):
                     center=False,
                 )
                 assert (
-                        audio.shape[1] == mel.shape[2] * self.hop_size
+                    audio.shape[1] == mel.shape[2] * self.hop_size
                 ), f"audio shape {audio.shape} mel shape {mel.shape}"
 
         else:
@@ -305,7 +309,7 @@ class MelDataset(torch.utils.data.Dataset):
                 os.path.join(
                     self.base_mels_path,
                     os.path.splitext(os.path.split(filename)[-1])[0] + ".npy",
-                    )
+                )
             )
             mel = torch.from_numpy(mel)
 
@@ -322,7 +326,7 @@ class MelDataset(torch.utils.data.Dataset):
                         :,
                         mel_start
                         * self.hop_size : (mel_start + frames_per_seg)
-                                          * self.hop_size,
+                        * self.hop_size,
                     ]
                 else:
                     mel = torch.nn.functional.pad(
@@ -348,4 +352,3 @@ class MelDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.audio_files)
-
