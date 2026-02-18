@@ -108,4 +108,13 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 Remove app.py
 Do I have to return so much data from inference?
 Use a LR scheduler
+Improve DynamicBatchSampler fix for adding more batches if needed 
 Use OGG or AAC compression instead of mp3
+Train with bigvgan mels (or Try to convert Vocos mels to bigvgan mels)
+See how bigvgan generates mels, maybe we want to do the same
+Take 579 and run a traininig with just Brian speaker embeddings enabled
+
+Ideas from BigVGAN v2:
+Use a MAX_WAV_VALUE = 32767 instead of 32768 when computing mels (prevents int16 overflow)
+Trim audio to multiple of hop lengths before converting to mel (figure out what is the benefit)
+Verify if vocos was trained with a clip_val of 1e-7 (BigVGAN uses 1e-5)
