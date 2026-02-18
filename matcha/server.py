@@ -20,7 +20,7 @@ import lameenc
 
 from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, OUTPUT_SAMPLE_RATE, VOCODER_SAMPLE_RATE, VOCODER_HOP_LENGTH, ODE_SOLVER
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-18_08-52-48/checkpoints/saved/checkpoint_epoch=124.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -136,7 +136,6 @@ def synthesize(request: InferenceRequest):
         text_processed["x"],
         text_processed["x_lengths"],
         n_timesteps=request.steps,
-        temperature=0.4,
         spks=spk,
         voice_mix=voice_mix,
         length_scale=length_scale,

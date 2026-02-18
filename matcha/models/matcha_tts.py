@@ -104,7 +104,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         return mixed_emb
 
     @torch.inference_mode()
-    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=0, voice_mix=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -141,6 +141,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 # Real-time factor
             }
         """
+
+        # Set seed for reproducible synthesis; without this, the voice sounds different with each synthesis call 
+        # but not in a good way, even the timbre will be different, as if it's a different person.
+        torch.cuda.manual_seed(42)
+        
         # For RTF computation
         t = dt.datetime.now()
 
@@ -178,7 +183,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         encoder_outputs = mu_y[:, :, :y_max_length]
 
         # Generate sample tracing the probability flow
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, temperature, spks)
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         t = (dt.datetime.now() - t).total_seconds()

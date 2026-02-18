@@ -32,7 +32,7 @@ class BASECFM(torch.nn.Module, ABC):
         self.estimator = None
 
     @torch.inference_mode()
-    def forward(self, mu, mask, n_timesteps, temperature=1.0, spks=None):
+    def forward(self, mu, mask, n_timesteps, spks=None):
         """Forward diffusion
 
         Args:
@@ -41,7 +41,6 @@ class BASECFM(torch.nn.Module, ABC):
             mask (torch.Tensor): Binary mask indicating valid mel frames (1) vs padding (0).
                 shape: (batch_size, 1, mel_timesteps)
             n_timesteps (int): number of diffusion steps
-            temperature (float, optional): temperature for scaling noise. Defaults to 1.0.
             spks (torch.Tensor, optional): speaker ids. Defaults to None.
                 shape: (batch_size, spk_emb_dim)
 
@@ -49,7 +48,7 @@ class BASECFM(torch.nn.Module, ABC):
             sample: generated mel-spectrogram
                 shape: (batch_size, n_feats, mel_timesteps)
         """
-        z = torch.randn_like(mu) * temperature
+        z = torch.randn_like(mu)
         t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
         return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks)
 
