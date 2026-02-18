@@ -108,4 +108,4 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 Remove app.py
 Do I have to return so much data from inference?
 Use a LR scheduler
-
+Use OGG or AAC compression instead of mp3
