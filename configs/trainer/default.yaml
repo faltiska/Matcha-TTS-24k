@@ -15,10 +15,7 @@ log_every_n_steps: 10
 # Changed from 16-mixed
 precision: bf16-mixed
 
-# There's a bug in Lightning and, if you add more data to the corpus, 
-# then resume from a checkpoint, it will not run validation at exactly 10 epochs, or at all.
-check_val_every_n_epoch: 10
-val_check_interval: "00:00:20:00"
+check_val_every_n_epoch: 5
 
 # Protects against spikes in learning. Keeps the model weights from jumping too wildly.
 gradient_clip_val: 4

@@ -1,19 +1,26 @@
 # Decoder capacity increased to make room for the increased frequency range (I am running with 
 # a Vocoder trained on 24KHz audio, 100 bins, and 12KHz f_max): 
-#  channels 256 → 320
-#  attention_head_dim 64 → 80
-#  n_blocks: 1 → 2  This makes inference slightly slower
-#  num_heads: 2 → 4
-# Decoder model size 26.1M params
+# Decoder model size 23.4M params
 
-# I must have attention_head_dim * num_heads == channels so the attention will cover all channels.   
-channels: [320, 320]
-dropout: 0.1  
+# Changed from [256, 256]
+# I must have attention_head_dim * num_heads == channels so the attention will cover all channels.
+channels: [320, 320, 320]
 
-attention_head_dim: 80
+# This model does not show a lot of overfitting, so I can use the original value of 0.05.
+dropout: 0.05
+
+# It is best to keep this as a power of 2 for performance
+# I also tried with attention_head_dim = 80 and num_heads = 4 
+attention_head_dim: 64
+
+# Increased from 1, to capture more acoustic details.
+# This makes training and inference slower.
 n_blocks: 2
+
 num_mid_blocks: 2
-num_heads: 4
+
+# Changed from 2
+num_heads: 5
 
 # Snake β activation (implemented in matcha/models/components/transformer.py)
 act_fn: snakebeta 
