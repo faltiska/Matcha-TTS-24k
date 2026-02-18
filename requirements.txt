@@ -49,5 +49,6 @@ seaborn
 vocos
 bigvgan
 parse
+pymcd
 
 nemo_text_processing  # nvidia nemo text normalization
