@@ -95,7 +95,11 @@ class BaseLightningClass(LightningModule, ABC):
     def on_train_epoch_start(self):
         sampler = self.trainer.train_dataloader.batch_sampler
         if hasattr(sampler, 'create_batches'):
-            sampler.create_batches()
+            old_len = len(sampler)
+            sampler.create_batches(old_len)
+            new_len = len(sampler)
+            if old_len != new_len:
+                log.error(f"Batch count changed from {old_len} to {new_len} at epoch {self.current_epoch}, this will cause Lightning to stop running validation.")
 
     def training_step(self, batch: Any, batch_idx: int):
         # avoids repeated recompilation of the model caused by changing parameter sizes.

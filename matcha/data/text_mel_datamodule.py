@@ -62,7 +62,7 @@ class DynamicBatchSampler(Sampler):
         self.redistribution_spread = 0
         self.create_batches()
         if self.num_redistribution_batches > 0:
-            print(f"DynamicBatchSampler: First {self.num_redistribution_batches} batches were redistributed to the next {self.redistribution_spread} batches.", file=sys.stderr)
+            print(f"DynamicBatchSampler: {self.num_batches} batches. First {self.num_redistribution_batches} batches were redistributed to the next {self.redistribution_spread}.", file=sys.stderr)
 
     def _get_lengths(self):
         """
@@ -102,7 +102,7 @@ class DynamicBatchSampler(Sampler):
         
         return sorted_lengths
     
-    def create_batches(self):
+    def create_batches(self, required_num_batches=None):
         """Group samples into dynamic batches from provided lengths list."""
         sorted_lengths = self._jittered_sort(self.lengths)
         
@@ -130,6 +130,15 @@ class DynamicBatchSampler(Sampler):
         
         self._enforce_max_frames()
         self.num_batches = len(self.batches)
+
+        # Split batches if we need more
+        if required_num_batches:
+            while self.num_batches < required_num_batches:
+                batch = self.batches[-1]
+                mid = len(batch) // 2
+                self.batches[-1] = batch[:mid]
+                self.batches.append(batch[mid:])
+                self.num_batches = self.num_batches + 1
 
     def _redistribute_short_samples(self):
         # Skip if not enough batches
