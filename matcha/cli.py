@@ -12,7 +12,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, OUTPUT_SAMPLE_RATE, VOCODER_SAMPLE_RATE, VOCODER_HOP_LENGTH, ODE_SOLVER
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir
 
 MATCHA_URLS = {
@@ -175,7 +175,7 @@ def cli():
     parser.add_argument(
         "--solver",
         type=str,
-        default="midpoint",
+        default=ODE_SOLVER,
         help="ODE solver to use (default: midpoint)",
     )
     parser.add_argument(
@@ -221,9 +221,9 @@ def cli():
     
     # Set audio params if not present (for old checkpoints)
     if not hasattr(model, "sample_rate"):
-        model.sample_rate = 24000
+        model.sample_rate = VOCODER_SAMPLE_RATE
     if not hasattr(model, "hop_length"):
-        model.hop_length = 256
+        model.hop_length = VOCODER_HOP_LENGTH
     
     vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
 
@@ -259,14 +259,15 @@ def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
             length_scale=args.speaking_rate,
         )
         waveform = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        waveform = post_process(waveform, orig_freq=sample_rate)
         # RTF with vocoder
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * sample_rate / (waveform.shape[-1])
+        rtf_w = t * OUTPUT_SAMPLE_RATE / (waveform.shape[-1])
         print(f"[🍵-{i}] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, sample_rate)
+        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, OUTPUT_SAMPLE_RATE)
         print(f"[+] Waveform saved: {location}")
 
     print("".join(["="] * 100))

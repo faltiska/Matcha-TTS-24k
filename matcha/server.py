@@ -18,7 +18,7 @@ import soundfile as sf
 import numpy as np
 import lameenc
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, OUTPUT_SAMPLE_RATE, VOCODER_SAMPLE_RATE, VOCODER_HOP_LENGTH, ODE_SOLVER
 
 CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
@@ -84,12 +84,12 @@ def load_models():
     global model, vocoder, denoiser
     print(f"[🍵] Loading model from {CHECKPOINT_PATH}")
     model = load_matcha("custom_model", CHECKPOINT_PATH, DEVICE)
-    model.decoder.solver = "midpoint"
+    model.decoder.solver = ODE_SOLVER
 
     if not hasattr(model, "sample_rate"):
-        model.sample_rate = 24000
+        model.sample_rate = VOCODER_SAMPLE_RATE
     if not hasattr(model, "hop_length"):
-        model.hop_length = 256
+        model.hop_length = VOCODER_HOP_LENGTH
 
     vocoder_path = Path.home() / ".local/share/matcha_tts/vocos"
     vocoder, denoiser = load_vocoder("vocos", vocoder_path, DEVICE)
@@ -143,13 +143,14 @@ def synthesize(request: InferenceRequest):
     )
         
     waveform = to_waveform(output["mel"], vocoder)
+    sample_rate = getattr(model, "sample_rate")
+    waveform = post_process(waveform, orig_freq=sample_rate)
     
     t = (dt.datetime.now() - start_t).total_seconds()
-    sample_rate = getattr(model, "sample_rate")
-    rtf = t * sample_rate / waveform.shape[-1]
+    rtf = t * OUTPUT_SAMPLE_RATE / waveform.shape[-1]
     print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf:.4f}")
 
-    mp3_data = convert_to_mp3(waveform.cpu().numpy(), sample_rate)
+    mp3_data = convert_to_mp3(waveform.cpu().numpy(), OUTPUT_SAMPLE_RATE)
     return Response(content=mp3_data, media_type="audio/mpeg")
 
 
