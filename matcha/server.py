@@ -16,10 +16,11 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 import soundfile as sf
 import numpy as np
+import lameenc
 
 from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/best_result/checkpoints/saved/checkpoint_epoch=409.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -47,7 +48,7 @@ class InferenceRequest(BaseModel):
     voice: int | str = 0  # Voice ID or Voice Mix in the form of "2(20)+5(80)" meaning 20% of voice 2 mixed with 80% of voice 5 
     response_format: str = "mp3"
     speed: float = 1.0
-    steps: int = 20
+    steps: int = 15
 
 
 def parse_voice_mix(voice_str: str):
@@ -58,18 +59,25 @@ def parse_voice_mix(voice_str: str):
     return voice1[0], voice1[1] / 100, voice2[0], voice2[1] / 100
 
 def convert_to_mp3(waveform, sample_rate):
-    wav_buffer = io.BytesIO()
-    sf.write(wav_buffer, waveform, sample_rate, format="WAV", subtype="PCM_16")
-    wav_buffer.seek(0)
+    start = time.perf_counter()
     
-    process = subprocess.Popen(
-        ["ffmpeg", "-i", "pipe:0", "-f", "mp3", "-ab", "192k", "pipe:1"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL
-    )
-    mp3_data, _ = process.communicate(input=wav_buffer.read())
-    return mp3_data
+    # Convert float32 to int16
+    waveform_int16 = (waveform * 32767).astype(np.int16)
+    wav_size = waveform_int16.nbytes
+    
+    encoder = lameenc.Encoder()
+    encoder.set_bit_rate(128)
+    encoder.set_in_sample_rate(sample_rate)
+    encoder.set_channels(1)
+    encoder.set_quality(5)
+    
+    mp3_data = encoder.encode(waveform_int16.tobytes())
+    mp3_data += encoder.flush()
+    
+    mp3_size = len(mp3_data)
+    pct = (mp3_size / wav_size * 100) if wav_size > 0 else 0
+    print(f"[🍵] MP3 conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}%")
+    return bytes(mp3_data)
 
 @app.on_event("startup")
 def load_models():
@@ -128,7 +136,7 @@ def synthesize(request: InferenceRequest):
         text_processed["x"],
         text_processed["x_lengths"],
         n_timesteps=request.steps,
-        temperature=0.5,
+        temperature=0.4,
         spks=spk,
         voice_mix=voice_mix,
         length_scale=length_scale,

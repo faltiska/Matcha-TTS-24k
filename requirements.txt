@@ -29,6 +29,7 @@ pytest          # tests
 phonemizer      # phonemization of text
 tensorboard
 librosa
+lameenc
 Cython
 numpy
 einops
@@ -46,6 +47,7 @@ gdown
 wget
 seaborn
 vocos
+bigvgan
 parse
 
 nemo_text_processing  # nvidia nemo text normalization
