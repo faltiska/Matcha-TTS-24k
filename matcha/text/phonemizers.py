@@ -48,7 +48,7 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 
 def cleanup_text(text):
     text = re.sub('[\"„“”«»]', '', text)
-    text = re.sub(r'\s*[<>()[\]{}]\s*', ', ', text)
+    text = re.sub(r'\s*[<>()[\]{}—–]\s*', ', ', text)
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.?!])', r'\1', text)
 
@@ -60,13 +60,13 @@ def cleanup_text(text):
 
 
 def normalize_text(lang_code, text):
+    # Nemo handles the smart left single quotes incorrectly, as if it was the standard single quotes
+    # The smart right single quote is frequently used as a single quote, so I just need to remove the left one.
+    # The right one is correctly handled by eSpeak.
+    # E.g. "don’t" instead of "don't".
+    text = re.sub('‘', '', text)
     if lang_code in normalizers:
         normalizer = normalizers[lang_code]
-        # Nemo handles the smart left single quotes incorrectly, as if it was the standard single quotes
-        # The smart right single quote is frequently used as a single quote, so I just need to remove the left one.
-        # The right one is correctly handled by eSpeak.
-        # E.g. "don’t" instead of "don't".
-        text = re.sub('‘', '', text)
         text = normalizer.normalize(text)
     return text
 
@@ -110,6 +110,8 @@ if __name__ == "__main__":
             "Word\t",
             'He said “hello” to me and I\'ve said hello ‘back’.',
             "The value is <10> or (20) or [30] or {40}.",
+            "It was a dark and stormy night—except at occasional intervals.",
+            "The years 2020–2025 were challenging.",
         ]),
         ('es', [
             "El Dr. García llegará a las 15:00.",
@@ -121,6 +123,7 @@ if __name__ == "__main__":
             "Le prix est de 5,00€ au 21 janvier 2026.",
             "La température est de -5°C ou 23°F.",
             "Elle a dit «bonjour» à lui.",
+            "La pluie tombait à torrents—sauf à intervalles occasionnels.",
         ]),
         ('de', [
             "Dr. Müller sieht Sie um 15:00 Uhr.",
@@ -148,6 +151,7 @@ if __name__ == "__main__":
             "Cuvânt   ",
             "Cuvânt\n\n",
             "Cuvânt\t",
+            "Ploaia cădea în torente—cu excepția momentelor ocazionale.",
         ]),
     ]
 
