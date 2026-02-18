@@ -66,7 +66,6 @@ def validate_args(args):
     assert (
         args.text or args.file
     ), "Either text or file must be provided Matcha-T(ea)TTS need sometext to whisk the waveforms."
-    assert args.temperature >= 0, "Sampling temperature cannot be negative"
     assert args.steps > 0, "Number of ODE steps must be greater than 0"
 
     if args.checkpoint_path is None:
@@ -179,12 +178,6 @@ def cli():
         help="ODE solver to use (default: midpoint)",
     )
     parser.add_argument(
-        "--temperature",
-        type=float,
-        default=0.6,
-        help="Variance of the x0 noise (default: 0.8)",
-    )
-    parser.add_argument(
         "--speaking_rate",
         type=float,
         default=None,
@@ -240,6 +233,7 @@ def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
     total_rtf = []
     total_rtf_w = []
     sample_rate = getattr(model, "sample_rate")
+    
     for i, text in enumerate(texts):
         i = i + 1
         base_name = f"utterance_{i:03d}_speaker_{spk_id:03d}" if spk_id is not None else f"utterance_{i:03d}"
@@ -254,20 +248,22 @@ def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
             text_processed["x"],
             text_processed["x_lengths"],
             n_timesteps=args.steps,
-            temperature=args.temperature,
             spks=spk_id if spk_id is not None else 0,
             length_scale=args.speaking_rate,
         )
         waveform = to_waveform(output["mel"], vocoder)
-        waveform = post_process(waveform, orig_freq=sample_rate)
+        
+        # waveform = post_process(waveform)
+        # sample_rate = OUTPUT_SAMPLE_RATE
+        
         # RTF with vocoder
         t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * OUTPUT_SAMPLE_RATE / (waveform.shape[-1])
+        rtf_w = t * sample_rate / (waveform.shape[-1])
         print(f"[🍵-{i}] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, OUTPUT_SAMPLE_RATE)
+        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, sample_rate)
         print(f"[+] Waveform saved: {location}")
 
     print("".join(["="] * 100))
@@ -280,7 +276,6 @@ def print_config(args, model):
     print("[!] Configurations: ")
     print(f"\t- Model: {args.model}")
     print(f"\t- Vocoder: {args.vocoder}")
-    print(f"\t- Temperature: {args.temperature}")
     print(f"\t- Speaking rate: {args.speaking_rate}")
     print(f"\t- Number of ODE steps: {args.steps}")
     print(f"\t- ODE Solver: {args.solver}")

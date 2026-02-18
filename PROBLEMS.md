@@ -25,3 +25,10 @@ By itself, this change is probably good.
 The Decoder was able to influence the encoder this way, pushing it in a direction that makes the diffusion job easier. But the encoder is supposed to generate a mel that looks as close to the original as possible.
 I have detached the encoder output before feeding it into the decoder loss formula. 
 The Duration Loss gradients were already detached.
+
+7. The temperature parameter was breaking inference.
+During training, the model learned how to produce a mel starting from random noise with a distribution of 1.0
+During inference, the temperature param was feeding noise with a different distribution into the model.
+The author thought this was going to introduce some variation thus making the speech more natural.
+But the model did not see such noise in training, thus it was generating speech that did not sound great.
+I have removed the concept of temperature entirely and tht improved the MCD by almost 1dB. 
