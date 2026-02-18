@@ -258,7 +258,7 @@ def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
             spks=spk_id if spk_id is not None else 0,
             length_scale=args.speaking_rate,
         )
-        waveform = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength, args.vocoder)
+        waveform = to_waveform(output["mel"], vocoder)
         waveform = post_process(waveform, orig_freq=sample_rate)
         # RTF with vocoder
         t = (dt.datetime.now() - start_t).total_seconds()
