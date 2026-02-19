@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from lightning import LightningModule
 
-from matcha.cli import VOCODER_URLS, load_matcha, load_vocoder
+from matcha.cli import VOCODERS, load_matcha, load_vocoder
 
 DEFAULT_OPSET = 15
 
@@ -103,7 +103,7 @@ def main():
     parser.add_argument(
         "--vocoder-name",
         type=str,
-        choices=list(VOCODER_URLS.keys()),
+        choices=list(VOCODERS.keys()),
         default="hifigan_univ_v1",
         help="Name of the vocoder to embed in the ONNX graph",
     )

@@ -14,19 +14,15 @@ import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-import soundfile as sf
-import numpy as np
-import lameenc
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, OUTPUT_SAMPLE_RATE, VOCODER_SAMPLE_RATE, VOCODER_HOP_LENGTH, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, SAMPLE_RATE, ODE_SOLVER
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-18_08-52-48/checkpoints/saved/checkpoint_epoch=124.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = None
 vocoder = None
-denoiser = None
 
 VOICES = [
     {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
@@ -58,41 +54,14 @@ def parse_voice_mix(voice_str: str):
     voice2 = parse("{:d}({:d})", parts[1])
     return voice1[0], voice1[1] / 100, voice2[0], voice2[1] / 100
 
-def convert_to_mp3(waveform, sample_rate):
-    start = time.perf_counter()
-    
-    # Convert float32 to int16
-    waveform_int16 = (waveform * 32767).astype(np.int16)
-    wav_size = waveform_int16.nbytes
-    
-    encoder = lameenc.Encoder()
-    encoder.set_bit_rate(128)
-    encoder.set_in_sample_rate(sample_rate)
-    encoder.set_channels(1)
-    encoder.set_quality(5)
-    
-    mp3_data = encoder.encode(waveform_int16.tobytes())
-    mp3_data += encoder.flush()
-    
-    mp3_size = len(mp3_data)
-    pct = (mp3_size / wav_size * 100) if wav_size > 0 else 0
-    print(f"[🍵] MP3 conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}%")
-    return bytes(mp3_data)
-
 @app.on_event("startup")
 def load_models():
-    global model, vocoder, denoiser
+    global model, vocoder
     print(f"[🍵] Loading model from {CHECKPOINT_PATH}")
     model = load_matcha("custom_model", CHECKPOINT_PATH, DEVICE)
     model.decoder.solver = ODE_SOLVER
 
-    if not hasattr(model, "sample_rate"):
-        model.sample_rate = VOCODER_SAMPLE_RATE
-    if not hasattr(model, "hop_length"):
-        model.hop_length = VOCODER_HOP_LENGTH
-
-    vocoder_path = Path.home() / ".local/share/matcha_tts/vocos"
-    vocoder, denoiser = load_vocoder("vocos", vocoder_path, DEVICE)
+    vocoder = load_vocoder("vocos", DEVICE)
     print("[🍵] Models loaded successfully")
 
 @app.get("/")
@@ -129,7 +98,7 @@ def synthesize(request: InferenceRequest):
         voice_mix = None
         spk = voice_id
 
-    text_processed = process_text(1, text, language, DEVICE)
+    text_processed = process_text(text, language, DEVICE)
 
     start_t = dt.datetime.now()
     output = model.synthesise(
@@ -142,14 +111,13 @@ def synthesize(request: InferenceRequest):
     )
         
     waveform = to_waveform(output["mel"], vocoder)
-    sample_rate = getattr(model, "sample_rate")
-    waveform = post_process(waveform, orig_freq=sample_rate)
-    
+    waveform = post_process(waveform)
+
     t = (dt.datetime.now() - start_t).total_seconds()
-    rtf = t * OUTPUT_SAMPLE_RATE / waveform.shape[-1]
+    rtf = t * SAMPLE_RATE / waveform.shape[-1]
     print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf:.4f}")
 
-    mp3_data = convert_to_mp3(waveform.cpu().numpy(), OUTPUT_SAMPLE_RATE)
+    mp3_data = convert_to_mp3(waveform)
     return Response(content=mp3_data, media_type="audio/mpeg")
 
 

@@ -12,53 +12,15 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, OUTPUT_SAMPLE_RATE, VOCODER_SAMPLE_RATE, VOCODER_HOP_LENGTH, ODE_SOLVER
-from matcha.utils.utils import assert_model_downloaded, get_user_data_dir
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, SAMPLE_RATE, ODE_SOLVER
 
-MATCHA_URLS = {
-    "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
-    "matcha_vctk": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_vctk.ckpt",
-}
+VOCODERS = { "vocos", "bigvgan" }
 
-VOCODER_URLS = {
-    "vocos": "https://huggingface.co/charactr/vocos-mel-24khz",
-    "bigvgan": "https://huggingface.co/nvidia/bigvgan_v2_24khz_100band_256x",
-}
-
-MULTISPEAKER_MODEL = {
-    "matcha_vctk": {"vocoder": "vocos", "speaking_rate": 1.0, "spk": 0, "spk_range": (0, 107)}
-}
-
-SINGLESPEAKER_MODEL = {"matcha_ljspeech": {"vocoder": "vocos", "speaking_rate": 1.0, "spk": None}}
-
-
-def get_texts(args):
-    if args.text:
-        texts = [args.text]
-    else:
-        with open(args.file, encoding="utf-8") as f:
-            texts = f.readlines()
-    return texts
-
-
-def assert_required_models_available(args):
-    save_dir = get_user_data_dir()
-    if not hasattr(args, "checkpoint_path") and args.checkpoint_path is None:
-        model_path = args.checkpoint_path
-    else:
-        model_path = save_dir / f"{args.model}.ckpt"
-        assert_model_downloaded(model_path, MATCHA_URLS[args.model])
-
-    vocoder_path = save_dir / f"{args.vocoder}"
-    assert_model_downloaded(vocoder_path, VOCODER_URLS[args.vocoder])
-    return {"matcha": model_path, "vocoder": vocoder_path}
-
-
-def save_to_folder(filename: str, waveform: dict, folder: str, sample_rate: int = 22050):
+def save_to_folder(filename: str, waveform: dict, folder: str):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
     wav_path = folder / f"{filename}.wav"
-    sf.write(wav_path, waveform, sample_rate, format="WAV", subtype="PCM_16")
+    sf.write(wav_path, waveform, SAMPLE_RATE, format="WAV", subtype="PCM_16")
     return wav_path
 
 
@@ -145,13 +107,6 @@ def cli():
     parser = argparse.ArgumentParser(
         description=" 🍵 Matcha-TTS: A fast TTS architecture with conditional flow matching"
     )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="matcha_ljspeech",
-        help="Model to use",
-        choices=MATCHA_URLS.keys(),
-    )
 
     parser.add_argument(
         "--checkpoint_path",
@@ -165,7 +120,7 @@ def cli():
         type=str,
         default=None,
         help="Vocoder to use (default: will use the one suggested with the pretrained model))",
-        choices=VOCODER_URLS.keys(),
+        choices=VOCODERS,
     )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
@@ -202,74 +157,60 @@ def cli():
 
     args = validate_args(args)
     device = get_device(args)
-    paths = assert_required_models_available(args)
 
     if args.checkpoint_path is not None:
         print(f"[🍵] Loading custom model from {args.checkpoint_path}")
-        paths["matcha"] = args.checkpoint_path
         args.model = "custom_model"
 
-    model = load_matcha(args.model, paths["matcha"], device)
+    model = load_matcha(args.model, args.checkpoint_path, device)
     model.decoder.solver = args.solver
     
-    # Set audio params if not present (for old checkpoints)
-    if not hasattr(model, "sample_rate"):
-        model.sample_rate = VOCODER_SAMPLE_RATE
-    if not hasattr(model, "hop_length"):
-        model.hop_length = VOCODER_HOP_LENGTH
-    
-    vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
+    vocoder = load_vocoder(args.vocoder, device)
 
     print_config(args, model)
 
-    texts = get_texts(args)
-
     spk_list = args.spk if args.spk[0] is not None else [None]
     for spk_id in spk_list:
-        synthesis(args, device, model, vocoder, denoiser, texts, spk_id)
+        synthesis(args, device, model, vocoder, args.text, spk_id)
 
 
-def synthesis(args, device, model, vocoder, denoiser, texts, spk_id):
+def synthesis(args, device, model, vocoder, text, spk_id=0):
     total_rtf = []
     total_rtf_w = []
-    sample_rate = getattr(model, "sample_rate")
     
-    for i, text in enumerate(texts):
-        i = i + 1
-        base_name = f"utterance_{i:03d}_speaker_{spk_id:03d}" if spk_id is not None else f"utterance_{i:03d}"
+    base_name = f"speaker_{spk_id:03d}"
 
-        print("".join(["="] * 100))
-        text = text.strip()
-        text_processed = process_text(i, text, args.language, device)
+    print("".join(["="] * 100))
+    text = text.strip()
+    text_processed = process_text(text, args.language, device)
 
-        print(f"[🍵] Whisking Matcha-T(ea)TS for: {i}")
-        start_t = dt.datetime.now()
-        output = model.synthesise(
-            text_processed["x"],
-            text_processed["x_lengths"],
-            n_timesteps=args.steps,
-            spks=spk_id if spk_id is not None else 0,
-            length_scale=args.speaking_rate,
-        )
-        waveform = to_waveform(output["mel"], vocoder)
-        
-        # waveform = post_process(waveform)
-        # sample_rate = OUTPUT_SAMPLE_RATE
-        
-        # RTF with vocoder
-        t = (dt.datetime.now() - start_t).total_seconds()
-        rtf_w = t * sample_rate / (waveform.shape[-1])
-        print(f"[🍵-{i}] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
-        total_rtf.append(output["rtf"])
-        total_rtf_w.append(rtf_w)
+    start_t = dt.datetime.now()
+    output = model.synthesise(
+        text_processed["x"],
+        text_processed["x_lengths"],
+        n_timesteps=args.steps,
+        spks=spk_id if spk_id is not None else 0,
+        length_scale=args.speaking_rate,
+    )
+    waveform = to_waveform(output["mel"], vocoder)
+    waveform = post_process(waveform)
+    
+    save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
+    
+    # RTF with vocoder
+    t = (dt.datetime.now() - start_t).total_seconds()
+    rtf_w = t * SAMPLE_RATE / (waveform.shape[-1])
+    print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
+    total_rtf.append(output["rtf"])
+    total_rtf_w.append(rtf_w)
 
-        location = save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder, sample_rate)
-        print(f"[+] Waveform saved: {location}")
+    mp3_data = convert_to_mp3(waveform)
+    mp3_path = Path(args.output_folder) / f"{base_name}.mp3"
+    mp3_path.write_bytes(mp3_data)
 
     print("".join(["="] * 100))
     print(f"[🍵] Average Matcha-TTS RTF: {np.mean(total_rtf):.4f} ± {np.std(total_rtf)}")
     print(f"[🍵] Average Matcha-TTS + VOCODER RTF: {np.mean(total_rtf_w):.4f} ± {np.std(total_rtf_w)}")
-    print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
 
 
 def print_config(args, model):
@@ -277,11 +218,9 @@ def print_config(args, model):
     print(f"\t- Model: {args.model}")
     print(f"\t- Vocoder: {args.vocoder}")
     print(f"\t- Speaking rate: {args.speaking_rate}")
-    print(f"\t- Number of ODE steps: {args.steps}")
+    print(f"\t- ODE steps: {args.steps}")
     print(f"\t- ODE Solver: {args.solver}")
     print(f"\t- Speaker: {args.spk}")
-    print(f"\t- Sample rate: {getattr(model, 'sample_rate')}")
-    print(f"\t- Hop length: {getattr(model, 'hop_length')}")
 
 def get_device(args):
     if torch.cuda.is_available() and not args.cpu:
