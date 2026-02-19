@@ -5,10 +5,7 @@ import torch.nn.functional as F
 from torchdiffeq import odeint, odeint_adjoint
 
 from matcha.models.components.decoder import Decoder
-from matcha.utils.pylogger import get_pylogger
 from .ode_solver_wrapper import OdeSolverWrapper
-
-log = get_pylogger(__name__)
 
 
 class BASECFM(torch.nn.Module, ABC):
