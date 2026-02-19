@@ -1,6 +1,6 @@
 import argparse
-import datetime as dt
 import os
+import time
 import warnings
 from pathlib import Path
 # Set HuggingFace cache BEFORE any imports that might use it
@@ -176,18 +176,17 @@ def speak(args, model, vocoder, text, spk_id=0):
     base_name = f"speaker_{spk_id:03d}"
     print("".join(["="] * 100))
 
-    start_t = dt.datetime.now()
-    waveform, rtf = synthesise(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
-    t = (dt.datetime.now() - start_t).total_seconds()
-    rtf_w = t * SAMPLE_RATE / waveform.shape[-1]
-    print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
+    t = time.perf_counter()
+    waveform = synthesise(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
+    elapsed = time.perf_counter() - t
+    audio_duration = waveform.shape[-1] / SAMPLE_RATE
+    rtf = elapsed / audio_duration
+    print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {rtf :.4f}")
 
     save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
     Path(args.output_folder, f"{base_name}.mp3").write_bytes(convert_to_mp3(waveform))
     Path(args.output_folder, f"{base_name}.ogg").write_bytes(convert_to_opus_ogg(waveform))
-
     print("".join(["="] * 100))
-    print(f"[🍵] RTF: {rtf:.4f}, RTF+vocoder: {rtf_w:.4f}")
 
 
 def print_config(args, model):

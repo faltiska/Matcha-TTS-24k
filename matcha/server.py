@@ -1,5 +1,3 @@
-import datetime as dt
-import io
 import os
 import subprocess
 import time
@@ -94,10 +92,11 @@ def speak(request: InferenceRequest):
         voice_mix = None
         spk = voice_id
 
-    start_t = dt.datetime.now()
-    waveform, rtf = synthesise(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
-    t = (dt.datetime.now() - start_t).total_seconds()
-    print(f"[🍵] Inference time: {t:.2f}s, RTF: {t * SAMPLE_RATE / waveform.shape[-1]:.4f}")
+    t = time.perf_counter()
+    waveform = synthesise(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
+    elapsed = time.perf_counter() - t
+    audio_duration = waveform.shape[-1] / SAMPLE_RATE
+    print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
 
     if request.response_format == "mp3":
         return Response(content=convert_to_mp3(waveform), media_type="audio/mpeg")
