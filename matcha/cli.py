@@ -12,7 +12,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
 VOCODERS = { "vocos", "bigvgan" }
 
@@ -207,6 +207,10 @@ def synthesis(args, device, model, vocoder, text, spk_id=0):
     mp3_data = convert_to_mp3(waveform)
     mp3_path = Path(args.output_folder) / f"{base_name}.mp3"
     mp3_path.write_bytes(mp3_data)
+
+    ogg_data = convert_to_opus_ogg(waveform)
+    ogg_path = Path(args.output_folder) / f"{base_name}.ogg"
+    ogg_path.write_bytes(ogg_data)
 
     print("".join(["="] * 100))
     print(f"[🍵] Average Matcha-TTS RTF: {np.mean(total_rtf):.4f} ± {np.std(total_rtf)}")

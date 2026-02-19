@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
 CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
@@ -42,7 +42,7 @@ app = FastAPI(title="Matcha-TTS Inference Server")
 class InferenceRequest(BaseModel):
     input: str
     voice: int | str = 0  # Voice ID or Voice Mix in the form of "2(20)+5(80)" meaning 20% of voice 2 mixed with 80% of voice 5 
-    response_format: str = "mp3"
+    response_format: str = "ogg"
     speed: float = 1.0
     steps: int = 15
 
@@ -117,8 +117,14 @@ def synthesize(request: InferenceRequest):
     rtf = t * SAMPLE_RATE / waveform.shape[-1]
     print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf:.4f}")
 
-    mp3_data = convert_to_mp3(waveform)
-    return Response(content=mp3_data, media_type="audio/mpeg")
+    if request.response_format == "mp3":
+        audio_data = convert_to_mp3(waveform)
+        media_type = "audio/mpeg"
+    else:
+        audio_data = convert_to_opus_ogg(waveform)
+        media_type = "audio/ogg"
+    
+    return Response(content=audio_data, media_type=media_type)
 
 
 # Health check endpoint

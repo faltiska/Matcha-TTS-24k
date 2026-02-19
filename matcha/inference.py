@@ -1,3 +1,6 @@
+import io
+import time
+import lameenc
 import torch
 import torchaudio
 from matcha.models.matcha_tts import MatchaTTS
@@ -5,6 +8,8 @@ from matcha.text import sequence_to_text, to_phoneme_ids, to_phonemes
 from matcha.utils.utils import intersperse
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
+import av
+import numpy as np
 
 SAMPLE_RATE = 24000
 HOP_LENGTH = 256
@@ -67,7 +72,6 @@ def apply_lowpass_filter(audio: torch.Tensor, start_freq: float = 11000, end_fre
 
 
 def post_process(audio):
-    import time
     start = time.perf_counter()
     audio = apply_lowpass_filter(audio)
     print(f"Post-processing took {time.perf_counter() - start:.3f}s")
@@ -75,9 +79,6 @@ def post_process(audio):
 
 
 def convert_to_mp3(waveform):
-    import time
-    import lameenc
-    
     start = time.perf_counter()
     waveform_int16 = (waveform * 32767).to(torch.int16)
     wav_size = waveform_int16.numel() * 2
@@ -93,5 +94,34 @@ def convert_to_mp3(waveform):
     
     mp3_size = len(mp3_data)
     pct = (mp3_size / wav_size * 100) if wav_size > 0 else 0
-    print(f"MP3 conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}%")
+    print(f"MP3 conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}% size")
     return bytes(mp3_data)
+
+
+def convert_to_opus_ogg(waveform):
+    start = time.perf_counter()
+    audio_np = (waveform.numpy() * 32767).astype(np.int16).reshape(1, -1)
+    wav_size = audio_np.size * 2
+    
+    buffer = io.BytesIO()
+    container = av.open(buffer, mode='w', format='ogg')
+    stream = container.add_stream('libopus', rate=SAMPLE_RATE)
+    stream.layout = 'mono'
+    stream.bit_rate = 48000
+    stream.options = {'compression_level': "5"}
+    
+    frame = av.AudioFrame.from_ndarray(audio_np, format='s16', layout='mono')
+    frame.sample_rate = SAMPLE_RATE
+    
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    for packet in stream.encode():
+        container.mux(packet)
+    
+    container.close()
+    
+    ogg_data = buffer.getvalue()
+    ogg_size = len(ogg_data)
+    pct = (ogg_size / wav_size * 100) if wav_size > 0 else 0
+    print(f"OGG conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}% size")
+    return bytes(ogg_data)
