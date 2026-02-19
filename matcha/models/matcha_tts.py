@@ -1,12 +1,6 @@
 import datetime as dt
 import math
-
-LOG_2_PI = math.log(2 * math.pi)
-import random
-
 import torch
-
-from matcha.utils import monotonic_align
 
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
@@ -22,6 +16,8 @@ from matcha.utils.model import (
 from super_monotonic_align import maximum_path
 
 log = utils.get_pylogger(__name__)
+
+LOG_2_PI = math.log(2 * math.pi)
 
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
@@ -104,7 +100,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         return mixed_emb
 
     @torch.inference_mode()
-    def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0, variance=0.0, variance_probability=0.0):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -142,10 +138,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             }
         """
 
-        # Set seed for reproducible synthesis; without this, the voice sounds different with each synthesis call 
-        # but not in a good way, even the timbre will be different, as if it's a different person.
-        torch.cuda.manual_seed(42)
-        
         # For RTF computation
         t = dt.datetime.now()
 
@@ -168,6 +160,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
         w = torch.exp(logw) * x_mask * length_scale
+
+        # Randomly chooses a set of phonemes (variance_probability say how many),
+        # and increases their length by a factor up to variance.
+        if variance > 0.0:
+            mask = torch.bernoulli(torch.full_like(w, variance_probability))
+            w = w * (1.0 + mask * torch.rand_like(w) * variance)
+
         y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).round().long()
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
