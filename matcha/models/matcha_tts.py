@@ -1,4 +1,3 @@
-import datetime as dt
 import math
 import torch
 
@@ -138,9 +137,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             }
         """
 
-        # For RTF computation
-        t = dt.datetime.now()
-
         if self.n_spks > 1:
             if voice_mix is not None:
                 spks = self.mix_speakers(voice_mix)
@@ -185,18 +181,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
-        t = (dt.datetime.now() - t).total_seconds()
-        sr = getattr(self, "sample_rate", 24000)
-        hop = getattr(self, "hop_length", 256)
-        rtf = t * sr / (decoder_outputs.shape[-1] * hop)
-
         return {
             "encoder_outputs": encoder_outputs,
             "decoder_outputs": decoder_outputs,
             "attn": attn[:, :, :y_max_length],
             "mel": denormalize(decoder_outputs, self.mel_mean, self.mel_std),
             "mel_lengths": y_lengths,
-            "rtf": rtf,
         }
 
     def forward(self, x, x_lengths, y, y_lengths, spks=None, durations=None):
