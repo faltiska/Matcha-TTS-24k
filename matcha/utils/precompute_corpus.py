@@ -167,7 +167,7 @@ def main():
     mel_std = float(data_stats["mel_std"])
 
     # ---- NEW: read mel_backend for extractor selection ----
-    mel_backend = cfg.get("mel_backend", "hifigan")
+    mel_backend = cfg.get("mel_backend", "vocos")
     # Instantiate the backend-agnostic mel extractor here, once
     mel_extractor = get_mel_extractor(
         mel_backend,

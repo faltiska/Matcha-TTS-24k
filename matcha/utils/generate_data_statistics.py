@@ -71,7 +71,7 @@ def compute_data_statistics(
     win_length: int,
     f_min: float,
     f_max: float,
-    mel_backend: str = "hifigan",
+    mel_backend: str = "vocos",
 ) -> Dict[str, float]:
     """
     Compute mel statistics by directly loading all wav files (no DataLoader).
@@ -200,7 +200,7 @@ def main():
         win_length=int(cfg["win_length"]),
         f_min=float(cfg["f_min"]),
         f_max=float(cfg["f_max"]),
-        mel_backend=cfg.get("mel_backend", "hifigan"),
+        mel_backend=cfg.get("mel_backend", "vocos"),
     )
     
     print("\ndata_statistics:")
