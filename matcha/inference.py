@@ -47,10 +47,21 @@ def load_vocoder(vocoder_name, device):
 def load_matcha(model_name, checkpoint_path, device):
     print(f"[!] Loading {model_name}!")
     model = MatchaTTS.load_from_checkpoint(checkpoint_path, map_location=device, weights_only=False, strict=False).eval()
-    print(f"[!] Compiling model...")
-    model = torch.compile(model)
-    print(f"[+] {model_name} loaded and compiled!")
     return model
+
+
+def synthesise(model, vocoder, text, language, spk=0, voice_mix=None, n_timesteps=15, length_scale=1.0):
+    text_processed = process_text(text, language, next(model.parameters()).device)
+    output = model.synthesise(
+        text_processed["x"],
+        text_processed["x_lengths"],
+        n_timesteps=n_timesteps,
+        spks=spk,
+        voice_mix=voice_mix,
+        length_scale=length_scale,
+    )
+    waveform = to_waveform(output["mel"], vocoder)
+    return post_process(waveform), output["rtf"]
 
 
 def to_waveform(mel, vocoder):

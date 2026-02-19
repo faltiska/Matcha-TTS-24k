@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, synthesise, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
 CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
@@ -78,16 +78,12 @@ def get_voices():
 @app.post("/prod/speak/evie")
 @app.post("/test/speak/evie")
 @torch.inference_mode()
-def synthesize(request: InferenceRequest):
+def speak(request: InferenceRequest):
     print(f"[🍵] Request: {request.model_dump()}")
-    
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
-    text = request.input.strip()
-    length_scale = request.speed
-
-    if '+' in request.voice:
+    if '+' in str(request.voice):
         id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
         language = VOICES[id1]["lang"]
         voice_mix = [(id1, weight1), (id2, weight2)]
@@ -98,33 +94,14 @@ def synthesize(request: InferenceRequest):
         voice_mix = None
         spk = voice_id
 
-    text_processed = process_text(text, language, DEVICE)
-
     start_t = dt.datetime.now()
-    output = model.synthesise(
-        text_processed["x"],
-        text_processed["x_lengths"],
-        n_timesteps=request.steps,
-        spks=spk,
-        voice_mix=voice_mix,
-        length_scale=length_scale,
-    )
-        
-    waveform = to_waveform(output["mel"], vocoder)
-    waveform = post_process(waveform)
-
+    waveform, rtf = synthesise(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
     t = (dt.datetime.now() - start_t).total_seconds()
-    rtf = t * SAMPLE_RATE / waveform.shape[-1]
-    print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf:.4f}")
+    print(f"[🍵] Inference time: {t:.2f}s, RTF: {t * SAMPLE_RATE / waveform.shape[-1]:.4f}")
 
     if request.response_format == "mp3":
-        audio_data = convert_to_mp3(waveform)
-        media_type = "audio/mpeg"
-    else:
-        audio_data = convert_to_opus_ogg(waveform)
-        media_type = "audio/ogg"
-    
-    return Response(content=audio_data, media_type=media_type)
+        return Response(content=convert_to_mp3(waveform), media_type="audio/mpeg")
+    return Response(content=convert_to_opus_ogg(waveform), media_type="audio/ogg")
 
 
 # Health check endpoint

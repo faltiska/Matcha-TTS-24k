@@ -3,8 +3,6 @@ import datetime as dt
 import os
 import warnings
 from pathlib import Path
-import numpy as np
-
 # Set HuggingFace cache BEFORE any imports that might use it
 cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
 os.environ["HF_HOME"] = str(cache_base / "huggingface")
@@ -12,7 +10,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, process_text, to_waveform, post_process, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, synthesise, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
 VOCODERS = { "vocos", "bigvgan" }
 
@@ -171,50 +169,25 @@ def cli():
 
     spk_list = args.spk if args.spk[0] is not None else [None]
     for spk_id in spk_list:
-        synthesis(args, device, model, vocoder, args.text, spk_id)
+        speak(args, model, vocoder, args.text, spk_id)
 
 
-def synthesis(args, device, model, vocoder, text, spk_id=0):
-    total_rtf = []
-    total_rtf_w = []
-    
+def speak(args, model, vocoder, text, spk_id=0):
     base_name = f"speaker_{spk_id:03d}"
-
     print("".join(["="] * 100))
-    text = text.strip()
-    text_processed = process_text(text, args.language, device)
 
     start_t = dt.datetime.now()
-    output = model.synthesise(
-        text_processed["x"],
-        text_processed["x_lengths"],
-        n_timesteps=args.steps,
-        spks=spk_id if spk_id is not None else 0,
-        length_scale=args.speaking_rate,
-    )
-    waveform = to_waveform(output["mel"], vocoder)
-    waveform = post_process(waveform)
-    
-    save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
-    
-    # RTF with vocoder
+    waveform, rtf = synthesise(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
     t = (dt.datetime.now() - start_t).total_seconds()
-    rtf_w = t * SAMPLE_RATE / (waveform.shape[-1])
+    rtf_w = t * SAMPLE_RATE / waveform.shape[-1]
     print(f"[🍵] Inference time: {t:.2f}s, RTF: {rtf_w:.2f}")
-    total_rtf.append(output["rtf"])
-    total_rtf_w.append(rtf_w)
 
-    mp3_data = convert_to_mp3(waveform)
-    mp3_path = Path(args.output_folder) / f"{base_name}.mp3"
-    mp3_path.write_bytes(mp3_data)
-
-    ogg_data = convert_to_opus_ogg(waveform)
-    ogg_path = Path(args.output_folder) / f"{base_name}.ogg"
-    ogg_path.write_bytes(ogg_data)
+    save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
+    Path(args.output_folder, f"{base_name}.mp3").write_bytes(convert_to_mp3(waveform))
+    Path(args.output_folder, f"{base_name}.ogg").write_bytes(convert_to_opus_ogg(waveform))
 
     print("".join(["="] * 100))
-    print(f"[🍵] Average Matcha-TTS RTF: {np.mean(total_rtf):.4f} ± {np.std(total_rtf)}")
-    print(f"[🍵] Average Matcha-TTS + VOCODER RTF: {np.mean(total_rtf_w):.4f} ± {np.std(total_rtf_w)}")
+    print(f"[🍵] RTF: {rtf:.4f}, RTF+vocoder: {rtf_w:.4f}")
 
 
 def print_config(args, model):
