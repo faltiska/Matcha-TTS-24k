@@ -34,33 +34,54 @@ class MatchaTTSInfer(nn.Module):
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
 
+    def mix_speakers(self, speaker_mix):
+        if self.n_spks <= 1:
+            return None
+        
+        device = next(self.parameters()).device
+        mixed_emb = None
+        
+        for spk_id, weight in speaker_mix:
+            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
+            spk_emb = self.spk_emb(spk_tensor)
+            
+            if mixed_emb is None:
+                mixed_emb = weight * spk_emb
+            else:
+                mixed_emb += weight * spk_emb
+        
+        return mixed_emb
+
     def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0, variance=0.0, variance_probability=0.0):
+        """
+        See method def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0):
+        in matcha_tts.py for reference. 
+        """
         if self.n_spks > 1:
             if voice_mix is not None:
-                spks = sum(w * self.spk_emb(torch.tensor([sid], device=DEVICE, dtype=torch.long))
-                           for sid, w in voice_mix)
+                spks = self.mix_speakers(voice_mix)
             else:
-                spks = self.spk_emb(torch.tensor([spks], device=DEVICE, dtype=torch.long))
+                device = next(self.parameters()).device
+                spks = torch.tensor([spks], device=device, dtype=torch.long)
+                spks = self.spk_emb(spks)
 
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
         w = torch.exp(logw) * x_mask * length_scale
         if variance > 0.0:
-            w = w * (1.0 + torch.bernoulli(torch.full_like(w, variance_probability)) * torch.rand_like(w) * variance)
-        y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).round().long()
-        y_max_length_ = fix_len_compatibility(y_lengths.max())
+            mask = torch.bernoulli(torch.full_like(w, variance_probability))
+            w = w * (1.0 + mask * torch.rand_like(w) * variance)
+        w_clamped = torch.clamp_min(w.squeeze(1), 0.5)
+        y_lengths = torch.clamp_min(torch.cumsum(w_clamped, 1).round()[:, -1].long(), 1)
+        y_max_length = y_lengths.max()
+        y_max_length_ = fix_len_compatibility(y_max_length)
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
-        attn = generate_path(w.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2)).transpose(1, 2)
-        y_max = y_lengths.max()
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)[:, :, :y_max]
-        return {
-            "encoder_outputs": mu_y[:, :, :y_max],
-            "decoder_outputs": decoder_outputs,
-            "attn": attn[:, :, :y_max],
-            "mel": denormalize(decoder_outputs, self.mel_mean, self.mel_std),
-            "mel_lengths": y_lengths,
-        }
+        attn = generate_path(w_clamped, attn_mask.squeeze(1)).unsqueeze(1)
+        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        mu_y = mu_y.transpose(1, 2)
+
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)[:, :, :y_max_length]
+        return denormalize(decoder_outputs, self.mel_mean, self.mel_std)
 
 
 def load_matcha(model_name, checkpoint_path):
@@ -111,7 +132,7 @@ def synthesise(model, vocoder, text, language, spk=0, voice_mix=None, n_timestep
             voice_mix=voice_mix,
             length_scale=length_scale,
         )
-    waveform = to_waveform(output["mel"], vocoder)
+    waveform = to_waveform(output, vocoder)
     return post_process(waveform)
 
 
