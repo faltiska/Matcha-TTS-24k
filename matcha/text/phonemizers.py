@@ -75,9 +75,9 @@ def normalize_text(lang_code, text):
 
 
 def multilingual_phonemizer(text, language):
-    phonemizer = phonemizers[language]
-    if not phonemizer:
-        raise Exception(f"Unsupported {language=}")
+    phonemizer = phonemizers.get(language)
+    if phonemizer is None:
+        raise ValueError(f"Unsupported {language=}")
     
     # Apply NeMo normalization if available for this language.
     # The eSpeak normalization will still be applied during phonemization; in case of languages 
@@ -91,96 +91,3 @@ def multilingual_phonemizer(text, language):
     phonemes = phonemizer.phonemize([text])[0]
 
     return phonemes
-
-
-if __name__ == "__main__":
-    """
-    Run me with:
-     python -m matcha.text.phonemizers
-    """
-    from time import time
-    
-    test_cases = [
-        ('en', [
-            "I live for live broadcasts.",
-            "Dr. Jones will see you at 15:00.",
-            "The price is $5.00 as of Jan 21st, 2026.",
-            "Call me at 555-1234 or visit 123 Main St.",
-            "The temperature is -5°C or 23°F.",
-            "He scored 95% on the test.",
-            "Word   ",
-            "Word\n\n",
-            "Word\t",
-            'He said “hello” to me and I\'ve said hello ‘back’.',
-            "The value is <10> or (20) or [30] or {40}.",
-            "It was a dark and stormy night—except at occasional intervals.",
-            "The years 2020–2025 were challenging.",
-        ]),
-        ('es', [
-            "El Dr. García llegará a las 15:00.",
-            "El precio es $5.00 desde el 21 de enero de 2026.",
-            "La temperatura es -5°C o 23°F.",
-        ]),
-        ('fr', [
-            "Le Dr. Dupont vous verra à 15h00.",
-            "Le prix est de 5,00€ au 21 janvier 2026.",
-            "La température est de -5°C ou 23°F.",
-            "Elle a dit «bonjour» à lui.",
-            "La pluie tombait à torrents—sauf à intervalles occasionnels.",
-        ]),
-        ('de', [
-            "Dr. Müller sieht Sie um 15:00 Uhr.",
-            "Der Preis beträgt 5,00€ ab dem 21. Januar 2026.",
-            "Die Temperatur beträgt -5°C oder 23°F.",
-        ]),
-        ('pt', [
-            "O Dr. Silva verá você às 15:00.",
-            "O preço é R$ 5,00 desde 21 de janeiro de 2026.",
-            "A temperatura é -5°C ou 23°F.",
-        ]),
-        ('it', [
-            "Il Dr. Rossi la vedrà alle 15:00.",
-            "Il prezzo è €5,00 dal 21 gennaio 2026.",
-            "La temperatura è -5°C o 23°F.",
-        ]),
-        ('ro', [
-            "Dr. Popescu vă va vedea la ora 15:00.",
-            "Prețul este 5,00 lei din 21 ianuarie 2026.",
-            "Temperatura este -5°C sau 23°F.",
-            "Sunați-mă la 555-1234 sau vizitați Str. Principală nr. 123.",
-            "Oare?",
-            "Doare!",
-            "N-are.",
-            "Cuvânt   ",
-            "Cuvânt\n\n",
-            "Cuvânt\t",
-            "Ploaia cădea în torente—cu excepția momentelor ocazionale.",
-        ]),
-    ]
-
-    for lang, examples in test_cases:
-        lang_key = f"{lang}-us" if lang == 'en' else f"{lang}-fr" if lang == 'fr' else lang
-        print(f"=== {lang.upper()} ===")
-        for text in examples:
-            print(f"Original:   <{text}>")
-
-            if lang in normalizers:
-                start = time()
-                normalized = normalize_text(lang, text)
-                ms = int((time() - start) * 1000)
-                print(f"Normalized: <{normalized}> ({ms} ms)")
-            else:
-                normalized = text
-                print(f"Nemo normalization not available for {lang=}")
-            
-            cleaned = cleanup_text(normalized)
-            print(f"Cleaned:    <{cleaned}>")
-            
-            start = time()
-            phonemes = multilingual_phonemizer(text, lang_key)
-            ms = int((time() - start) * 1000)
-            print(f"Phonemized: <{phonemes}> ({ms} ms)")
-
-            print()
-        
-        
