@@ -6,7 +6,13 @@
 ```
 sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
-sudo apt  install docker.io
+sudo apt install docker.io
+```
+Install buildx from Docker's official repo (not in Ubuntu's default apt)
+```
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+sudo apt update && sudo apt install docker-buildx-plugin
 ```
 
 ### In AWS
@@ -26,10 +32,10 @@ sudo apt  install docker.io
 Test the Docker image locally with GPU support.
 See: https://docker-desktop.io/docs/docker/gpu
 
-```powershell
-# PowerShell (WSL)
-$TAG="v1.0.0"
-docker build -f docker/Dockerfile -t 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG .
+```bash
+# Linux
+export TAG=v1.0.0
+docker buildx build -f docker/Dockerfile -t 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG .
 docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG
 
 # Log into container
@@ -40,13 +46,6 @@ docker container remove matcha
 docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG
 ```
 
-```bash
-# Linux/Mac
-export TAG=v1.0.0
-docker build -f docker/Dockerfile -t 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG .
-docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG
-```
-
 ## Build and Push to ECR
 
 ```powershell
@@ -55,8 +54,9 @@ $TAG="v1.0.0"
 $REGISTRY="678811077621.dkr.ecr.eu-west-1.amazonaws.com"
 $IMAGE_NAME="evie/matcha-tts"
 
-# Build image
-docker build -f docker/Dockerfile -t "$REGISTRY/$IMAGE_NAME:$TAG" .
+# Build image (copy checkpoint into docker/ first)
+cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
+docker buildx build -f docker/Dockerfile -t "$REGISTRY/$IMAGE_NAME:$TAG" .
 
 # Login to ECR
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
@@ -71,7 +71,9 @@ export TAG=v1.0.0
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha-tts
 
-docker build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
+# Build image (copy checkpoint into docker/ first)
+cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
+docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker push $REGISTRY/$IMAGE_NAME:$TAG
 ```
@@ -274,11 +276,3 @@ docker service update matcha --replicas 2
 - Rolling updates start new container before stopping old one (brief VRAM spike)
 - Health checks ensure traffic only goes to healthy containers
 - `--update-order start-first` ensures zero downtime during updates
-
-
-## TODO
-- take the Nemo grammar files and the Vocos model from the local cache, don't download it after docker container starts
-- check what is so large in the docker image, even before including those
-- try to get GPU to work with Rancher Desktop (install nVidia WSL Toolkit manually)
-- improve server.py to make it ready for prod
-- add PSR script

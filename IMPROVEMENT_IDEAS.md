@@ -103,6 +103,9 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 | **MOS (UTMOS)** | Naturalness        | Absolute (No Ref)  | > 4.0                         |
 | **SEC**         | Speaker Similarity | Reference Speaker  | > 0.8 (Cosine Sim)            |
 
+## TODO
+- improve server.py to make it ready for prod
+- add PSR script
 
 ## Code changes I can consider in the future (not now!)
 Remove app.py
@@ -118,3 +121,10 @@ Ideas from BigVGAN v2:
 Use a MAX_WAV_VALUE = 32767 instead of 32768 when computing mels (prevents int16 overflow)
 Trim audio to multiple of hop lengths before converting to mel (figure out what is the benefit)
 Verify if vocos was trained with a clip_val of 1e-7 (BigVGAN uses 1e-5)
+
+Find a way to vary the prosody a little with each inference call, but just the prosody
+not the timbre, like the TEMPERATURE feature was doing. 
+
+Clean up the architecture so that the model and the lightning module are separated
+- matcha/models/matcha_tts_model.py — pure nn.Module with synthesise(), no lightning, no hydra, no logging. This is essentially what MatchaTTSInfer already is.
+- matcha/models/matcha_tts.py — thin LightningModule wrapper that owns the training loop (forward, losses, optimizers, validation step) and delegates to the model for everything else.

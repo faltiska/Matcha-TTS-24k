@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM nvidia/cuda:13.0.2-base-ubuntu24.04
 
 RUN apt-get update -y && \
@@ -14,16 +15,16 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 USER appuser
 WORKDIR /app
 
-COPY --chown=appuser:appuser requirements.txt setup.py README.md ./
+COPY --chown=appuser:appuser requirements-inference.txt ./
 COPY --chown=appuser:appuser matcha ./matcha
+COPY --chown=appuser:appuser logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt ./models/checkpoint.ckpt
+COPY --chown=appuser:appuser .cache ./.cache
 
-RUN uv venv --python 3.13 && \
-    uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --no-cache && \
-    uv pip install -r requirements.txt --no-cache && \
-    .venv/bin/python setup.py build_ext --inplace && \
-    uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --no-cache
-
-COPY --chown=appuser:appuser logs/train/corpus-small-24k/runs/2026-02-05_10-24-26/checkpoints/saved/checkpoint_epoch=279.ckpt ./models/checkpoint.ckpt
+RUN --mount=type=cache,target=/uv-cache,uid=1001 \
+    UV_CACHE_DIR=/uv-cache \
+    uv venv --python 3.13 && \
+    UV_CACHE_DIR=/uv-cache uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 && \
+    UV_CACHE_DIR=/uv-cache uv pip install -r requirements-inference.txt
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

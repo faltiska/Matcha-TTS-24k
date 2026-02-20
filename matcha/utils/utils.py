@@ -6,16 +6,14 @@ from math import ceil
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
-import gdown
 import matplotlib
 matplotlib.use("Agg")  # Use non-interactive backend to avoid Tkinter errors in headless runs
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import wget
 from omegaconf import DictConfig
 
-from matcha.utils import pylogger, rich_utils
+from matcha.utils import pylogger
 
 log = pylogger.get_pylogger(__name__)
 
@@ -44,11 +42,13 @@ def extras(cfg: DictConfig) -> None:
     # prompt user to input tags from command line if none are provided in the config
     if cfg.extras.get("enforce_tags"):
         log.info("Enforcing tags! <cfg.extras.enforce_tags=True>")
+        from matcha.utils import rich_utils
         rich_utils.enforce_tags(cfg, save_to_file=True)
 
     # pretty print config tree using Rich library
     if cfg.extras.get("print_config"):
         log.info("Printing config tree with Rich! <cfg.extras.print_config=True>")
+        from matcha.utils import rich_utils
         rich_utils.print_config_tree(cfg, resolve=True, save_to_file=True)
 
 
@@ -214,25 +214,6 @@ def get_user_data_dir(appname="matcha_tts"):
     final_path.mkdir(parents=True, exist_ok=True)
     return final_path
 
-
-def assert_model_downloaded(checkpoint_path, url, use_wget=True):
-    # Handle HuggingFace URLs specially - they're downloaded by the vocos library
-    if url.startswith("hf://"):
-        log.debug(f"[+] HuggingFace model will be downloaded by the vocos library: {url}")
-        print(f"[+] HuggingFace model will be downloaded by the vocos library: {url}")
-        return
-    
-    if Path(checkpoint_path).exists():
-        log.debug(f"[+] Model already present at {checkpoint_path}!")
-        print(f"[+] Model already present at {checkpoint_path}!")
-        return
-    log.info(f"[-] Model not found at {checkpoint_path}! Will download it")
-    print(f"[-] Model not found at {checkpoint_path}! Will download it")
-    checkpoint_path = str(checkpoint_path)
-    if not use_wget:
-        gdown.download(url=url, output=checkpoint_path, quiet=False, fuzzy=True)
-    else:
-        wget.download(url=url, out=checkpoint_path)
 
 
 def get_phoneme_durations(durations, phones):
