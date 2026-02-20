@@ -32,7 +32,7 @@ def generate_path(duration, mask):
     # Ensure all durations are at least 0.5 to prevent zero-length phonemes after rounding
     # For example these durations: [1.1, 0.3, 1.8] may result in a cumsum of [1.1, 1.4, 3.2]
     # which, when rounded up will be [1, 1, 3] meaning the second phoneme will start over the first one
-    duration = torch.clamp_min(duration, 0.5)
+    duration = torch.clamp_min(duration, 1.0)
 
     # Duration could have fractional numbers during inference, because there's an exp(duration) there.
     # During training, It will only have integers, because they are coming from MAS.
