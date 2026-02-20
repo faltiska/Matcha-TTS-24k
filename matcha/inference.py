@@ -16,6 +16,7 @@ import numpy as np
 SAMPLE_RATE = 24000
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
+DEVICE = torch.device("cuda")
 
 
 class MatchaTTSInfer(nn.Module):
@@ -35,12 +36,11 @@ class MatchaTTSInfer(nn.Module):
 
     def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0, variance=0.0, variance_probability=0.0):
         if self.n_spks > 1:
-            device = next(self.parameters()).device
             if voice_mix is not None:
-                spks = sum(w * self.spk_emb(torch.tensor([sid], device=device, dtype=torch.long))
+                spks = sum(w * self.spk_emb(torch.tensor([sid], device=DEVICE, dtype=torch.long))
                            for sid, w in voice_mix)
             else:
-                spks = self.spk_emb(torch.tensor([spks], device=device, dtype=torch.long))
+                spks = self.spk_emb(torch.tensor([spks], device=DEVICE, dtype=torch.long))
 
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
         w = torch.exp(logw) * x_mask * length_scale
@@ -63,36 +63,36 @@ class MatchaTTSInfer(nn.Module):
         }
 
 
-def load_matcha(model_name, checkpoint_path, device):
+def load_matcha(model_name, checkpoint_path):
     print(f"[!] Loading {model_name}!")
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
     hparams = ckpt["hyper_parameters"]
     hparams.pop("optimizer", None)
     hparams.pop("scheduler", None)
-    model = MatchaTTSInfer(**hparams).to(device)
+    model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(ckpt["state_dict"], strict=False)
     model.eval()
     print(f"[+] {model_name} loaded!")
     return model
 
 
-def process_text(text: str, language: str, device: torch.device):
+def process_text(text: str, language: str):
     print(f"Input text: {text}")
     phonemes = to_phonemes(text, language=language)
     phoneme_ids = to_phoneme_ids(phonemes)
-    x = torch.tensor(intersperse(phoneme_ids, 0), dtype=torch.long, device=device)[None]
-    x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=device)
+    x = torch.tensor(intersperse(phoneme_ids, 0), dtype=torch.long, device=DEVICE)[None]
+    x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
     x_phones = sequence_to_text(x.squeeze(0).tolist())
     print(f"Phonetised text: {x_phones[1::2]}")
     return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": x_phones}
 
 
-def load_vocoder(vocoder_name, device):
+def load_vocoder(vocoder_name):
     print(f"[!] Loading {vocoder_name}!")
     if vocoder_name == "vocos":
-        vocoder = load_vocos(device)
+        vocoder = load_vocos(DEVICE)
     elif vocoder_name == "bigvgan":
-        vocoder = load_bigvgan(device)
+        vocoder = load_bigvgan(DEVICE)
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented!")
     print(f"[+] {vocoder_name} loaded!")
@@ -101,15 +101,16 @@ def load_vocoder(vocoder_name, device):
 
 @torch.inference_mode()
 def synthesise(model, vocoder, text, language, spk=0, voice_mix=None, n_timesteps=15, length_scale=1.0):
-    text_processed = process_text(text, language, next(model.parameters()).device)
-    output = model.synthesise(
-        text_processed["x"],
-        text_processed["x_lengths"],
-        n_timesteps=n_timesteps,
-        spks=spk,
-        voice_mix=voice_mix,
-        length_scale=length_scale,
-    )
+    text_processed = process_text(text, language)
+    with torch.autocast(device_type="cuda"):
+        output = model.synthesise(
+            text_processed["x"],
+            text_processed["x_lengths"],
+            n_timesteps=n_timesteps,
+            spks=spk,
+            voice_mix=voice_mix,
+            length_scale=length_scale,
+        )
     waveform = to_waveform(output["mel"], vocoder)
     return post_process(waveform)
 

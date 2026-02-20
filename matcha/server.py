@@ -1,6 +1,6 @@
 import os
-import subprocess
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Set HuggingFace cache BEFORE any imports that might use it
@@ -8,7 +8,6 @@ cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
 os.environ["HF_HOME"] = str(cache_base / "huggingface")
 
 from parse import parse
-import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -17,8 +16,6 @@ from matcha.inference import load_matcha, load_vocoder, synthesise, convert_to_m
 
 CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 model = None
 vocoder = None
 
@@ -35,11 +32,25 @@ VOICES = [
     {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
 ]
 
-app = FastAPI(title="Matcha-TTS Inference Server")
+MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 500))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global model, vocoder
+    print(f"[🍵] Loading model from {CHECKPOINT_PATH}")
+    model = load_matcha("custom_model", CHECKPOINT_PATH)
+    model.decoder.solver = ODE_SOLVER
+    vocoder = load_vocoder("vocos")
+    print("[🍵] Models loaded successfully")
+    yield
+
+
+app = FastAPI(title="Matcha-TTS Inference Server", lifespan=lifespan)
 
 class InferenceRequest(BaseModel):
     input: str
-    voice: int | str = 0  # Voice ID or Voice Mix in the form of "2(20)+5(80)" meaning 20% of voice 2 mixed with 80% of voice 5 
+    voice: int | str = 0
     response_format: str = "ogg"
     speed: float = 1.0
     steps: int = 15
@@ -52,15 +63,6 @@ def parse_voice_mix(voice_str: str):
     voice2 = parse("{:d}({:d})", parts[1])
     return voice1[0], voice1[1] / 100, voice2[0], voice2[1] / 100
 
-@app.on_event("startup")
-def load_models():
-    global model, vocoder
-    print(f"[🍵] Loading model from {CHECKPOINT_PATH}")
-    model = load_matcha("custom_model", CHECKPOINT_PATH, DEVICE)
-    model.decoder.solver = ODE_SOLVER
-
-    vocoder = load_vocoder("vocos", DEVICE)
-    print("[🍵] Models loaded successfully")
 
 @app.get("/")
 def root():
@@ -72,14 +74,15 @@ def root():
 def get_voices():
     return VOICES
 
+@app.post("/v1/audio/speech")
 @app.post("/api/v1/speak")
 @app.post("/prod/speak/evie")
 @app.post("/test/speak/evie")
-@torch.inference_mode()
 def speak(request: InferenceRequest):
+    if len(request.input) > MAX_TEXT_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Text exceeds {MAX_TEXT_LENGTH} characters")
+
     print(f"[🍵] Request: {request.model_dump()}")
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
 
     if '+' in str(request.voice):
         id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
@@ -103,14 +106,14 @@ def speak(request: InferenceRequest):
     return Response(content=convert_to_opus_ogg(waveform), media_type="audio/ogg")
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
     return {"status": "healthy"}
 
 
 # Run it with python -m matcha.server
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8880, reload=False, workers=3)

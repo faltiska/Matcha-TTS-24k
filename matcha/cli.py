@@ -137,7 +137,6 @@ def cli():
         help="change the speaking rate, a higher value means slower speaking rate (default: 1.0)",
     )
     parser.add_argument("--steps", type=int, default=20, help="Number of ODE steps  (default: 20)")
-    parser.add_argument("--cpu", action="store_true", help="Use CPU for inference (default: use GPU if available)")
     parser.add_argument(
         "--denoiser_strength",
         type=float,
@@ -154,16 +153,14 @@ def cli():
     args = parser.parse_args()
 
     args = validate_args(args)
-    device = get_device(args)
-
     if args.checkpoint_path is not None:
         print(f"[🍵] Loading custom model from {args.checkpoint_path}")
         args.model = "custom_model"
 
-    model = load_matcha(args.model, args.checkpoint_path, device)
+    model = load_matcha(args.model, args.checkpoint_path)
     model.decoder.solver = args.solver
     
-    vocoder = load_vocoder(args.vocoder, device)
+    vocoder = load_vocoder(args.vocoder)
 
     print_config(args, model)
 
@@ -197,15 +194,6 @@ def print_config(args, model):
     print(f"\t- ODE steps: {args.steps}")
     print(f"\t- ODE Solver: {args.solver}")
     print(f"\t- Speaker: {args.spk}")
-
-def get_device(args):
-    if torch.cuda.is_available() and not args.cpu:
-        print("[+] GPU Available! Using GPU")
-        device = torch.device("cuda")
-    else:
-        print("[-] GPU not available or forced CPU run! Using CPU")
-        device = torch.device("cpu")
-    return device
 
 
 if __name__ == "__main__":
