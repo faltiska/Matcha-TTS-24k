@@ -163,18 +163,25 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             mask = torch.bernoulli(torch.full_like(w, variance_probability))
             w = w * (1.0 + mask * torch.rand_like(w) * variance)
 
-        y_lengths = torch.clamp_min(torch.sum(w, [1, 2]), 1).round().long()
+        # Ensure all durations are at least 0.5 to prevent zero-length phonemes after rounding
+        # For example these durations: [1.1, 0.3, 1.8] may result in a cumsum of [1.1, 1.4, 3.2]
+        # which, when rounded up will be [1, 1, 3] meaning the second phoneme will start over the first one
+        w_clamped = torch.clamp_min(w.squeeze(1), 0.5)
+        y_lengths = torch.clamp_min(torch.cumsum(w_clamped, 1).round()[:, -1].long(), 1)
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
 
         # Using obtained durations `w` construct alignment map `attn`
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
-        attn = generate_path(w.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
+        attn = generate_path(w_clamped, attn_mask.squeeze(1)).unsqueeze(1)
 
         # Align encoded text and get mu_y
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
+        # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1)) but I saw different result
+        # Even though the match checks out, the MCD metric is 0.05dB worse with the simplified formula
+
         encoder_outputs = mu_y[:, :, :y_max_length]
 
         # Generate sample tracing the probability flow
@@ -253,11 +260,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
         # Align encoded text with mel-spectrogram and get mu_y segment
-        # Original code was:
-        #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        #   mu_y = mu_y.transpose(1, 2)
-        # but that can be simplified as: 
-        mu_y = torch.matmul(mu_x, attn.squeeze(1))
+        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        mu_y = mu_y.transpose(1, 2)
+        # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Detach mu_y to prevent diffusion gradients from flowing back to the encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. We want the Encoder to learn 
