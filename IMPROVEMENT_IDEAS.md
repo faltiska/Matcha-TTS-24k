@@ -106,6 +106,7 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 ## TODO
 - improve server.py to make it ready for prod
 - add PSR script
+- check why is model compilation not helping in inference
 
 ## Code changes I can consider in the future (not now!)
 Remove app.py

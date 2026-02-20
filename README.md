@@ -130,8 +130,9 @@ Compared to the original MatchaTTS, I did the following:
 - Made some performance improvements to the CPU based monotonic_align implementation
 - Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
   It is fast, but not really faster than the CPU version
-- Found a series of other performance improvements 
-- Made changes to get the model to compile, this is the biggest performance improvement.
+- Found a series of other performance improvements
+- Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
+- Made changes to get the model to compile, but since using the dynamic data loader, it does not help anymore.
 
 # PyTorch stuff
 

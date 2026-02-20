@@ -43,8 +43,6 @@ diffusers # developed using version ==0.25.0
 notebook
 ipywidgets
 gradio
-gdown
-wget
 seaborn
 vocos
 bigvgan

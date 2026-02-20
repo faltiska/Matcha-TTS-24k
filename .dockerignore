@@ -1,0 +1,9 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.git
+.gitignore
+logs/
+!logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt
+tests/
