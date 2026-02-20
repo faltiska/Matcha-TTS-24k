@@ -3,6 +3,8 @@ Adapted from https://github.com/keithito/tacotron
 Convert input text to phonemes at both training and eval time. Based on eSpeak. 
 List of supported languages: English, Spanish, Portuguese, French, German, Italian, Romanian, Japanese, Hebrew
 Only Hiragana or Katakana is supported for Japanese, not Kanji.
+
+Test with: pytest tests/test_phonemizers.py 
 """
 
 import logging
@@ -48,7 +50,8 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 
 def cleanup_text(text):
     text = re.sub('[\"„“”«»]', '', text)
-    text = re.sub(r'\s*[<>()[\]{}—–]\s*', ', ', text)
+    text = re.sub(r'\s*[<>()[\]{}—–…]\s*', ', ', text)
+    text = re.sub(r'^,\s*', '', text)
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.?!])', r'\1', text)
 
