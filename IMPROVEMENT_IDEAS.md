@@ -109,13 +109,9 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 - check why is model compilation not helping in inference
 
 ## Code changes I can consider in the future (not now!)
-Remove app.py
 Do I have to return so much data from inference?
 Use a LR scheduler
-Improve DynamicBatchSampler fix for adding more batches if needed 
-Use OGG or AAC compression instead of mp3
 Train with bigvgan mels (or Try to convert Vocos mels to bigvgan mels)
-See how bigvgan generates mels, maybe we want to do the same
 Take 579 and run a traininig with just Brian speaker embeddings enabled
 
 Ideas from BigVGAN v2:

@@ -1,3 +1,10 @@
+"""
+    Run the DynamicBatchSampler with:
+        python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 37000 32 > output.csv
+        
+    Unit test it with: 
+        python -m pytest tests/test_dynamic_batch_sampler.py -v
+"""
 import random
 import sys
 from pathlib import Path
@@ -59,7 +66,9 @@ class DynamicBatchSampler(Sampler):
         self.distribution_bias = distribution_bias
         self.jitter_factor = jitter_factor
         self.lengths = self._get_lengths()
+        self.length_map = {idx: length for idx, length in self.lengths}
         self.redistribution_spread = 0
+        self.num_batches = None
         self.create_batches()
         if self.num_redistribution_batches > 0:
             print(f"DynamicBatchSampler: {self.num_batches} batches. First {self.num_redistribution_batches} batches were redistributed to the next {self.redistribution_spread}.", file=sys.stderr)
@@ -102,7 +111,7 @@ class DynamicBatchSampler(Sampler):
         
         return sorted_lengths
     
-    def create_batches(self, required_num_batches=None):
+    def create_batches(self):
         """Group samples into dynamic batches from provided lengths list."""
         sorted_lengths = self._jittered_sort(self.lengths)
         
@@ -129,16 +138,37 @@ class DynamicBatchSampler(Sampler):
             self._redistribute_short_samples()
         
         self._enforce_max_frames()
+
+        # We need to ensure we have the exact same number of batches promised to Lightning
+        self.dropped_samples = []
+        if self.num_batches is not None:
+            # Create more batches if we don't have enough.
+            # Build each new batch by stealing one sample from random donors until max_frames is reached,
+            # mixing samples from different length ranges to increase training randomness.
+            while len(self.batches) < self.num_batches:
+                new_batch = self._steal_samples_from_other_batches()
+                self.batches.append(new_batch)
+            # Drop some batches if we have too many.        
+            # We randomly pick the batches to drop, so we again increase the randomness.
+            while len(self.batches) > self.num_batches:
+                drop = random.randrange(len(self.batches))
+                self.dropped_samples.extend(self.batches.pop(drop))
+
         self.num_batches = len(self.batches)
 
-        # Split batches if we need more
-        if required_num_batches:
-            while self.num_batches < required_num_batches:
-                batch = self.batches[-1]
-                mid = len(batch) // 2
-                self.batches[-1] = batch[:mid]
-                self.batches.append(batch[mid:])
-                self.num_batches = self.num_batches + 1
+    def _steal_samples_from_other_batches(self):
+        """Build a new batch by stealing one sample from random donors, respecting max_frames."""
+        new_batch = []
+        new_max_len = 0
+        for donor in random.sample(range(len(self.batches)), len(self.batches)):
+            if len(self.batches[donor]) > 1:
+                candidate = self.batches[donor][random.randrange(len(self.batches[donor]))]
+                candidate_max = max(new_max_len, self.length_map[candidate])
+                if candidate_max * (len(new_batch) + 1) <= self.max_frames:
+                    self.batches[donor].remove(candidate)
+                    new_batch.append(candidate)
+                    new_max_len = candidate_max
+        return new_batch
 
     def _redistribute_short_samples(self):
         # Skip if not enough batches
@@ -188,12 +218,10 @@ class DynamicBatchSampler(Sampler):
         Enforce max_frames constraint by moving overflow samples to next batch.
         It also takes the opportunity to shuffle the samples around, to avoid overfitting.
         """
-        length_map = {idx: length for idx, length in self.lengths}
-        
         i = 0
         while i < len(self.batches):
             batch = self.batches[i]
-            sample_lengths = [length_map[idx] for idx in batch]
+            sample_lengths = [self.length_map[idx] for idx in batch]
             max_len = max(sample_lengths)
             total_frames = max_len * len(batch)
             
@@ -215,14 +243,10 @@ class DynamicBatchSampler(Sampler):
             i += 1
     
     def __iter__(self):
-        try:
-            random.shuffle(self.batches)
-            for batch in self.batches:
-                random.shuffle(batch)
-                yield batch
-        except Exception as e:
-            print(f"\nERROR in DynamicBatchSampler.__iter__(): {e}", file=sys.stderr)
-            raise
+        random.shuffle(self.batches)
+        for batch in self.batches:
+            random.shuffle(batch)
+            yield batch
     
     def __len__(self):
         return self.num_batches
@@ -551,7 +575,6 @@ if __name__ == "__main__":
     if len(sys.argv) < 4:
         print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> <batch_size> > output.csv")
         print("Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 32 > output.csv")
-        print("Unit test it with: python -m pytest tests/test_dynamic_batch_sampler.py -v")
         sys.exit(1)
     
     class MockDataset:
@@ -628,9 +651,9 @@ if __name__ == "__main__":
         print(f"{batch_idx},{len(batch)},{min_len},{max_len},{batch_total_frames},{batch_actual_frames},{padding_pct:.2f}")
     
     avg_batch_size = sum(batch_sizes) / len(batch_sizes)
-    min_batch_size = min(batch_sizes)
+    max_batch_size = max(batch_sizes)
     dynamic_waste = 100*total_wasted/total_frames
-    print(f"\nDynamic sampler: Num batches: {batch_count}, Avg batch size: {avg_batch_size:.1f}, Min batch size: {min_batch_size}, Padding frames: {total_wasted:,} ({dynamic_waste:.2f}%)", file=sys.stderr)
+    print(f"\nDynamic sampler: Num batches: {batch_count}, Avg batch size: {avg_batch_size:.1f}, Max batch size: {max_batch_size}, Padding frames: {total_wasted:,} ({dynamic_waste:.2f}%)", file=sys.stderr)
     print(f"Default sampler: Num batches: {default_num_batches}, Max batch frames: {default_max_frames:,}, Padding frames: {default_total_wasted:,} ({default_sampler_waste:.2f}%)", file=sys.stderr)
     
     # Compute pairwise co-occurrence across 10 epochs to measure batch diversity
