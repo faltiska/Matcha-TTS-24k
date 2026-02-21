@@ -3,6 +3,11 @@ import json
 import bigvgan
 from huggingface_hub import hf_hub_download
 
+"""
+Wrapper for nVidia's BigVGAN V2 
+https://huggingface.co/nvidia/bigvgan_v2_24khz_100band_256x
+"""
+
 # BigVGAN expects a namespace/object for hyperparameters
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
