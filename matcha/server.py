@@ -12,9 +12,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from matcha.inference import load_matcha, load_vocoder, synthesise, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-20_15-02-47/checkpoints/saved/checkpoint_epoch=329.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
     model = load_matcha("custom_model", CHECKPOINT_PATH)
     model.decoder.solver = ODE_SOLVER
     vocoder = load_vocoder("vocos")
+    print("[🍵] Triggering model compilation...")
+    for _ in range(3):
+        pipeline(model, vocoder, "Warming up.", "en-us")
     print("[🍵] Models loaded successfully")
     yield
 
@@ -96,7 +99,7 @@ def speak(request: InferenceRequest):
         spk = voice_id
 
     t = time.perf_counter()
-    waveform = synthesise(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
+    waveform = pipeline(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
@@ -116,4 +119,4 @@ async def health_check():
 # Run it with python -m matcha.server
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8880, reload=False, workers=3)
+    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8000, reload=False, workers=1)

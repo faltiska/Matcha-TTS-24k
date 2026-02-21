@@ -66,21 +66,6 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     model.sample_rate = cfg.data.sample_rate
     model.hop_length = cfg.data.hop_length
 
-    # Compile model for faster training if enabled
-    if cfg.get("compile"):
-        log.info("Compiling the model.")
-        
-        # Avoids some recompilation
-        torch._dynamo.config.allow_unspec_int_on_nn_module = True
-
-        logging.getLogger('torch._dynamo').setLevel(logging.ERROR)
-        logging.getLogger("torch._inductor.lowering").setLevel(logging.ERROR)
-        logging.getLogger('torch._inductor').setLevel(logging.ERROR)
-
-        # export TORCH_LOGS="recompiles" to see recompilation reasons
-        # Don't compile the entire model, because it is a Lightning module
-        model.forward = torch.compile(model.forward)
-
     log.info("Instantiating callbacks...")
     callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))
 

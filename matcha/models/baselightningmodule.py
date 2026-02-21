@@ -102,9 +102,6 @@ class BaseLightningClass(LightningModule, ABC):
                 log.error(f"Batch count changed from {old_len} to {new_len} at epoch {self.current_epoch}, this will cause Lightning to stop running validation.")
 
     def training_step(self, batch: Any, batch_idx: int):
-        # avoids repeated recompilation of the model caused by changing parameter sizes.
-        torch._dynamo.mark_dynamic(batch["x"], 1)
-
         diff_loss, dur_loss, prior_loss = self.get_losses(batch)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
@@ -134,54 +131,6 @@ class BaseLightningClass(LightningModule, ABC):
         self.log_dict(metrics, on_step=True, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss
-
-    def on_validation_end(self) -> None:
-        if not self.hparams.plot_mel_on_validation_end:
-            return
-        
-        if self.trainer.is_global_zero:
-            one_batch = next(iter(self.trainer.val_dataloaders))
-            if self.current_epoch == 0:
-                log.debug("Plotting original samples")
-                for i in range(2):
-                    y = one_batch["y"][i].unsqueeze(0).to(self.device)
-                    self.logger.experiment.add_image(
-                        f"original/{i}",
-                        plot_tensor(y.squeeze().cpu()),
-                        self.current_epoch,
-                        dataformats="HWC",
-                    )
-            
-            log.debug("Synthesising...")
-            for i in range(2):
-                x = one_batch["x"][i].unsqueeze(0).to(self.device)
-                x_lengths = one_batch["x_lengths"][i].unsqueeze(0).to(self.device)
-                spks = one_batch["spks"][i].unsqueeze(0).to(self.device) if one_batch["spks"] is not None else None
-                output = self.synthesise(x[:, :x_lengths], x_lengths, n_timesteps=10, spks=spks)
-                y_enc, y_dec = output["encoder_outputs"], output["decoder_outputs"]
-                attn = output["attn"]
-                self.logger.experiment.add_image(
-                    f"generated_enc/{i}",
-                    plot_tensor(y_enc.squeeze().cpu()),
-                    self.current_epoch,
-                    dataformats="HWC",
-                )
-                self.logger.experiment.add_image(
-                    f"generated_dec/{i}",
-                    plot_tensor(y_dec.squeeze().cpu()),
-                    self.current_epoch,
-                    dataformats="HWC",
-                )
-                self.logger.experiment.add_image(
-                    f"alignment/{i}",
-                    plot_tensor(attn.squeeze().cpu()),
-                    self.current_epoch,
-                    dataformats="HWC",
-                )
-          
-        # I noticed VRAM usage suddenly increased, could not explain it
-        # so I thought I would clean it up periodically
-        torch.cuda.empty_cache()
 
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)

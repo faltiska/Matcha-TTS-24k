@@ -103,10 +103,6 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 | **MOS (UTMOS)** | Naturalness        | Absolute (No Ref)  | > 4.0                         |
 | **SEC**         | Speaker Similarity | Reference Speaker  | > 0.8 (Cosine Sim)            |
 
-## TODO
-- improve server.py to make it ready for prod
-- add PSR script
-- check why is model compilation not helping in inference
 
 ## Code changes I can consider in the future (not now!)
 Do I have to return so much data from inference?

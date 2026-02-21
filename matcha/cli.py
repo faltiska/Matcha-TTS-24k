@@ -10,7 +10,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, synthesise, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
 VOCODERS = { "vocos", "bigvgan" }
 
@@ -100,7 +100,6 @@ def validate_args_for_single_speaker_model(args):
     return args
 
 
-@torch.inference_mode()
 def cli():
     parser = argparse.ArgumentParser(
         description=" 🍵 Matcha-TTS: A fast TTS architecture with conditional flow matching"
@@ -174,7 +173,7 @@ def speak(args, model, vocoder, text, spk_id=0):
     print("".join(["="] * 100))
 
     t = time.perf_counter()
-    waveform = synthesise(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
+    waveform = pipeline(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     rtf = elapsed / audio_duration
