@@ -125,11 +125,14 @@ class MatchaTTSInfer(nn.Module):
         # But generate_path can handle fractional durations so I can pass w as is.
         w = torch.exp(logw) * x_mask * length_scale
 
+        # Nudge short phonemes durations up, leaving longer ones mostly unaffected (no effect beyond ~4 frames)
+        w = w * (1.0 + 0.3 * torch.exp(-w))
+
         # Randomly chooses a set of phonemes (variance_probability say how many),
         # and increases their length by a factor up to variance.
         if variance > 0.0:
             mask = torch.bernoulli(torch.full_like(w, variance_probability))
-            w = w * (1.0 + mask * torch.rand_like(w) * variance)
+            w = w * (1.0 + mask * (torch.rand_like(w) * 2.0 - 1.0) * variance)
 
         # Ensure all durations are at least 0.5 to prevent zero-length phonemes after rounding
         # For example these durations: [1.1, 0.3, 1.8] may result in a cumsum of [1.1, 1.4, 3.2]
@@ -148,7 +151,7 @@ class MatchaTTSInfer(nn.Module):
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         mu_y = mu_y.transpose(1, 2)
         # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1)) but I saw different results.
-        # Even though the match checks out, the MCD metric is 0.05dB worse with the simplified formula.
+        # Even though the math checks out, the MCD metric is 0.05dB worse with the simplified formula.
 
         # Generate sample tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)
@@ -165,7 +168,7 @@ def load_matcha(model_name, checkpoint_path):
     model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(ckpt["state_dict"], strict=False)
     model.eval()
-    model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
+    # model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
     print(f"[+] {model_name} loaded!")
     return model
 
