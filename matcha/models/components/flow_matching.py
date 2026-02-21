@@ -46,12 +46,12 @@ class BASECFM(torch.nn.Module, ABC):
                 shape: (batch_size, n_feats, mel_timesteps)
         """
 
-        # Set seed for reproducible synthesis; without this, the voice sounds different with each synthesis call 
-        # but not in a good way, even the timbre will be different, as if it's a different person.
-        # I cannot reproduce that anymore, even without the seed, maybe I was imagining it?
-        torch.cuda.manual_seed(42)
-        
-        z = torch.randn_like(mu)
+
+        # Set seed for reproducible synthesis; without this, the voice sounds slightly different 
+        #  with each synthesis call so MCD metrics are not reliable.
+        generator = torch.Generator(device=mu.device)
+        generator.manual_seed(42)
+        z = torch.randn_like(mu, generator=generator)        
         
         t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
         return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks)

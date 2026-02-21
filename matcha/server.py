@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-20_15-02-47/checkpoints/saved/checkpoint_epoch=329.ckpt"
+CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-20_15-02-47/checkpoints/saved/checkpoint_epoch=309.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -32,7 +32,7 @@ VOICES = [
     {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
 ]
 
-MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 500))
+MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 2000))
 
 
 @asynccontextmanager
@@ -81,8 +81,9 @@ def get_voices():
 @app.post("/api/v1/speak")
 @app.post("/prod/speak/evie")
 @app.post("/test/speak/evie")
-def speak(request: InferenceRequest):
+async def speak(request: InferenceRequest):
     if len(request.input) > MAX_TEXT_LENGTH:
+        print(f"[🍵] ERROR: Text exceeds {MAX_TEXT_LENGTH} characters.")
         raise HTTPException(status_code=400, detail=f"Text exceeds {MAX_TEXT_LENGTH} characters")
 
     print(f"[🍵] Request: {request.model_dump()}")
@@ -112,11 +113,12 @@ def speak(request: InferenceRequest):
 @app.get("/health")
 async def health_check():
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        print(f"[🍵] INFO: Model not loaded yet.")
+        raise HTTPException(status_code=503, detail="Model not loaded yet.")
     return {"status": "healthy"}
 
 
 # Run it with python -m matcha.server
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8000, reload=False, workers=1)
+    uvicorn.run("matcha.server:app", host="0.0.0.0", port=8000, reload=False)
