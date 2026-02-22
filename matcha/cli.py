@@ -14,6 +14,19 @@ from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3
 
 VOCODERS = { "vocos", "bigvgan" }
 
+VOICES = [
+    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
+    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
+    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
+    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
+    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
+    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
+    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
+    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
+    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
+    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
+]
+
 def save_to_folder(filename: str, waveform: dict, folder: str):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
@@ -121,7 +134,6 @@ def cli():
     )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
-    parser.add_argument("--language", type=str, required=True, help="Language code (e.g., en-us, en-gb, ro)")
     parser.add_argument("--spk", type=str, default=None, help="Speaker ID or comma-separated list (e.g., 0 or 0,1,2)")
     parser.add_argument(
         "--solver",
@@ -173,7 +185,8 @@ def speak(args, model, vocoder, text, spk_id=0):
     print("".join(["="] * 100))
 
     t = time.perf_counter()
-    waveform = pipeline(model, vocoder, text.strip(), args.language, spk_id or 0, None, args.steps, args.speaking_rate)
+    language = next((v["lang"] for v in VOICES if v["id"] == str(spk_id)), "en-us")
+    waveform = pipeline(model, vocoder, text.strip(), language, spk_id or 0, None, args.steps, args.speaking_rate)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     rtf = elapsed / audio_duration
