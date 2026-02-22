@@ -59,8 +59,18 @@ def freeze_model_except_target_speaker(model, target_speaker):
         mask = torch.zeros_like(grad)
         mask[target_speaker] = 1.0
         return grad * mask
-    
+
     model.spk_emb.weight.register_hook(mask_speaker_gradients)
+
+    original_on_load_checkpoint = model.on_load_checkpoint
+    def on_load_checkpoint(self, checkpoint):
+        original_on_load_checkpoint(checkpoint)
+        self.spk_emb.weight.register_hook(mask_speaker_gradients)
+    model.on_load_checkpoint = types.MethodType(on_load_checkpoint, model)
+
+    def configure_optimizers(self):
+        return self.hparams.optimizer(params=[self.spk_emb.weight])
+    model.configure_optimizers = types.MethodType(configure_optimizers, model)
 
 
 @utils.task_wrapper
@@ -68,7 +78,7 @@ def finetune(cfg: DictConfig):
     # Required overrides
     if not cfg.get("ckpt_path"):
         raise ValueError("Must specify ckpt_path in train.yaml")
-    if not cfg.get("target_speaker") and cfg.get("target_speaker") != 0:
+    if cfg.get("target_speaker") is None:
         raise ValueError("Must specify +target_speaker=<speaker_id>")
     
     if cfg.get("seed"):
@@ -76,6 +86,14 @@ def finetune(cfg: DictConfig):
     
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule = hydra.utils.instantiate(cfg.data)
+
+    original_setup = datamodule.setup
+    def setup(stage=None):
+        original_setup(stage)
+        spk = str(cfg.target_speaker)
+        datamodule.trainset.filepaths_and_text = [r for r in datamodule.trainset.filepaths_and_text if r[1] == spk]
+        datamodule.validset.filepaths_and_text = [r for r in datamodule.validset.filepaths_and_text if r[1] == spk]
+    datamodule.setup = setup
     
     log.info(f"Instantiating model <{cfg.model._target_}>")
     model = hydra.utils.instantiate(cfg.model)
@@ -120,7 +138,7 @@ def finetune(cfg: DictConfig):
         utils.log_hyperparameters(object_dict)
     
     log.info(f"Fine-tuning speaker {cfg.target_speaker}")
-    trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path, weights_only=False)
+    trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
     
     # Verify frozen weights didn't change
     encoder_unchanged = torch.equal(encoder_fingerprint, next(model.encoder.parameters()))

@@ -103,13 +103,19 @@ See how much audio you have in the corpus:
 ```
 python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
 ```
-### Fine tune a speaker or add a new one:
+### Fine-tune an existing speaker:
+Uses the full corpus yaml, filters to that speaker
 ```
-python -m matcha.finetune_speaker \
-    +new_speaker_train_csv=data/new_speaker/train.csv \
-    +new_speaker_val_csv=data/new_speaker/val.csv \
-    +new_speaker_id=10
+python -m matcha.finetune_speaker +target_speaker=3
 ```
+ckpt_path is read from train.yaml (or your experiment override).
+
+### Add a new speaker:
+Point to a single-speaker corpus yaml, set n_spks to the new total
+```
+python -m matcha.finetune_speaker +target_speaker=10 data=my-new-speaker data.n_spks=11
+```
+Where configs/data/my-new-speaker.yaml has the new speaker's train/validate CSVs.
 
 ## Improvements
 
@@ -132,7 +138,8 @@ Compared to the original MatchaTTS, I did the following:
   It is fast, but not really faster than the CPU version
 - Found a series of other performance improvements
 - Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
-- Made changes to get the model to compile, but since using the dynamic data loader, it does not help anymore.
+- Made changes to get the model to compile ofr training, but since using the dynamic data loader, it does not help
+- Made changes to get the model to compile for inference, it improves synthesis time 3x
 
 # PyTorch stuff
 
