@@ -162,7 +162,7 @@ def main():
     hop_length = int(cfg["hop_length"])
     win_length = int(cfg["win_length"])
     f_min = float(cfg["f_min"])
-    f_max = float(cfg["f_max"])
+    f_max = float(cfg["f_max"]) if cfg.get("f_max") is not None else None
     mel_mean = float(data_stats["mel_mean"])
     mel_std = float(data_stats["mel_std"])
 

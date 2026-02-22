@@ -1,42 +1,6 @@
 from typing import Callable, Optional
 
 import torch
-import torchaudio
-
-def _vocos_mel_factory(
-    sample_rate: int = 24000,
-    n_fft: int = 1024,
-    hop_length: int = 256,
-    win_length: int = 1024,
-    n_mels: int = 100,
-    log_eps: float = 1e-7,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """
-    Create a mel extractor matching Vocos-24k training:
-    - torchaudio MelSpectrogram with center=True, power=1 (magnitude), mel_scale='htk', norm=None
-    - Natural log with eps=1e-7
-    """
-    mel_spec = torchaudio.transforms.MelSpectrogram(
-        sample_rate=sample_rate,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        win_length=win_length,
-        n_mels=n_mels,
-        center=True,
-        power=1,
-        # mel_scale default is 'htk' for Vocos (see upstream); torchaudio default is 'htk' in recent versions
-        mel_scale="htk",
-        norm=None,
-    )
-
-    def extract_fn(y: torch.Tensor) -> torch.Tensor:
-        # y: [B, T] or [1, T]
-        device = y.device
-        mel = mel_spec.to(device)(y)
-        mel = torch.log(torch.clamp(mel, min=log_eps))
-        return mel
-
-    return extract_fn
 
 
 def get_mel_extractor(
@@ -50,25 +14,20 @@ def get_mel_extractor(
     f_min: Optional[float] = None,
     f_max: Optional[float] = None,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
-    """
-    Factory to obtain a mel spectrogram extractor callable consistent with the chosen backend.
-
-    Args:
-        backend: "vocos" or "bigvgan"
-        Other params override sensible defaults for each backend if provided.
-
-    Returns:
-        Callable that maps waveform tensor [B, T] -> mel [B, n_mels, Frames]
-    """
     b = (backend or "vocos").lower()
-
+    kwargs = dict(
+        sample_rate=sample_rate,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        win_length=win_length,
+        n_mels=n_mels,
+        f_min=f_min,
+        f_max=f_max,
+    )
     if b == "vocos":
-        return _vocos_mel_factory(
-            sample_rate=sample_rate or 24000,
-            n_fft=n_fft or 1024,
-            hop_length=hop_length or 256,
-            win_length=win_length or 1024,
-            n_mels=n_mels or 100,
-            log_eps=1e-7,
-        )
+        from matcha.vocos24k.mel_extractor import get_mel_extractor as _ext
+        return _ext(**kwargs)
+    if b == "bigvgan":
+        from matcha.bigvgan24k.mel_extractor import get_mel_extractor as _ext
+        return _ext(**kwargs)
     raise ValueError(f"Unknown mel backend: '{backend}'. Supported: 'vocos', 'bigvgan'")
