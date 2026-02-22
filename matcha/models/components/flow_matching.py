@@ -99,7 +99,6 @@ class BASECFM(torch.nn.Module, ABC):
         # Loss with padding: 1.355872
         # Loss properly masked: 0.052236
         # original_loss = F.mse_loss(pred, u, reduction="sum") / (torch.sum(mask) * u.shape[1])
-
         # Applying the mask to both the prediction and the target, ensures the loss is based only
         # on the actual speech frames and the padding does not contribute to the loss:
         loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
