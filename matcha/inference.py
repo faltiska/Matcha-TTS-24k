@@ -3,6 +3,7 @@ import time
 import lameenc
 import torch
 import torch.nn as nn
+import torch.nn.functional as functional
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
@@ -12,12 +13,6 @@ from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 import av
 import numpy as np
-
-import logging
-logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
-logging.getLogger("torch._inductor").setLevel(logging.ERROR)
-logging.getLogger("torch.utils._sympy.interp").setLevel(logging.ERROR)
-torch._inductor.config.fx_graph_cache = True
 
 SAMPLE_RATE = 24000
 HOP_LENGTH = 256
@@ -68,7 +63,7 @@ class MatchaTTSInfer(nn.Module):
 
         return mixed_emb
 
-    def synthesise(self, x, x_lengths, n_timesteps, spks=0, voice_mix=None, length_scale=1.0, variance=0.0, variance_probability=0.0):
+    def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -81,10 +76,10 @@ class MatchaTTSInfer(nn.Module):
             x_lengths (torch.Tensor): lengths of texts in batch.
                 shape: (batch_size,)
             n_timesteps (int): number of steps to use for reverse diffusion in decoder.
-            spks (int, optional): speaker id (default: 0).
+            speaker (int, optional): speaker id (default: 0).
             voice_mix (list, optional): List of (speaker_id, weight) tuples for mixing speakers.
                 Example: [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
-                If provided, spks parameter is ignored.
+                If provided, speaker parameter is ignored.
             length_scale (float, optional): controls speech pace.
                 Increase value to slow down generated speech and vice versa.
 
@@ -107,14 +102,14 @@ class MatchaTTSInfer(nn.Module):
 
         if self.n_spks > 1:
             if voice_mix is not None:
-                spks = self.mix_speakers(voice_mix)
+                speaker = self.mix_speakers(voice_mix)
             else:
                 device = next(self.parameters()).device
-                spks = torch.tensor([spks], device=device, dtype=torch.long)
-                spks = self.spk_emb(spks)
+                speaker = torch.tensor([speaker], device=device, dtype=torch.long)
+                speaker = self.spk_emb(speaker)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker)
 
         # Original code was:
         #  w = torch.exp(logw) * x_mask
@@ -123,29 +118,28 @@ class MatchaTTSInfer(nn.Module):
         # I think torch.ceil() that was rounding up each phoneme duration,
         # causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
-        w = torch.exp(logw) * x_mask * length_scale
+        phoneme_durations = torch.exp(logw) * x_mask * length_scale
 
         # Nudge short phonemes durations up, leaving longer ones mostly unaffected (no effect beyond ~4 frames)
-        w = w * (1.0 + 0.3 * torch.exp(-w))
+        phoneme_durations = phoneme_durations * (1.0 + 0.3 * torch.exp(-phoneme_durations))
 
-        # Randomly chooses a set of phonemes (variance_probability say how many),
-        # and increases their length by a factor up to variance.
-        if variance > 0.0:
-            mask = torch.bernoulli(torch.full_like(w, variance_probability))
-            w = w * (1.0 + mask * (torch.rand_like(w) * 2.0 - 1.0) * variance)
-
-        # Ensure all durations are at least 0.5 to prevent zero-length phonemes after rounding
-        # For example these durations: [1.1, 0.3, 1.8] may result in a cumsum of [1.1, 1.4, 3.2]
-        # which, when rounded up will be [1, 1, 3] meaning the second phoneme will start over the first one
-        w_clamped = torch.clamp_min(w.squeeze(1), 0.5)
-        y_lengths = torch.clamp_min(torch.cumsum(w_clamped, 1).round()[:, -1].long(), 1)
+        # Round phoneme positions to avoid collisions (2 phonemes starting on the same position).
+        # E.g. durations [1.5, 0.5, 1.5] -> cumsum [1.5, 2.0, 3.5] -> round [2, 2, 4].
+        # Enforce strictly monotonic integer positions, then derive integer durations from them.
+        phoneme_positions = torch.cumsum(phoneme_durations.squeeze(1), 1).round()
+        num_phonemes = phoneme_positions.size(1) + 1
+        indices = torch.arange(1, num_phonemes, device=phoneme_durations.device)
+        phoneme_positions = torch.maximum(phoneme_positions, indices.unsqueeze(0))
+        phoneme_durations = phoneme_positions - functional.pad(phoneme_positions, (1, 0))[:, :-1]
+        
+        y_lengths = torch.clamp_min(phoneme_positions[:, -1].long(), 1)
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
 
         # Using obtained durations `w` construct alignment map `attn`
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
-        attn = generate_path(w_clamped, attn_mask.squeeze(1)).unsqueeze(1)
+        attn = generate_path(phoneme_durations, attn_mask.squeeze(1)).unsqueeze(1)
 
         # Align encoded text and get mu_y
         mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
@@ -153,8 +147,8 @@ class MatchaTTSInfer(nn.Module):
         # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1)) but I saw different results.
         # Even though the math checks out, the MCD metric is 0.05dB worse with the simplified formula.
 
-        # Generate sample tracing the probability flow
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks)
+        # Generate speech tracing the probability flow
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=speaker)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         return denormalize(decoder_outputs, self.mel_mean, self.mel_std)
@@ -168,7 +162,6 @@ def load_matcha(model_name, checkpoint_path):
     model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(ckpt["state_dict"], strict=False)
     model.eval()
-    # model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
     print(f"[+] {model_name} loaded!")
     return model
 
@@ -197,18 +190,16 @@ def load_vocoder(vocoder_name):
 
 
 @torch.inference_mode()
-def pipeline(model, vocoder, text, language, spk=0, voice_mix=None, n_timesteps=15, length_scale=1.0, variance=0.0, variance_probability=0.0):
+def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, length_scale=1.0):
     text_processed = process_text(text, language)
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(
             text_processed["x"],
             text_processed["x_lengths"],
             n_timesteps=n_timesteps,
-            spks=spk,
+            speaker=speaker,
             voice_mix=voice_mix,
             length_scale=length_scale,
-            variance=variance,
-            variance_probability=variance_probability
         )
     waveform = to_waveform(output, vocoder)
     return post_process(waveform)

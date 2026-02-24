@@ -180,13 +180,13 @@ def cli():
         speak(args, model, vocoder, args.text, spk_id)
 
 
-def speak(args, model, vocoder, text, spk_id=0):
-    base_name = f"speaker_{spk_id:03d}"
+def speak(args, model, vocoder, text, speaker=0):
+    base_name = f"speaker_{speaker:03d}"
     print("".join(["="] * 100))
 
     t = time.perf_counter()
-    language = next((v["lang"] for v in VOICES if v["id"] == str(spk_id)), "en-us")
-    waveform = pipeline(model, vocoder, text.strip(), language, spk_id or 0, None, args.steps, args.speaking_rate)
+    language = next((v["lang"] for v in VOICES if v["id"] == str(speaker)), "en-us")
+    waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     rtf = elapsed / audio_duration

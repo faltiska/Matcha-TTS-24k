@@ -20,25 +20,23 @@ def fix_len_compatibility(length, num_downsamplings_in_unet=2):
         return length
 
 
-def convert_pad_shape(pad_shape):
-    inverted_shape = pad_shape[::-1]
-    pad_shape = [item for sublist in inverted_shape for item in sublist]
-    return pad_shape
-
-
 def generate_path(duration, mask):
+    """
+    Build an attention path from phoneme durations.
+
+    Args:
+        duration: (batch, t_x) phoneme durations. Must be natural numbers.
+        mask: (batch, t_x, t_y) attention mask.
+    Returns:
+        path: (batch, t_x, t_y) binary alignment map.
+    """
     b, t_x, t_y = mask.shape
-
-    # Duration could have fractional numbers during inference, because there's an exp(duration) there.
-    # During training, It will only have integers, because they are coming from MAS.
-    cum_duration = torch.cumsum(duration, 1).round()
-
+    cum_duration = torch.cumsum(duration.long(), 1)
     cum_duration_flat = cum_duration.view(b * t_x)
     path = sequence_mask(cum_duration_flat, t_y).to(mask.dtype)
     path = path.view(b, t_x, t_y)
-    path = path - torch.nn.functional.pad(path, convert_pad_shape([[0, 0], [1, 0], [0, 0]]))[:, :-1]
-    path = path * mask
-    return path
+    path = path - torch.nn.functional.pad(path, [0, 0, 1, 0, 0, 0])[:, :-1]
+    return path * mask
 
 
 def duration_loss(logw, logw_, lengths):

@@ -12,9 +12,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+import logging
+logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
+logging.getLogger("torch._inductor").setLevel(logging.ERROR)
+logging.getLogger("torch.utils._sympy.interp").setLevel(logging.ERROR)
+
+import torch
+torch._inductor.config.fx_graph_cache = True
+
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/runs/2026-02-20_15-02-47/checkpoints/saved/checkpoint_epoch=309.ckpt"
+CHECKPOINT_PATH = "averaged.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -38,14 +46,15 @@ MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 2000))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model, vocoder
-    print(f"[🍵] Loading model from {CHECKPOINT_PATH}")
+    print(f"[🍵] Loading model from {CHECKPOINT_PATH}...")
     model = load_matcha("custom_model", CHECKPOINT_PATH)
     model.decoder.solver = ODE_SOLVER
     vocoder = load_vocoder("vocos")
-    print("[🍵] Triggering model compilation...")
+    print("[🍵] Compiling the model...")
+    model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
     for _ in range(3):
         pipeline(model, vocoder, "Warming up.", "en-us")
-    print("[🍵] Models loaded successfully")
+    print("[🍵] Model loaded.")
     yield
 
 
@@ -92,15 +101,15 @@ async def speak(request: InferenceRequest):
         id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
         language = VOICES[id1]["lang"]
         voice_mix = [(id1, weight1), (id2, weight2)]
-        spk = 0
+        speaker = 0
     else:
         voice_id = int(request.voice)
         language = VOICES[voice_id]["lang"]
         voice_mix = None
-        spk = voice_id
+        speaker = voice_id
 
     t = time.perf_counter()
-    waveform = pipeline(model, vocoder, request.input.strip(), language, spk, voice_mix, request.steps, request.speed)
+    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, request.speed)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
