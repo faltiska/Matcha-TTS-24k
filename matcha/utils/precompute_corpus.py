@@ -197,8 +197,9 @@ def main():
             rel_and_abs_wavs.append((rel_base, wav_path))
 
     total = len(rel_and_abs_wavs)
-    ok = 0
-    failures = []
+    processed = 0
+    existing = 0
+    failed = []
 
     mel_dir.mkdir(parents=True, exist_ok=True)
     print(f"[precompute_corpus] Config: {cfg_path}")
@@ -208,6 +209,10 @@ def main():
     for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
         # rel_base is like "1/abc"
         out_path = mel_dir / (rel_base + ".npy")
+        if out_path.exists():
+            existing += 1
+            print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
+            continue
         success, msg, mel_length = compute_and_save_mel(
             wav_path=wav_path,
             out_path=out_path,
@@ -217,11 +222,11 @@ def main():
             mel_extractor=mel_extractor,  # Pass backend-agnostic extractor
         )
         if success:
-            ok += 1
+            processed += 1
             print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
         else:
             print(f"[precompute_corpus] ERROR: {msg}")
-            failures.append((str(wav_path), msg))
+            failed.append((str(wav_path), msg))
 
     # Write metadata for traceability
     meta = {
@@ -246,19 +251,19 @@ def main():
         "mel_mean": mel_mean,
         "mel_std": mel_std,
         "num_files": total,
-        "num_ok": ok,
-        "num_fail": len(failures),
+        "num_ok": processed,
+        "num_fail": len(failed),
         "filelists": [str(train_filelist), str(valid_filelist)],
     }
     with open(mel_dir / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
-    if failures:
+    if failed:
         with open(mel_dir / "failures.txt", "w", encoding="utf-8") as f:
-            for wav_path, msg in failures:
+            for wav_path, msg in failed:
                 f.write(f"{wav_path}\t{msg}\n")
 
-    print(f"\n[precompute_corpus] Finished. ok={ok}, fail={len(failures)}.\nMetadata at {mel_dir/'metadata.json'}")
+    print(f"\n[precompute_corpus] Finished. processed={processed}, existing={existing}, failed={len(failed)}.\nMetadata at {mel_dir/'metadata.json'}")
 
 
 if __name__ == "__main__":
