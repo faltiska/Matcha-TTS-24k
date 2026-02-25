@@ -1,59 +1,99 @@
-# Timestep Weighting for Flow Matching Loss
+# Bug flagged by Gemini
+I didn't spend a log if time on this, but Gemini thinks there's a bug in this code from flow_matching.py
+```
+y = (1 - (1 - self.sigma_min) * t) * z + t * x1
+```
 
-## Motivation
+# Log sub-losses per speaker per epoch.
 
-Helps the model focus on getting the final refinement steps right, where perceptual quality matters most.
+And don't log losses per step anymore, I never look at those.
 
-Think about the generation process from t=0 to t=1:
-* **t=0**: Pure noise - the "canvas" can be rough
-* **t=0.5**: Getting structure - phonemes emerging, rough spectral shape
-* **t=1**: Final output - every detail matters for perceptual quality
+# CFM / Diffusion improvement 
 
-The final 10% of the journey (t=0.9→1.0) has disproportionate impact on what the listener hears, 
-but with uniform sampling, you spend equal training effort on all timesteps.
+## 1. The "Beta" Schedule (Shifted Sampling)
 
-## Weighting Strategies
+Instead of weighting the loss (which keeps the gradients the same but scales them), try changing **which** timesteps the model sees more often.
+In mel-spectrogram generation, the model often struggles with the fine details that emerge near.
+Instead of `torch.rand`, sample  from a **Beta distribution**.
+This forces the model to spend more "brain power" on the complex parts of the trajectory.
 
-### Linear (t)
-* Gentle, safe starting point
-* 2x more weight at t=1 vs t=0
-* Good for initial experiments
-* Formula: `loss = t * ||v_pred - v_target||²`
+```
+# Instead of t = torch.rand(...)
+# alpha > 1 shifts sampling towards t=1 (the target)
+# alpha=1.5 or 2.0 is a good starting point
+dist = torch.distributions.Beta(1.5, 1.0) 
+t = dist.sample([b, 1, 1]).to(mu.device)
+```
 
-### Quadratic (t²)
-* Stronger emphasis on final steps
-* 10x more weight at t=1 vs t=0.3
-* Strong enough to matter, not so strong it destabilizes training
-* Used successfully in recent diffusion TTS papers
-* Formula: `loss = t² * ||v_pred - v_target||²`
+## 2. Auxiliary Reconstruction Loss
 
-## Implementation Strategy
+Right now, your model only learns the "velocity" ().
+It doesn't actually "see" the final mel-spectrogram it's trying to create until inference.
+You can add a secondary loss that forces the predicted velocity to be consistent with the target.
+It is a secondary objective that supervises the model's ability to recover the clean target ($x_1$) 
+from any noisy intermediate state ($y$).
+While the primary Flow Matching loss penalizes the error in the predicted velocity (the "vector" or "direction"), 
+the reconstruction loss penalizes the error in the implied final endpoint. 
+It effectively transforms the network's velocity prediction back into a data-space estimate and compares it directly 
+against the ground truth mel-spectrogram.
 
-1. Start with **linear weighting (t)** first
-2. If training is stable and results improve, try **quadratic (t²)**
-3. Monitor for training instability (loss spikes, NaN values)
-4. Can be toggled on/off via config for ablation studies
+Technical Benefits:
+Global Structural Consistency: Velocity loss is local and differential. 
+Reconstruction loss provides a global signal, ensuring the predicted trajectory actually lands on a valid 
+mel-spectrogram manifold.
+Gradient Stabilization: It acts as a regularizer. 
+By forcing the model to "see" the destination at every timestep $t$, it reduces the variance of the gradients, 
+especially in the high-noise regimes (low $t$) where the optimal velocity is harder to estimate.
+Spectral Feature Alignment: In audio tasks, Flow Matching can sometimes produce high-frequency artifacts. 
+A reconstruction loss (especially using L1) encourages the model to preserve the harmonic structure and energy 
+distribution of the original speech.
 
-## Why This Works for Matcha-TTS
+Implementation Logic:
+Algebraic Projection: Use the current noisy sample and the network's output to solve for the implied clean target.
+Masking: Apply the same sequence mask used in the flow loss to ignore padding.
+Loss Calculation: Compute the Mean Absolute Error (L1) between the implied target and the actual ground truth.
+Weighted Sum: Add this value to your primary loss, scaled by a hyperparameter (e.g., $0.5$).
 
-* Compatible with Conditional Flow Matching (CFM) architecture
-* No architectural changes needed - just multiply loss by weight
-* Doesn't interfere with encoder/decoder independence
-* Low risk, potentially high reward
+```
+# Inside compute_loss
+pred = self.estimator(y, mask, mu, t.squeeze(), spks)
+# Calculate the implied target
+x1_pred = y + (1 - t) * pred
+# Combined loss: Flow loss + Reconstruction loss
+loss_flow = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
+loss_recon = F.l1_loss(x1_pred * mask, x1 * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
+
+loss = loss_flow + 0.5 * loss_recon # Lambda of 0.5 is usually safe
+```
+
+## 3. Switch to L1 Loss for the Flow
+
+You are currently using `F.mse_loss`. 
+While MSE is mathematically "clean" for Gaussian processes, mel-spectrograms are notoriously full of outliers and sharp peaks.
+**L1 loss** (Mean Absolute Error) is significantly more robust for audio tasks.
+It prevents the model from over-correcting for rare, high-energy spectral peaks at the expense of the subtle textures.
 
 
-# Sway sampling 
+# Dropout on mu_y to reduce harsh speaker characteristics
 
-In a standard ODE (Ordinary Differential Equation) solver, you move from time  (noise) to  (data) in equal increments.
-However, the "path" from noise to data is often more turbulent at the beginning and end. 
-**Sway sampling** re-warps the time steps so the model spends more "focus" (smaller steps) on the high-noise regions and larger, faster steps where the data is clearer.
+The CFM decoder receives `mu_y` (the encoder's output) as its conditioning signal.
+`mu_y` carries the spectral character of the training recordings, including harsh or metallic voice qualities,
+because the encoder learned to reproduce those characteristics to minimize prior loss.
 
-The core idea is to transform a linear time sequence using a power function. For Matcha, we typically want more density near  (the noise) to ensure the initial direction is correct.
+Adding dropout to `mu_y` during training forces the CFM to generate good speech even when the conditioning
+signal is slightly corrupted. Over time, the model learns to rely more on its own learned priors about
+what speech should sound like, and less on faithfully reproducing every spectral detail of `mu_y`.
+At inference time dropout is off, but the model will have learned to be less dependent on the exact
+spectral details — producing a cleaner, more "ideal" version of the speaker's voice.
 
-I implemented and tested this using the MCD metric described beloe, and **it makes no difference**.
+Implementation: in `matcha_tts.py`, apply `F.dropout(mu_y, p=0.1, training=self.training)` before
+passing `detached_mu_y` to `self.decoder.compute_loss()`.
+
+This requires retraining from scratch or fine-tuning from a checkpoint.
+Start with p=0.05 and measure MCD — lower MCD is not the goal here, better perceptual quality is.
 
 
-# Implement validation tools like WER, MCD, UTMOS
+# Validation tools like WER, MCD, UTMOS
 
 I have implemented MCD and I am using it to compare progress over multiple checkpoints.
 
@@ -105,19 +145,46 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 
 
 ## Code changes I can consider in the future (not now!)
-Do I have to return so much data from inference?
 Use a LR scheduler
 Train with bigvgan mels (or Try to convert Vocos mels to bigvgan mels)
 Take 579 and run a traininig with just Brian speaker embeddings enabled
 
-Ideas from BigVGAN v2:
-Use a MAX_WAV_VALUE = 32767 instead of 32768 when computing mels (prevents int16 overflow)
-Trim audio to multiple of hop lengths before converting to mel (figure out what is the benefit)
-Verify if vocos was trained with a clip_val of 1e-7 (BigVGAN uses 1e-5)
 
-Find a way to vary the prosody a little with each inference call, but just the prosody
-not the timbre, like the TEMPERATURE feature was doing. 
+## Precompute Phoneme Durations Using a Forced Aligner
 
-Clean up the architecture so that the model and the lightning module are separated
-- matcha/models/matcha_tts_model.py — pure nn.Module with synthesise(), no lightning, no hydra, no logging. This is essentially what MatchaTTSInfer already is.
-- matcha/models/matcha_tts.py — thin LightningModule wrapper that owns the training loop (forward, losses, optimizers, validation step) and delegates to the model for everything else.
+Currently, phoneme durations are computed during training via Monotonic Alignment Search (MAS), which aligns
+the encoder's `mu_x` against the ground truth mel using a Gaussian log-likelihood score. MAS works well but
+recomputes alignments every epoch and produces noisier targets early in training when `mu_x` is still poor.
+
+An alternative is to precompute durations once, before training, using a forced aligner, and store them as
+`.npy` files. The infrastructure for this already exists: `load_durations=True` in the data config, and
+`get_durations()` in `TextMelDataset` which loads from `data/<corpus>/durations/<rel_base_path>.npy`.
+
+### Recommended model: `facebook/wav2vec2-lv-60-espeak-cv-ft`
+
+- Available on Hugging Face
+- Fine-tuned with CTC to output **eSpeak IPA phonemes directly** — the same phoneme set used by this project
+- Trained on 36 languages including English, French, Italian, Spanish, Portuguese, German, Russian
+- Romanian is not in the training set, but shares most phonemes with the Romance languages that are
+- Expects 16kHz audio — resample in memory at compute time, no need to save 16kHz copies
+
+### Implementation outline
+
+Write `matcha/utils/compute_durations.py`:
+1. Load the model and processor from `facebook/wav2vec2-lv-60-espeak-cv-ft`
+2. For each row in the CSV: load wav, resample to 16kHz, run `torchaudio.functional.forced_align`
+   with the eSpeak phoneme sequence as the target transcript
+3. Convert frame-level CTC alignment to per-phoneme frame counts at 24kHz hop_length
+4. Account for `add_blank` (interspersed zeros) — assign 0 frames to blank tokens
+5. Save as `data/<corpus>/durations/<rel_base_path>.npy`
+
+Then set `load_durations: true` in the data config and `use_precomputed_durations: true` in `train.yaml`.
+
+### Expected benefit
+
+- Duration targets are fixed and consistent across all epochs
+- No MAS computation during training (small speed improvement)
+- Duration predictor trains on ground-truth acoustic boundaries from the start,
+  rather than noisy MAS alignments that improve only as `mu_x` improves
+
+

@@ -32,3 +32,14 @@ During inference, the temperature param was feeding noise with a different distr
 The author thought this was going to introduce some variation thus making the speech more natural.
 But the model did not see such noise in training, thus it was generating speech that did not sound great.
 I have removed the concept of temperature entirely and tht improved the MCD by almost 1dB. 
+
+8. One single speaker embedding tensor, shared by all 3 components, but optimized only by encoder gradients.
+Encoder, duration predictor, decoder all use same `spk_emb` vector
+Duration predictor gradients are detached and don't flow back into the encoder, so they don't influence the encoder core model.
+The encoder must be trained to reproduce the ground truth mels as close as possible. 
+Decoder gradients to are detached and they do not flow back into the encoder, for the same reason.
+The above also mean they do not flow back into the speaker embeddings.
+Speaker embeddings learn encoder-optimal representations.
+Then, the embeddings for 10 different speakers are injected in to both the Duration Predictor and into the Decoder, as they are.
+This forces the 2 components to adapt to 10 speakers.
+Fix was to separate the one embeddings tensor into 3, one per component.

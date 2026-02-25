@@ -104,11 +104,21 @@ See how much audio you have in the corpus:
 python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
 ```
 ### Fine-tune an existing speaker:
-Uses the full corpus yaml, filters to that speaker
+Tuning uses the full corpus yaml, but filters the dataset by speaker.
 ```
 python -m matcha.finetune_speaker +target_speaker=3
 ```
-ckpt_path is read from train.yaml (or your experiment override).
+You can use this to get some stubborn speakers in line with others.
+Set the ckpt_path in train.yaml.
+Set dropouts and weight decay to 0, LR to 1e-4.  
+Watch the losses and run until losses get in the sae range as other speakers.
+
+You can check the param norm for that speaker, to make sure it does not get too big: 
+```
+python -m matcha.utils.inspect_spk_emb \
+  <path to the ckpt from which you resumed> \
+  <path to the latest ckpt from fine-tuning>
+```
 
 ### Add a new speaker:
 Point to a single-speaker corpus yaml, set n_spks to the new total
@@ -116,6 +126,13 @@ Point to a single-speaker corpus yaml, set n_spks to the new total
 python -m matcha.finetune_speaker +target_speaker=10 data=my-new-speaker data.n_spks=11
 ```
 Where configs/data/my-new-speaker.yaml has the new speaker's train/validate CSVs.
+
+### Transplant a speaker embedding from one checkpoint to another:
+Copies the embeddings for a single speaker from a source checkpoint into a target checkpoint, keeping all other weights and optimizer state intact.
+The target checkpoint is backed up to `<target>.bak` before modification.
+```
+python -m matcha.utils.transplant_spk_emb <target.ckpt> <source.ckpt> <spk_id>
+```
 
 ## Improvements
 
