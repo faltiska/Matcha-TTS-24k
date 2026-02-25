@@ -1,129 +1,101 @@
 """
-Fine-tune a trained MatchaTTS model to learn a new speaker or improve an existing one.
+Fine-tune speaker embeddings only, leaving the rest of the model frozen.
 
-Usage:
-    python -m matcha.finetune_speaker +target_speaker=0
+Fine-tune an existing speaker:
+    python -m matcha.finetune_speaker +target_speaker=3
 
-Note: Configure data paths in your data yaml (e.g., speaker0.yaml)
-      Set ckpt_path in train.yaml
-
-Fine-tuning logic:
-    1. Validate required config (ckpt_path and target_speaker)
-    2. Set random seed
-    3. Instantiate datamodule
-    4. Instantiate fresh model from config
-    5. Freeze encoder (includes duration predictor)
-    6. Freeze decoder
-    7. Register gradient hook to mask all speakers except target
-    8. Instantiate callbacks
-    9. Instantiate loggers
-    10. Instantiate trainer
-    11. Log hyperparameters
-    12. Start training (trainer.fit loads checkpoint and trains)
-    13. Log best checkpoint path
-    14. Return metrics
+Add a new speaker (must also set n_spks in data config):
+    python -m matcha.finetune_speaker +target_speaker=10 data.n_spks=11
 """
+import os
+from pathlib import Path
 
-import torch
-import types
-import lightning as L
+cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
+os.environ["HF_HOME"] = str(cache_base / "huggingface")
+
+from typing import Any, Dict, List, Optional, Tuple
+
 import hydra
+import lightning as L
 import rootutils
+import torch
+from lightning import Callback, LightningDataModule, LightningModule, Trainer
+from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
-
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+import logging
 
 from matcha import utils
+
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 log = utils.get_pylogger(__name__)
 
 
-def freeze_model_except_target_speaker(model, target_speaker):
-    """Freeze all model parameters except the target speaker embedding."""
-    # Set frozen modules to eval mode to disable dropout.
-    # Otherwise, dropout noise would force the speaker embedding to overfit to random patterns
-    # instead of learning actual speaker characteristics.
-    log.info("Freezing encoder")
-    model.encoder.eval()
-    for param in model.encoder.parameters():
-        param.requires_grad = False
-    
-    log.info("Freezing decoder")
-    model.decoder.eval()
-    for param in model.decoder.parameters():
-        param.requires_grad = False
-    
-    log.info(f"Training only speaker {target_speaker} embedding")
-    
-    def mask_speaker_gradients(grad):
-        mask = torch.zeros_like(grad)
-        mask[target_speaker] = 1.0
-        return grad * mask
+def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int):
+    spk_emb_names = {"spk_emb_encoder.weight", "spk_emb_duration.weight", "spk_emb_decoder.weight"}
+    for name, param in model.named_parameters():
+        param.requires_grad = name in spk_emb_names
 
-    model.spk_emb.weight.register_hook(mask_speaker_gradients)
+    def _mask_grad(grad):
+        masked = torch.zeros_like(grad)
+        masked[target_speaker] = grad[target_speaker]
+        return masked
 
-    original_on_load_checkpoint = model.on_load_checkpoint
-    def on_load_checkpoint(self, checkpoint):
-        original_on_load_checkpoint(checkpoint)
-        self.spk_emb.weight.register_hook(mask_speaker_gradients)
-    model.on_load_checkpoint = types.MethodType(on_load_checkpoint, model)
+    for emb in (model.spk_emb_encoder, model.spk_emb_duration, model.spk_emb_decoder):
+        emb.weight.register_hook(_mask_grad)
+    log.info(f"Unfrozen spk_emb_encoder/duration/decoder row {target_speaker} only. All other parameters frozen.")
 
-    def configure_optimizers(self):
-        return self.hparams.optimizer(params=[self.spk_emb.weight])
-    model.configure_optimizers = types.MethodType(configure_optimizers, model)
+
+def filter_dataset_to_speaker(datamodule: LightningDataModule, target_speaker: int):
+    for split, dataset in [("train", datamodule.trainset), ("val", datamodule.validset)]:
+        before = len(dataset.filepaths_and_text)
+        dataset.filepaths_and_text = [
+            row for row in dataset.filepaths_and_text if int(row[1]) == target_speaker
+        ]
+        after = len(dataset.filepaths_and_text)
+        log.info(f"{split}: filtered {before} -> {after} samples for speaker {target_speaker}")
 
 
 @utils.task_wrapper
-def finetune(cfg: DictConfig):
-    # Required overrides
-    if not cfg.get("ckpt_path"):
-        raise ValueError("Must specify ckpt_path in train.yaml")
-    if cfg.get("target_speaker") is None:
-        raise ValueError("Must specify +target_speaker=<speaker_id>")
-    
+def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    target_speaker: int = cfg.target_speaker
+
     if cfg.get("seed"):
         L.seed_everything(cfg.seed, workers=True)
-    
+
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
-    datamodule = hydra.utils.instantiate(cfg.data)
+    datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
-    original_setup = datamodule.setup
-    def setup(stage=None):
-        original_setup(stage)
-        spk = str(cfg.target_speaker)
-        datamodule.trainset.filepaths_and_text = [r for r in datamodule.trainset.filepaths_and_text if r[1] == spk]
-        datamodule.validset.filepaths_and_text = [r for r in datamodule.validset.filepaths_and_text if r[1] == spk]
-    datamodule.setup = setup
-    
     log.info(f"Instantiating model <{cfg.model._target_}>")
-    model = hydra.utils.instantiate(cfg.model)
-    
-    freeze_model_except_target_speaker(model, cfg.target_speaker)
-    
-    # Save fingerprint of encoder/decoder weights for verification
-    encoder_fingerprint = next(model.encoder.parameters()).clone()
-    decoder_fingerprint = next(model.decoder.parameters()).clone()
-    # I can delete the above lines after I tested few times
+    model: LightningModule = hydra.utils.instantiate(cfg.model)
+    model.sample_rate = cfg.data.sample_rate
+    model.hop_length = cfg.data.hop_length
 
-    # Override on_train_epoch_start to keep frozen modules in eval mode
-    # trainer.fit() calls model.train() which resets all submodules to training mode
-    original_on_train_epoch_start = model.on_train_epoch_start
-    def on_train_epoch_start(self):
-        if original_on_train_epoch_start:
-            original_on_train_epoch_start()
-        self.encoder.eval()
-        self.decoder.eval()
-    model.on_train_epoch_start = types.MethodType(on_train_epoch_start, model)
-    
+    # Load checkpoint weights before freezing, so optimizer only sees spk_emb params
+    ckpt_path = cfg.get("ckpt_path")
+    if ckpt_path:
+        log.info(f"Loading checkpoint: {ckpt_path}")
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        model.on_load_checkpoint(ckpt)
+        model.load_state_dict(ckpt["state_dict"])
+        resumed_epoch = ckpt["epoch"]
+
+    freeze_all_except_target_speaker(model, target_speaker)
+
+    datamodule.setup()
+    filter_dataset_to_speaker(datamodule, target_speaker)
+    datamodule.setup = lambda stage=None: None  # prevent Lightning from re-running setup
+
     log.info("Instantiating callbacks...")
-    callbacks = utils.instantiate_callbacks(cfg.get("callbacks"))
-    
+    callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))
+
     log.info("Instantiating loggers...")
-    logger = utils.instantiate_loggers(cfg.get("logger"))
-    
+    logger: List[Logger] = utils.instantiate_loggers(cfg.get("logger"))
+
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
-    
+    logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
+    trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,
@@ -132,33 +104,25 @@ def finetune(cfg: DictConfig):
         "logger": logger,
         "trainer": trainer,
     }
-    
+
     if logger:
-        log.info("Logging hyperparameters")
         utils.log_hyperparameters(object_dict)
-    
-    log.info(f"Fine-tuning speaker {cfg.target_speaker}")
-    trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
-    
-    # Verify frozen weights didn't change
-    encoder_unchanged = torch.equal(encoder_fingerprint, next(model.encoder.parameters()))
-    decoder_unchanged = torch.equal(decoder_fingerprint, next(model.decoder.parameters()))
-    log.info(f"Encoder weights unchanged: {encoder_unchanged}")
-    log.info(f"Decoder weights unchanged: {decoder_unchanged}")
-    if not encoder_unchanged or not decoder_unchanged:
-        log.warning("WARNING: Frozen weights changed during training!")
-    # I can delete the above lines after I tested a few times
-    
-    log.info(f"Best checkpoint: {trainer.checkpoint_callback.best_model_path}")
-    
+
+    if ckpt_path:
+        trainer.fit_loop.epoch_progress.current.completed = resumed_epoch
+
+    # Pass ckpt_path=None since we loaded weights manually above
+    trainer.fit(model=model, datamodule=datamodule)
+
     return trainer.callback_metrics, object_dict
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
-def main(cfg: DictConfig):
+def main(cfg: DictConfig) -> Optional[float]:
     utils.extras(cfg)
-    finetune(cfg)
+    metric_dict, _ = train(cfg)
+    return utils.get_metric_value(metric_dict=metric_dict, metric_name=cfg.get("optimized_metric"))
 
 
 if __name__ == "__main__":
-    main()  # pylint: disable=no-value-for-parameter
+    main()
