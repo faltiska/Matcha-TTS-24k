@@ -41,7 +41,7 @@ def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int
         masked[target_speaker] = grad[target_speaker]
         return masked
 
-    for emb in (model.spk_emb_encoder, model.spk_emb_duration, model.spk_emb_decoder):
+    for emb in (model.encoder_speaker_embeddings, model.duration_speaker_embeddings, model.decoder_speaker_embeddings):
         emb.weight.register_hook(_mask_grad)
     log.info(f"Unfrozen spk_emb_encoder/duration/decoder row {target_speaker} only. All other parameters frozen.")
 

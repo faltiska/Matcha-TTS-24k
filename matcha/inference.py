@@ -25,9 +25,9 @@ class MatchaTTSInfer(nn.Module):
         super().__init__()
         self.n_spks = n_spks
         if n_spks > 1:
-            self.spk_emb_encoder = nn.Embedding(n_spks, spk_emb_dim)
-            self.spk_emb_duration = nn.Embedding(n_spks, spk_emb_dim)
-            self.spk_emb_decoder = nn.Embedding(n_spks, spk_emb_dim)
+            self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
+            self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
+            self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * encoder.encoder_params.n_feats,
@@ -60,9 +60,9 @@ class MatchaTTSInfer(nn.Module):
             return None, None, None
         device = next(self.parameters()).device
         return (
-            self._mix(self.spk_emb_encoder, speaker_mix, device),
-            self._mix(self.spk_emb_duration, speaker_mix, device),
-            self._mix(self.spk_emb_decoder, speaker_mix, device),
+            self._mix(self.encoder_speaker_embeddings, speaker_mix, device),
+            self._mix(self.duration_speaker_embeddings, speaker_mix, device),
+            self._mix(self.decoder_speaker_embeddings, speaker_mix, device),
         )
 
     def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0):
@@ -102,19 +102,19 @@ class MatchaTTSInfer(nn.Module):
             }
         """
 
-        spks_encoder = spks_duration = spks_decoder = None
+        encoder_speaker_embedding = duration_speaker_embedding = decoder_speaker_embedding = None
         if self.n_spks > 1:
             if voice_mix is not None:
-                spks_encoder, spks_duration, spks_decoder = self.mix_speakers(voice_mix)
+                encoder_speaker_embedding, duration_speaker_embedding, decoder_speaker_embedding = self.mix_speakers(voice_mix)
             else:
                 device = next(self.parameters()).device
                 spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
-                spks_encoder = self.spk_emb_encoder(spk_tensor)
-                spks_duration = self.spk_emb_duration(spk_tensor)
-                spks_decoder = self.spk_emb_decoder(spk_tensor)
+                encoder_speaker_embedding = self.encoder_speaker_embeddings(spk_tensor)
+                duration_speaker_embedding = self.duration_speaker_embeddings(spk_tensor)
+                decoder_speaker_embedding = self.decoder_speaker_embeddings(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks_encoder, spks_duration)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
 
         # Original code was:
         #  w = torch.exp(logw) * x_mask
@@ -153,7 +153,7 @@ class MatchaTTSInfer(nn.Module):
         # Even though the math checks out, the MCD metric is 0.05dB worse with the simplified formula.
 
         # Generate speech tracing the probability flow
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks_decoder)
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=decoder_speaker_embedding)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         return denormalize(decoder_outputs, self.mel_mean, self.mel_std)
@@ -165,11 +165,21 @@ def load_matcha(model_name, checkpoint_path):
     hparams.pop("optimizer", None)
     hparams.pop("scheduler", None)
     sd = ckpt["state_dict"]
-    if "spk_emb.weight" in sd and "spk_emb_encoder.weight" not in sd:
+    # BEGIN legacy checkpoint migration - delete when all checkpoints use current names
+    if "spk_emb.weight" in sd and "encoder_speaker_embeddings.weight" not in sd:
         old = sd.pop("spk_emb.weight")
-        sd["spk_emb_encoder.weight"] = old.clone()
-        sd["spk_emb_duration.weight"] = old.clone()
-        sd["spk_emb_decoder.weight"] = old.clone()
+        sd["encoder_speaker_embeddings.weight"] = old.clone()
+        sd["duration_speaker_embeddings.weight"] = old.clone()
+        sd["decoder_speaker_embeddings.weight"] = old.clone()
+    old_to_new = {
+        "spk_emb_encoder.weight": "encoder_speaker_embeddings.weight",
+        "spk_emb_duration.weight": "duration_speaker_embeddings.weight",
+        "spk_emb_decoder.weight": "decoder_speaker_embeddings.weight",
+    }
+    for old_key, new_key in old_to_new.items():
+        if old_key in sd:
+            sd[new_key] = sd.pop(old_key)
+    # END legacy checkpoint migration
     model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(sd, strict=False)
     model.eval()

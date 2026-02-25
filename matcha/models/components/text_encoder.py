@@ -397,7 +397,7 @@ class TextEncoder(nn.Module):
             spk_emb_dim=spk_emb_dim if n_spks > 1 else 0,
         )
 
-    def forward(self, x, x_lengths, spk_emb_encoder=None, spk_emb_duration=None):
+    def forward(self, x, x_lengths, encoder_speaker_embedding=None, duration_speaker_embedding=None):
         """Run forward pass to the transformer based encoder and duration predictor
 
         Args:
@@ -405,9 +405,9 @@ class TextEncoder(nn.Module):
                 shape: (batch_size, max_text_length)
             x_lengths (torch.Tensor): text input lengths
                 shape: (batch_size,)
-            spk_emb_encoder (torch.Tensor, optional): speaker embedding for the encoder. Defaults to None.
+            encoder_speaker_embedding (torch.Tensor, optional): speaker embedding for the encoder
                 shape: (batch_size, spk_emb_dim)
-            spk_emb_duration (torch.Tensor, optional): speaker embedding for the duration predictor. Defaults to None.
+            duration_speaker_embedding (torch.Tensor, optional): speaker embedding for the duration predictor
                 shape: (batch_size, spk_emb_dim)
 
         Returns:
@@ -424,7 +424,7 @@ class TextEncoder(nn.Module):
 
         x = self.prenet(x, x_mask)
         if self.n_spks > 1:
-            x = torch.cat([x, spk_emb_encoder.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
+            x = torch.cat([x, encoder_speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
@@ -433,6 +433,6 @@ class TextEncoder(nn.Module):
         if self.n_spks > 1:
             x = x[:, :-self.spk_emb_dim, :]
         x_dp = x.detach()
-        logw = self.proj_w(x_dp, x_mask, spk_emb_duration)
+        logw = self.proj_w(x_dp, x_mask, duration_speaker_embedding)
 
         return mu, logw, x_mask

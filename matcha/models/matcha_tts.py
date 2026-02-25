@@ -47,9 +47,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.mas_const = -0.5 * LOG_2_PI * n_feats
 
         if n_spks > 1:
-            self.spk_emb_encoder = torch.nn.Embedding(n_spks, spk_emb_dim)
-            self.spk_emb_duration = torch.nn.Embedding(n_spks, spk_emb_dim)
-            self.spk_emb_decoder = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.encoder_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.duration_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.decoder_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -91,14 +91,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size,)
         """
         if self.n_spks > 1:
-            spks_encoder = self.spk_emb_encoder(spks)
-            spks_duration = self.spk_emb_duration(spks)
-            spks_decoder = self.spk_emb_decoder(spks)
+            encoder_speaker_embedding = self.encoder_speaker_embeddings(spks)
+            duration_speaker_embedding = self.duration_speaker_embeddings(spks)
+            decoder_speaker_embedding = self.decoder_speaker_embeddings(spks)
         else:
-            spks_encoder = spks_duration = spks_decoder = None
+            encoder_speaker_embedding = duration_speaker_embedding = decoder_speaker_embedding = None
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks_encoder, spks_duration)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
         y_max_length = y.shape[-1]
 
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
@@ -149,7 +149,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         detached_mu_y = mu_y.detach()
 
         # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=spks_decoder)
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=decoder_speaker_embedding)
 
         if self.prior_loss:
             # Original code was: 
