@@ -47,7 +47,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.mas_const = -0.5 * LOG_2_PI * n_feats
 
         if n_spks > 1:
-            self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_encoder = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_duration = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_decoder = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -89,11 +91,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size,)
         """
         if self.n_spks > 1:
-            # Get speaker embedding
-            spks = self.spk_emb(spks)
+            spks_encoder = self.spk_emb_encoder(spks)
+            spks_duration = self.spk_emb_duration(spks)
+            spks_decoder = self.spk_emb_decoder(spks)
+        else:
+            spks_encoder = spks_duration = spks_decoder = None
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks_encoder, spks_duration)
         y_max_length = y.shape[-1]
 
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
@@ -144,7 +149,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         detached_mu_y = mu_y.detach()
 
         # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=spks)
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=spks_decoder)
 
         if self.prior_loss:
             # Original code was: 

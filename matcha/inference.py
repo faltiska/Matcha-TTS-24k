@@ -25,7 +25,9 @@ class MatchaTTSInfer(nn.Module):
         super().__init__()
         self.n_spks = n_spks
         if n_spks > 1:
-            self.spk_emb = nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_encoder = nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_duration = nn.Embedding(n_spks, spk_emb_dim)
+            self.spk_emb_decoder = nn.Embedding(n_spks, spk_emb_dim)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * encoder.encoder_params.n_feats,
@@ -35,33 +37,33 @@ class MatchaTTSInfer(nn.Module):
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
 
+    def _mix(self, emb_table, speaker_mix, device):
+        mixed = None
+        for spk_id, weight in speaker_mix:
+            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
+            e = emb_table(spk_tensor)
+            mixed = weight * e if mixed is None else mixed + weight * e
+        return mixed
+
     def mix_speakers(self, speaker_mix):
         """
         Mix multiple speaker embeddings with given weights.
-        
-        Args: 
+
+        Args:
             speaker_mix (list): List of (speaker_id, weight) tuples.
-        Example: 
+        Example:
             [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
-        Returns: 
-            torch.Tensor: Mixed speaker embedding, shape: (1, spk_emb_dim)
+        Returns:
+            tuple: (encoder_emb, duration_emb, decoder_emb), each shape (1, spk_emb_dim)
         """
         if self.n_spks <= 1:
-            return None
-
+            return None, None, None
         device = next(self.parameters()).device
-        mixed_emb = None
-
-        for spk_id, weight in speaker_mix:
-            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
-            spk_emb = self.spk_emb(spk_tensor)
-
-            if mixed_emb is None:
-                mixed_emb = weight * spk_emb
-            else:
-                mixed_emb += weight * spk_emb
-
-        return mixed_emb
+        return (
+            self._mix(self.spk_emb_encoder, speaker_mix, device),
+            self._mix(self.spk_emb_duration, speaker_mix, device),
+            self._mix(self.spk_emb_decoder, speaker_mix, device),
+        )
 
     def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0):
         """
@@ -100,16 +102,19 @@ class MatchaTTSInfer(nn.Module):
             }
         """
 
+        spks_encoder = spks_duration = spks_decoder = None
         if self.n_spks > 1:
             if voice_mix is not None:
-                speaker = self.mix_speakers(voice_mix)
+                spks_encoder, spks_duration, spks_decoder = self.mix_speakers(voice_mix)
             else:
                 device = next(self.parameters()).device
-                speaker = torch.tensor([speaker], device=device, dtype=torch.long)
-                speaker = self.spk_emb(speaker)
+                spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
+                spks_encoder = self.spk_emb_encoder(spk_tensor)
+                spks_duration = self.spk_emb_duration(spk_tensor)
+                spks_decoder = self.spk_emb_decoder(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, spks_encoder, spks_duration)
 
         # Original code was:
         #  w = torch.exp(logw) * x_mask
@@ -121,7 +126,7 @@ class MatchaTTSInfer(nn.Module):
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
 
         # Nudge short phonemes durations up, leaving longer ones mostly unaffected (no effect beyond ~4 frames)
-        phoneme_durations = phoneme_durations * (1.0 + 0.3 * torch.exp(-phoneme_durations))
+        # phoneme_durations = phoneme_durations * (1.0 + 0.3 * torch.exp(-phoneme_durations))
 
         # Round phoneme positions to avoid collisions (2 phonemes starting on the same position).
         # E.g. durations [1.5, 0.5, 1.5] -> cumsum [1.5, 2.0, 3.5] -> round [2, 2, 4].
@@ -148,7 +153,7 @@ class MatchaTTSInfer(nn.Module):
         # Even though the math checks out, the MCD metric is 0.05dB worse with the simplified formula.
 
         # Generate speech tracing the probability flow
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=speaker)
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=spks_decoder)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         return denormalize(decoder_outputs, self.mel_mean, self.mel_std)
@@ -159,8 +164,14 @@ def load_matcha(model_name, checkpoint_path):
     hparams = ckpt["hyper_parameters"]
     hparams.pop("optimizer", None)
     hparams.pop("scheduler", None)
+    sd = ckpt["state_dict"]
+    if "spk_emb.weight" in sd and "spk_emb_encoder.weight" not in sd:
+        old = sd.pop("spk_emb.weight")
+        sd["spk_emb_encoder.weight"] = old.clone()
+        sd["spk_emb_duration.weight"] = old.clone()
+        sd["spk_emb_decoder.weight"] = old.clone()
     model = MatchaTTSInfer(**hparams).to(DEVICE)
-    model.load_state_dict(ckpt["state_dict"], strict=False)
+    model.load_state_dict(sd, strict=False)
     model.eval()
     print(f"[+] {model_name} loaded!")
     return model

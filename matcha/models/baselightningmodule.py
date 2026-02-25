@@ -51,45 +51,53 @@ class BaseLightningClass(LightningModule, ABC):
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
         
-        # Override LR from checkpoint with config LR
-        config_lr = self.hparams.optimizer.keywords.get("lr")
-        if config_lr is not None:
-            for opt_state in checkpoint.get("optimizer_states", []):
-                for param_group in opt_state.get("param_groups", []):
-                    old_lr = param_group["lr"]
-                    param_group["lr"] = config_lr
-                    log.info(f"Overriding checkpoint LR {old_lr} with new value from config {config_lr}")
-        
-        # Override weight decay from checkpoint with config weight decay
-        config_weight_decay = self.hparams.optimizer.keywords.get("weight_decay")
-        if config_weight_decay is not None:
-            for opt_state in checkpoint.get("optimizer_states", []):
-                for param_group in opt_state.get("param_groups", []):
-                    old_wd = param_group.get("weight_decay", 0.0)
-                    param_group["weight_decay"] = config_weight_decay
-                    log.info(f"Overriding checkpoint weight decay {old_wd} with new value from config {config_weight_decay}")
-        
-        # Check if a new speaker was added to the corpus
-        if "spk_emb.weight" in checkpoint["state_dict"]:
-            old_spk_emb = checkpoint["state_dict"]["spk_emb.weight"]
-            old_n_spks = old_spk_emb.shape[0]
+        for key in ("lr", "weight_decay"):
+            self._override_optimizer_param(checkpoint, key)
+
+        self.add_speaker_if_needed(checkpoint)
+
+    def _override_optimizer_param(self, checkpoint, key):
+        config_val = self.hparams.optimizer.keywords.get(key)
+        if config_val is None:
+            return
+        for opt_state in checkpoint.get("optimizer_states", []):
+            for param_group in opt_state.get("param_groups", []):
+                old_val = param_group.get(key)
+                param_group[key] = config_val
+                log.info(f"Overriding checkpoint {key} {old_val} with config value {config_val}")
+
+    def add_speaker_if_needed(self, checkpoint):
+        state_dict = checkpoint["state_dict"]
+        emb_keys = [k for k in ("spk_emb_encoder.weight", "spk_emb_duration.weight", "spk_emb_decoder.weight") if
+                    k in state_dict]
+        if emb_keys:
+            old_n_spks = state_dict[emb_keys[0]].shape[0]
             new_n_spks = self.n_spks
-            
+
             if old_n_spks < new_n_spks:
-                emb_dim = old_spk_emb.shape[1]
-                new_spk_emb = torch.zeros(new_n_spks, emb_dim, dtype=old_spk_emb.dtype)
-                new_spk_emb[:old_n_spks] = old_spk_emb
-                checkpoint["state_dict"]["spk_emb.weight"] = new_spk_emb
-                
-                # Expand optimizer state for speaker embeddings
+                for emb_key in emb_keys:
+                    old_spk_emb = state_dict[emb_key]
+                    emb_dim = old_spk_emb.shape[1]
+                    new_spk_emb = torch.zeros(new_n_spks, emb_dim, dtype=old_spk_emb.dtype)
+                    new_spk_emb[:old_n_spks] = old_spk_emb
+                    state_dict[emb_key] = new_spk_emb
+
+                # Expand optimizer state for speaker embeddings.
+                # Optimizer states are indexed by the parameter's position in the flat list of all parameters.
+                # We find the indices of the embedding parameters, then expand those.
+                all_param_names = [name for name, _ in self.named_parameters()]
+                emb_param_ids = {all_param_names.index(name) for name in emb_keys if name in all_param_names}
                 for opt_state in checkpoint.get("optimizer_states", []):
                     for param_id, state in opt_state.get("state", {}).items():
+                        if param_id not in emb_param_ids:
+                            continue
                         for key in ["exp_avg", "exp_avg_sq"]:
-                            if key in state and state[key].shape[0] == old_n_spks:
+                            if key in state:
+                                emb_dim = state[key].shape[1]
                                 expanded = torch.zeros(new_n_spks, emb_dim, dtype=state[key].dtype)
                                 expanded[:old_n_spks] = state[key]
                                 state[key] = expanded
-                
+
                 log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
     def on_train_epoch_start(self):

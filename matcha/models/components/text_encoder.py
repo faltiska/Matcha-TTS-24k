@@ -72,18 +72,19 @@ class DurationPredictor(nn.Module):
     
     Having 4 layers instead of 2 improved the duration estimations dramatically.
     """
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2):
+    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=0):
         super().__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
         self.p_dropout = p_dropout
+        self.spk_emb_dim = spk_emb_dim
 
         self.drop = torch.nn.Dropout(p_dropout)
         self.conv_layers = torch.nn.ModuleList()
         self.norm_layers = torch.nn.ModuleList()
 
         self.conv_layers.append(
-            torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+            torch.nn.Conv1d(in_channels + spk_emb_dim, filter_channels, kernel_size, padding=kernel_size // 2)
         )
         self.norm_layers.append(LayerNorm(filter_channels))
 
@@ -95,7 +96,9 @@ class DurationPredictor(nn.Module):
 
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
-    def forward(self, x, x_mask):
+    def forward(self, x, x_mask, spk_emb=None):
+        if spk_emb is not None:
+            x = torch.cat([x, spk_emb.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
             x = torch.relu(x)
@@ -387,13 +390,14 @@ class TextEncoder(nn.Module):
 
         self.proj_m = torch.nn.Conv1d(self.n_channels + (spk_emb_dim if n_spks > 1 else 0), self.n_feats, 1)
         self.proj_w = DurationPredictor(
-            self.n_channels + (spk_emb_dim if n_spks > 1 else 0),
+            self.n_channels,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
+            spk_emb_dim=spk_emb_dim if n_spks > 1 else 0,
         )
 
-    def forward(self, x, x_lengths, spks=None):
+    def forward(self, x, x_lengths, spk_emb_encoder=None, spk_emb_duration=None):
         """Run forward pass to the transformer based encoder and duration predictor
 
         Args:
@@ -401,8 +405,10 @@ class TextEncoder(nn.Module):
                 shape: (batch_size, max_text_length)
             x_lengths (torch.Tensor): text input lengths
                 shape: (batch_size,)
-            spks (torch.Tensor, optional): speaker ids. Defaults to None.
-                shape: (batch_size,)
+            spk_emb_encoder (torch.Tensor, optional): speaker embedding for the encoder. Defaults to None.
+                shape: (batch_size, spk_emb_dim)
+            spk_emb_duration (torch.Tensor, optional): speaker embedding for the duration predictor. Defaults to None.
+                shape: (batch_size, spk_emb_dim)
 
         Returns:
             mu (torch.Tensor): average output of the encoder
@@ -418,11 +424,15 @@ class TextEncoder(nn.Module):
 
         x = self.prenet(x, x_mask)
         if self.n_spks > 1:
-            x = torch.cat([x, spks.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
+            x = torch.cat([x, spk_emb_encoder.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        x_dp = torch.detach(x)
-        logw = self.proj_w(x_dp, x_mask)
+        # spk_emb_encoder was concatenated into x (see above), so we have to strip it before
+        # passing it to DurationPredictor, which has its own embeddings.
+        if self.n_spks > 1:
+            x = x[:, :-self.spk_emb_dim, :]
+        x_dp = x.detach()
+        logw = self.proj_w(x_dp, x_mask, spk_emb_duration)
 
         return mu, logw, x_mask
