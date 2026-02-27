@@ -27,9 +27,9 @@ class SnakeBeta(nn.Module):
         - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
         https://arxiv.org/abs/2006.08195
     Examples:
-        >>> a1 = snakebeta(256)
-        >>> x = torch.randn(256)
-        >>> x = a1(x)
+        a1 = SnakeBeta(256)
+        x = torch.randn(256)
+        x = a1(x)
     """
 
     def __init__(self, in_features, out_features, alpha=1.0, alpha_trainable=True, alpha_logscale=True):
@@ -50,8 +50,8 @@ class SnakeBeta(nn.Module):
         # initialize alpha
         self.alpha_logscale = alpha_logscale
         if self.alpha_logscale:  # log scale alphas initialized to zeros
-            self.alpha = nn.Parameter(torch.zeros(self.in_features) * alpha)
-            self.beta = nn.Parameter(torch.zeros(self.in_features) * alpha)
+            self.alpha = nn.Parameter(torch.zeros(self.in_features))
+            self.beta = nn.Parameter(torch.zeros(self.in_features))
         else:  # linear scale alphas initialized to ones
             self.alpha = nn.Parameter(torch.ones(self.in_features) * alpha)
             self.beta = nn.Parameter(torch.ones(self.in_features) * alpha)
@@ -99,7 +99,7 @@ class FeedForward(nn.Module):
         dim_out: Optional[int] = None,
         mult: int = 4,
         dropout: float = 0.0,
-        activation_fn: str = "geglu",
+        activation_fn: str = "snakebeta",
         final_dropout: bool = False,
     ):
         super().__init__()
@@ -108,7 +108,7 @@ class FeedForward(nn.Module):
 
         if activation_fn == "gelu":
             act_fn = GELU(dim, inner_dim)
-        if activation_fn == "gelu-approximate":
+        elif activation_fn == "gelu-approximate":
             act_fn = GELU(dim, inner_dim, approximate="tanh")
         elif activation_fn == "geglu":
             act_fn = GEGLU(dim, inner_dim)
