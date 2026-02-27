@@ -5,7 +5,7 @@ This script checks if the text in your corpus CSV is already normalized
 or if it needs to be re-recorded with NeMo normalized text.
 
 Usage:
-  python -m matcha.text.test_nemo_normalization data/corpus-small-24k/train.csv
+  python -m matcha.text.test_corpus_normalization.py data/corpus-small-24k/train.csv
 """
 
 import argparse
