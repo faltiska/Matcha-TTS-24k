@@ -10,10 +10,11 @@ import torch
 from lightning import LightningModule
 from lightning.pytorch.utilities import grad_norm
 
+import logging
 from matcha import utils
 from matcha.utils.utils import plot_tensor
 
-log = utils.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class BaseLightningClass(LightningModule, ABC):

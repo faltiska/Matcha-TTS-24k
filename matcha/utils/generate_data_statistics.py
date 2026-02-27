@@ -20,9 +20,9 @@ from omegaconf import open_dict
 from tqdm.auto import tqdm
 
 from matcha.mel.extractors import get_mel_extractor
-from matcha.utils.logging_utils import pylogger
+import logging
 
-log = pylogger.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def parse_filelist(filelist_path: Path, split_char: str = "|") -> List[Tuple[str, ...]]:

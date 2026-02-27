@@ -9,9 +9,9 @@ from lightning.pytorch.utilities import rank_zero_only
 from omegaconf import DictConfig, OmegaConf, open_dict
 from rich.prompt import Prompt
 
-from matcha.utils import pylogger
+import logging
 
-log = pylogger.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 @rank_zero_only

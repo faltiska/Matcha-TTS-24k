@@ -1,6 +1,7 @@
 import math
 import torch
 
+import logging
 from matcha import utils
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.models.components.flow_matching import CFM
@@ -12,7 +13,7 @@ from matcha.utils.model import (
 )
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
-log = utils.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
 

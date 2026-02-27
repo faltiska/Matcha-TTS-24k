@@ -28,7 +28,7 @@ from matcha import utils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-log = utils.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int):

@@ -1,5 +1,3 @@
-from matcha.utils.pylogger import get_pylogger
-
 def __getattr__(name):
     if name in ("instantiate_callbacks", "instantiate_loggers"):
         from matcha.utils.instantiators import instantiate_callbacks, instantiate_loggers

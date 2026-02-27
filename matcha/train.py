@@ -38,7 +38,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
 
 
-log = utils.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 @utils.task_wrapper

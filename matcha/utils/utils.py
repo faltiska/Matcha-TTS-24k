@@ -13,9 +13,9 @@ import numpy as np
 import torch
 from omegaconf import DictConfig
 
-from matcha.utils import pylogger
+import logging
 
-log = pylogger.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def extras(cfg: DictConfig) -> None:

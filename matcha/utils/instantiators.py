@@ -5,9 +5,9 @@ from lightning import Callback
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-from matcha.utils import pylogger
+import logging
 
-log = pylogger.get_pylogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback]:
