@@ -121,13 +121,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
                 log_prior = y_square - y_mu_double + mu_square + self.mas_const
 
-                # Alternative: this computes pairwise distance between every text token and ground truth mel frame
-                # Using L1-based MAS scoring would match the L1 formula I use for prior loss
-                # log_prior = -torch.cdist(mu_x.transpose(1, 2), y.transpose(1, 2), p=1)
-
-                # the GPU impl is about 5% faster
                 attn = maximum_path_gpu(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
-                # attn = monotonic_align.maximum_path_cpu(log_prior, attn_mask.squeeze(1))
 
         # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
         # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
