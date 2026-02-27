@@ -138,9 +138,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
         # Align encoded text with mel-spectrogram and get mu_y segment
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        mu_y = mu_y.transpose(1, 2)
-        # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1))
+        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        # mu_y = mu_y.transpose(1, 2)
+        # but that can be simplified as:
+        mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Detach mu_y to prevent diffusion gradients from flowing back to the encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. We want the Encoder to learn 

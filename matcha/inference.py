@@ -1,6 +1,5 @@
 import io
 import time
-import lameenc
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
@@ -147,10 +146,11 @@ class MatchaTTSInfer(nn.Module):
         attn = generate_path(phoneme_durations, attn_mask.squeeze(1)).unsqueeze(1)
 
         # Align encoded text and get mu_y
-        mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        mu_y = mu_y.transpose(1, 2)
-        # That can be simplified as mu_y = torch.matmul(mu_x, attn.squeeze(1)) but I saw different results.
-        # Even though the math checks out, the MCD metric is 0.05dB worse with the simplified formula.
+        # Original code was 
+        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        # mu_y = mu_y.transpose(1, 2)
+        # but that can be simplified as:
+        mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Generate speech tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=decoder_speaker_embedding)
@@ -251,20 +251,16 @@ def post_process(audio):
     return audio
 
 
+from matcha.utils.mp3_converter import encode_mp3
+
 def convert_to_mp3(waveform):
     start = time.perf_counter()
-    waveform_int16 = (waveform * 32767).to(torch.int16)
-    wav_size = waveform_int16.numel() * 2
-    encoder = lameenc.Encoder()
-    encoder.set_bit_rate(128)
-    encoder.set_in_sample_rate(SAMPLE_RATE)
-    encoder.set_channels(1)
-    encoder.set_quality(5)
-    mp3_data = encoder.encode(waveform_int16.numpy().tobytes())
-    mp3_data += encoder.flush()
+    audio_np = (waveform.numpy() * 32767).astype(np.int16)
+    wav_size = audio_np.size * 2
+    mp3_data = encode_mp3(audio_np, sample_rate=SAMPLE_RATE, vbr_quality=5, algorithm_quality=5)
     pct = (len(mp3_data) / wav_size * 100) if wav_size > 0 else 0
     print(f"MP3 conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}% size")
-    return bytes(mp3_data)
+    return mp3_data
 
 
 def convert_to_opus_ogg(waveform):
@@ -288,3 +284,5 @@ def convert_to_opus_ogg(waveform):
     pct = (len(ogg_data) / wav_size * 100) if wav_size > 0 else 0
     print(f"OGG conversion: {(time.perf_counter() - start)*1000:.1f}ms | {pct:.0f}% size")
     return bytes(ogg_data)
+
+

@@ -63,7 +63,7 @@ app = FastAPI(title="Matcha-TTS Inference Server", lifespan=lifespan)
 class InferenceRequest(BaseModel):
     input: str
     voice: int | str = 0
-    response_format: str = "ogg"
+    response_format: str = "mp3"
     speed: float = 1.0
     steps: int = 15
 
