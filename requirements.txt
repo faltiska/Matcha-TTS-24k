@@ -29,7 +29,6 @@ pytest          # tests
 phonemizer      # phonemization of text
 tensorboard
 librosa
-lameenc
 Cython
 numpy
 einops
