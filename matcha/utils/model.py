@@ -10,8 +10,11 @@ def sequence_mask(length, max_length=None):
     x = torch.arange(max_length, dtype=length.dtype, device=length.device)
     return x.unsqueeze(0) < length.unsqueeze(1)
 
-
-def fix_len_compatibility(length, num_downsamplings_in_unet=2):
+# num_downsamplings_in_unet must be len(channels) - 1. 
+# See channels configuration in decoder/default.yaml
+# If it is [256, 256], num_downsamplings_in_unet should be 1
+# If it is [256, 256, 256], num_downsamplings_in_unet should be 2
+def fix_len_compatibility(length, num_downsamplings_in_unet=1):
     factor = torch.scalar_tensor(2).pow(num_downsamplings_in_unet)
     length = (length / factor).ceil() * factor
     if not torch.onnx.is_in_onnx_export():

@@ -72,7 +72,7 @@ class DurationPredictor(nn.Module):
     
     Having 4 layers instead of 2 improved the duration estimations dramatically.
     """
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=0):
+    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=128):
         super().__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
@@ -380,7 +380,7 @@ class TextEncoder(nn.Module):
             self.prenet = lambda x, x_mask: x
 
         self.encoder = Encoder(
-            encoder_params.n_channels + (spk_emb_dim if n_spks > 1 else 0),
+            encoder_params.n_channels + spk_emb_dim,
             encoder_params.filter_channels,
             encoder_params.n_heads,
             encoder_params.n_layers,
@@ -388,13 +388,13 @@ class TextEncoder(nn.Module):
             encoder_params.p_dropout,
         )
 
-        self.proj_m = torch.nn.Conv1d(self.n_channels + (spk_emb_dim if n_spks > 1 else 0), self.n_feats, 1)
+        self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
         self.proj_w = DurationPredictor(
             self.n_channels,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
-            spk_emb_dim=spk_emb_dim if n_spks > 1 else 0,
+            spk_emb_dim=spk_emb_dim,
         )
 
     def forward(self, x, x_lengths, encoder_speaker_embedding=None, duration_speaker_embedding=None):
@@ -428,7 +428,7 @@ class TextEncoder(nn.Module):
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        # spk_emb_encoder was concatenated into x (see above), so we have to strip it before
+        # spk_emb_encoder was concatenated into x above, so we have to strip it before
         # passing it to DurationPredictor, which has its own embeddings.
         if self.n_spks > 1:
             x = x[:, :-self.spk_emb_dim, :]
