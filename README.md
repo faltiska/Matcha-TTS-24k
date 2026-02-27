@@ -113,19 +113,22 @@ Set the ckpt_path in train.yaml.
 Set dropouts and weight decay to 0, LR to 1e-4.  
 Watch the losses and run until losses get in the sae range as other speakers.
 
-You can check the param norm for that speaker, to make sure it does not get too big: 
-```
-python -m matcha.utils.inspect_spk_emb \
-  <path to the ckpt from which you resumed> \
-  <path to the latest ckpt from fine-tuning>
-```
-
 ### Add a new speaker:
 Point to a single-speaker corpus yaml, set n_spks to the new total
 ```
 python -m matcha.finetune_speaker +target_speaker=10 data=my-new-speaker data.n_spks=11
 ```
 Where configs/data/my-new-speaker.yaml has the new speaker's train/validate CSVs.
+
+### Average checkpoints:
+Averaging weights from multiple checkpoints can improve model quality and stability.
+```
+python -m matcha.utils.average_checkpoints \
+<ckpt1.ckpt> \
+<ckpt2.ckpt> \
+[<ckpt3.ckpt> ...] \
+-o averaged.ckpt
+```
 
 ### Transplant a speaker embedding from one checkpoint to another:
 Copies the embeddings for a single speaker from a source checkpoint into a target checkpoint, keeping all other weights and optimizer state intact.
