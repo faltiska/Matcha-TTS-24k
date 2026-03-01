@@ -11,6 +11,9 @@ import soundfile as sf
 from locust import HttpUser, task, events
 from locust.runners import MasterRunner
 from atomicx import AtomicInt
+from matcha.inference import VOICES
+
+VOICES = [{'id': '0(50)+1(50)', 'lang': 'en-us', 'gender': 'neutral', 'name': 'Voice mix'}, *VOICES]
 
 def get_audio_duration(data: bytes) -> float:
     try:
@@ -56,20 +59,6 @@ TEXT_SAMPLES = [
     {"lang": "fr-fr", "text": "La mémoire n'est pas un simple enregistreur; c'est une reconstruction active, façonnée par nos émotions, notre contexte et tout ce que nous avons vécu depuis l'événement original."},
     {"lang": "fr-fr", "text": "L'expérience a échoué, mais l'échec nous a appris plus que le succès ne l'aurait fait."},
     {"lang": "fr-fr", "text": "Tournez à gauche au feu, puis continuez tout droit pendant environ trois kilomètres."},
-]
-
-VOICES = [
-    {"id": "0(50)+1(50)", "lang": "en-us", "gender": "neutral", "name": "Voice mix"},
-    {"id": "0", "lang": "en-us", "gender": "male", "name": "Kai"},
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
-    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
-    {"id": "4", "lang": "en-gb", "gender": "male", "name": "Brian"},
-    {"id": "5", "lang": "en-gb", "gender": "male", "name": "Arthur"},
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
-    {"id": "7", "lang": "ro", "gender": "male", "name": "Emil"},
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
-    {"id": "9", "lang": "fr-fr", "gender": "male", "name": "Henri"},
 ]
 
 HOST = os.environ.get("HOST", "http://localhost:8880")

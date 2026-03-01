@@ -20,27 +20,19 @@ logging.getLogger("torch.utils._sympy.interp").setLevel(logging.ERROR)
 import torch
 torch._inductor.config.fx_graph_cache = True
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/corpus-small-24k/v3/checkpoint_epoch=724.ckpt"
+CHECKPOINT_PATH = "logs/train/v4/runs/2026-03-01_10-32-33/checkpoints/checkpoint_epoch=529.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
 
-VOICES = [
-    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
-    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
-    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
-    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
-    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
-]
-
 MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 2000))
+
+# length_scale is inverse of client speed: higher = slower speech
+LENGTH_SCALE_MIN      = 0.1   # fastest (client speed=2.0)
+LENGTH_SCALE_MAX      = 2.0   # slowest (client speed=0.1)
+LENGTH_SCALE_STANDARD = 1.00  # default pace (client speed=1.0)
 
 
 @asynccontextmanager
@@ -109,7 +101,8 @@ async def speak(request: InferenceRequest):
         speaker = voice_id
 
     t = time.perf_counter()
-    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, request.speed)
+    length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, LENGTH_SCALE_STANDARD / request.speed))
+    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, length_scale)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

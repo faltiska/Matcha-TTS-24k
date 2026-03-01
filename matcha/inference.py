@@ -12,8 +12,22 @@ from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 import av
 import numpy as np
+from matcha.utils.mp3_converter import encode_mp3
 
 SAMPLE_RATE = 24000
+
+VOICES = [
+    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
+    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
+    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
+    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
+    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
+    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
+    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
+    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
+    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
+    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
+]
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
@@ -29,8 +43,8 @@ class MatchaTTSInfer(nn.Module):
             self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim)
-        self.decoder = CFM(in_channels=2 * encoder.encoder_params.n_feats,
-                           out_channel=encoder.encoder_params.n_feats,
+        self.decoder = CFM(in_channels=2 * n_feats,
+                           out_channel=n_feats,
                            cfm_params=cfm, decoder_params=decoder, n_spks=n_spks, spk_emb_dim=spk_emb_dim)
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
@@ -119,8 +133,7 @@ class MatchaTTSInfer(nn.Module):
         #  w = torch.exp(logw) * x_mask
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-        # I think torch.ceil() that was rounding up each phoneme duration,
-        # causing the generated speech to be consistently too slow.
+        # Rounding up each phoneme duration, was causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
 
@@ -222,8 +235,7 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
             voice_mix=voice_mix,
             length_scale=length_scale,
         )
-    waveform = to_waveform(output, vocoder)
-    return post_process(waveform)
+    return to_waveform(output, vocoder)
 
 
 def to_waveform(mel, vocoder):
@@ -233,25 +245,6 @@ def to_waveform(mel, vocoder):
         audio = audio / max_abs * 0.95
     return audio.cpu().squeeze()
 
-
-def apply_lowpass_filter(audio: torch.Tensor, start_freq: float = 11000, end_freq: float = 12000, end_db: float = -12.0) -> torch.Tensor:
-    fft = torch.fft.rfft(audio)
-    freqs = torch.fft.rfftfreq(len(audio), 1 / SAMPLE_RATE)
-    gain = torch.ones_like(freqs)
-    mask = (freqs >= start_freq) & (freqs <= end_freq)
-    gain[mask] = torch.pow(10, (end_db / 20.0) * (freqs[mask] - start_freq) / (end_freq - start_freq))
-    gain[freqs > end_freq] = 10 ** (end_db / 20.0)
-    return torch.fft.irfft(fft * gain, n=len(audio))
-
-
-def post_process(audio):
-    start = time.perf_counter()
-    audio = apply_lowpass_filter(audio)
-    print(f"Post-processing took {time.perf_counter() - start:.3f}s")
-    return audio
-
-
-from matcha.utils.mp3_converter import encode_mp3
 
 def convert_to_mp3(waveform):
     start = time.perf_counter()

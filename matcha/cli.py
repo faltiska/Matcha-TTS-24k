@@ -10,22 +10,9 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
 VOCODERS = { "vocos", "bigvgan" }
-
-VOICES = [
-    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
-    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
-    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
-    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
-    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
-]
 
 def save_to_folder(filename: str, waveform: dict, folder: str):
     folder = Path(folder)

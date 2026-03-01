@@ -15,7 +15,7 @@ uv pip install locust atomicx
 Start Matcha-TTS server first, then start Locust:
 ```
 export HOST=http://localhost:8880
-locust -f ./psr/openai_load_test.py -H "$HOST" --web-host 127.0.0.1 --users 1 --spawn-rate 0.1 --run-time 5m MatchaTTSClient
+locust -f ./psr/load_test.py -H "$HOST" --web-host 127.0.0.1 --users 1 --spawn-rate 0.1 --run-time 5m MatchaTTSClient
 ```
 
 1. Use the Locust UI on http://localhost:8089 to start the test.
