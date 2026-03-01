@@ -80,7 +80,7 @@ class BASECFM(torch.nn.Module, ABC):
             y: conditional flow - interpolated sample between noise and target at time t
                 shape: (batch_size, n_feats, mel_timesteps)
         """
-        b, _, t = mu.shape
+        b = mu.shape[0]
 
         # random timestep
         t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
