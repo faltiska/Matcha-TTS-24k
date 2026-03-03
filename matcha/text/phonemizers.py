@@ -49,7 +49,7 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
 
 def cleanup_text(text):
-    text = re.sub('[\"„“”«»]', '', text)
+    text = re.sub('[\"„“”«»¡¿]', '', text)
     text = re.sub(r'\s*[<>()[\]{}—–…]\s*', ', ', text)
     text = re.sub(r'^,\s*', '', text)
     text = re.sub(r',\s*,', ',', text)

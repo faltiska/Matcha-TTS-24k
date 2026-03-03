@@ -271,3 +271,13 @@ class TestMultilingualPhonemizerErrors:
     def test_unsupported_language_raises(self):
         with pytest.raises(ValueError):
             multilingual_phonemizer("Hello.", "xx-xx")
+
+
+class TestPhonemizerOutputSymbols:
+    """Document which _punctuation chars survive cleanup_text + eSpeak to the final output."""
+
+    def test_only_prosodic_punctuation_survives_to_output(self):
+        from matcha.text.symbols import _punctuation
+        result = multilingual_phonemizer(_punctuation, "en-us")
+        surviving = set(result) & set(_punctuation)
+        assert surviving == set(';:,.!? '), f"Unexpected surviving punctuation: {surviving}"

@@ -7,13 +7,11 @@ Defines the set of symbols used in text input to the model.
 # Example: ["hɛˈloʊ", "haɪ"] → ["hɛˈloʊ", "haɪ___"] (padded to length 5)
 _pad = "_"
 
-# Punctuation marks preserved during phonemization
-# Helps the model learn prosody (pauses, intonation, emphasis)
-# Examples:
-#   . and , → pauses
-#   ? and ! → rising/emphatic intonation
-#   " → quoted speech patterns
-# The phonemizer parameter preserve_punctuation=True keeps these in the output
+# Punctuation marks that may appear in phonemizer output.
+# WARNING: do not reorder or remove — symbol IDs are baked into saved checkpoints.
+# Most of these are stripped before reaching eSpeak by cleanup_text() in phonemizers.py.
+# Only ;:,.!? and space actually survive to the phonemizer output in practice.
+# ¡¿ are stripped by cleanup_text, so in practice only ;:,.!? and space appear in training data.
 _punctuation = ';:,.!?¡¿_—…-\'"«»“”()[]/ '
 
 # IPA symbols that might appear in the list of supported languages.
