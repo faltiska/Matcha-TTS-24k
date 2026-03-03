@@ -147,6 +147,11 @@ def cli():
         default=os.getcwd(),
         help="Output folder to save results (default: current dir)",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Debug mode: save encoder mel wav and phoneme durations txt, skip mp3",
+    )
 
     args = parser.parse_args()
 
@@ -173,15 +178,33 @@ def speak(args, model, vocoder, text, speaker=0):
 
     t = time.perf_counter()
     language = next((v["lang"] for v in VOICES if v["id"] == str(speaker)), "en-us")
-    waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate)
-    elapsed = time.perf_counter() - t
-    audio_duration = waveform.shape[-1] / SAMPLE_RATE
-    rtf = elapsed / audio_duration
-    print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {rtf :.4f}")
 
-    save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
-    Path(args.output_folder, f"{base_name}.mp3").write_bytes(convert_to_mp3(waveform))
-    Path(args.output_folder, f"{base_name}.ogg").write_bytes(convert_to_opus_ogg(waveform))
+    if args.debug:
+        decoder_wav, encoder_wav, phoneme_dur_pairs = pipeline(
+            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate, debug=True
+        )
+        elapsed = time.perf_counter() - t
+        audio_duration = decoder_wav.shape[-1] / SAMPLE_RATE
+        print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
+
+        save_to_folder(base_name, decoder_wav.cpu().numpy(), args.output_folder)
+        save_to_folder(f"{base_name}_encoder", encoder_wav.cpu().numpy(), args.output_folder)
+
+        dur_path = Path(args.output_folder) / f"{base_name}_durations.txt"
+        dur_path.write_text(
+            "\n".join(f"{ph}\t{dur:.3f}" for ph, dur in phoneme_dur_pairs),
+            encoding="utf-8",
+        )
+        print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
+    else:
+        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate)
+        elapsed = time.perf_counter() - t
+        audio_duration = waveform.shape[-1] / SAMPLE_RATE
+        print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
+
+        save_to_folder(base_name, waveform.cpu().numpy(), args.output_folder)
+        Path(args.output_folder, f"{base_name}.mp3").write_bytes(convert_to_mp3(waveform))
+
     print("".join(["="] * 100))
 
 

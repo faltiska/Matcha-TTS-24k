@@ -78,7 +78,7 @@ class MatchaTTSInfer(nn.Module):
             self._mix(self.decoder_speaker_embeddings, speaker_mix, device),
         )
 
-    def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0, debug=False):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -169,7 +169,16 @@ class MatchaTTSInfer(nn.Module):
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=decoder_speaker_embedding)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
-        return denormalize(decoder_outputs, self.mel_mean, self.mel_std)
+        mel = denormalize(decoder_outputs, self.mel_mean, self.mel_std)
+        if debug:
+            return {
+                "mel": mel,
+                "encoder_mel": denormalize(mu_y[:, :, :y_max_length], self.mel_mean, self.mel_std),
+                "phoneme_durations": phoneme_durations.squeeze(1),
+            }
+        else:
+            return { "mel":  mel }
+
 
 def load_matcha(model_name, checkpoint_path):
     print(f"[!] Loading {model_name}!")
@@ -224,7 +233,7 @@ def load_vocoder(vocoder_name):
 
 
 @torch.inference_mode()
-def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, length_scale=1.0):
+def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, length_scale=1.0, debug=False):
     text_processed = process_text(text, language)
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(
@@ -234,8 +243,15 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
             speaker=speaker,
             voice_mix=voice_mix,
             length_scale=length_scale,
+            debug=debug,
         )
-    return to_waveform(output, vocoder)
+    if not debug:
+        return to_waveform(output["mel"], vocoder)
+    x_phones = text_processed["x_phones"]
+    phonemes = x_phones[1::2]
+    durations = output["phoneme_durations"].squeeze(0).tolist()
+    phoneme_dur_pairs = list(zip(phonemes, durations[1::2]))
+    return to_waveform(output["mel"], vocoder), to_waveform(output["encoder_mel"], vocoder), phoneme_dur_pairs
 
 
 def to_waveform(mel, vocoder):
