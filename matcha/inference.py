@@ -17,15 +17,15 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.06},  #1.11 
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.06},  #1.08
+    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.11},  #1.11 
+    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.08},  #1.08
     {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.06},  #1.06
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.06},  #1.03
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.06},  #1.09
-    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.06},  #1.11
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.06},  #1.04
-    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.06},  #1.09
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.06},  #1.08
+    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.03},  #1.03
+    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.09},  #1.09
+    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.11},  #1.11
+    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.04},  #1.04
+    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.09},  #1.09
+    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.08},  #1.08
     {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.06},  #1.06
 ]
 HOP_LENGTH = 256
@@ -45,7 +45,7 @@ class MatchaTTSInfer(nn.Module):
             self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
             self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dec)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
-                                   encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim_enc)
+                                   encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim_enc, spk_emb_dim_dur)
         self.decoder = CFM(in_channels=2 * n_feats,
                            out_channel=n_feats,
                            cfm_params=cfm, decoder_params=decoder, n_spks=n_spks, spk_emb_dim=spk_emb_dim_dec)
