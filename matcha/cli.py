@@ -41,14 +41,13 @@ def validate_args(args):
             args.vocoder = "vocos"
             warn_ = f"[-] Using custom model checkpoint, but no vocoder specified, defaulting to {args.vocoder}."
             warnings.warn(warn_, UserWarning)
-        if args.speaking_rate is None:
-            args.speaking_rate = 1.0
+
         if args.spk is not None:
             args.spk = [int(s.strip()) for s in args.spk.split(",")]
         else:
             args.spk = [None]
 
-    assert args.speaking_rate > 0, "Speaking rate must be greater than 0"
+    assert args.speaking_rate is None or args.speaking_rate > 0, "Speaking rate must be greater than 0"
 
     return args
 
@@ -177,11 +176,16 @@ def speak(args, model, vocoder, text, speaker=0):
     print("".join(["="] * 100))
 
     t = time.perf_counter()
-    language = next((v["lang"] for v in VOICES if v["id"] == str(speaker)), "en-us")
+    voice = next((v for v in VOICES if v["id"] == str(speaker)), VOICES[0])
+    language = voice["lang"]
+    if args.speaking_rate is not None:
+        length_scale = args.speaking_rate
+    else:
+        length_scale = voice["default_scale"]
 
     if args.debug:
         decoder_wav, encoder_wav, phoneme_dur_pairs = pipeline(
-            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate, debug=True
+            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, length_scale, debug=True
         )
         elapsed = time.perf_counter() - t
         audio_duration = decoder_wav.shape[-1] / SAMPLE_RATE
@@ -197,7 +201,7 @@ def speak(args, model, vocoder, text, speaker=0):
         )
         print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
     else:
-        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, args.speaking_rate)
+        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, length_scale)
         elapsed = time.perf_counter() - t
         audio_duration = waveform.shape[-1] / SAMPLE_RATE
         print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

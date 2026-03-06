@@ -22,7 +22,7 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v4/runs/2026-03-01_10-32-33/checkpoints/checkpoint_epoch=529.ckpt"
+CHECKPOINT_PATH = "logs/train/v4/checkpoint_epoch=994.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -32,8 +32,6 @@ MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 2000))
 # length_scale is inverse of client speed: higher = slower speech
 LENGTH_SCALE_MIN      = 0.1   # fastest (client speed=2.0)
 LENGTH_SCALE_MAX      = 2.0   # slowest (client speed=0.1)
-LENGTH_SCALE_STANDARD = 1.00  # default pace (client speed=1.0)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -101,7 +99,11 @@ async def speak(request: InferenceRequest):
         speaker = voice_id
 
     t = time.perf_counter()
-    length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, LENGTH_SCALE_STANDARD / request.speed))
+    if voice_mix is not None:
+        default_scale = sum(VOICES[spk_id]["default_scale"] * weight for spk_id, weight in voice_mix)
+    else:
+        default_scale = VOICES[speaker]["default_scale"]
+    length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, default_scale / request.speed))
     waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, length_scale)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE

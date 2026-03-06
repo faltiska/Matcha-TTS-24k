@@ -17,35 +17,38 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai"},
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane"},
-    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria"},
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella"},
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian"},
-    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur"},
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole"},
-    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil"},
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise"},
-    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri"},
+    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.06},  #1.11 
+    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.06},  #1.08
+    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.06},  #1.06
+    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.06},  #1.03
+    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.06},  #1.09
+    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.06},  #1.11
+    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.06},  #1.04
+    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.06},  #1.09
+    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.06},  #1.08
+    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.06},  #1.06
 ]
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
-
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_vocab, n_spks, spk_emb_dim, n_feats, encoder, decoder, cfm, data_statistics, **_):
+    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics,
+                 spk_emb_dim=None, spk_emb_dim_enc=None, spk_emb_dim_dur=None, spk_emb_dim_dec=None, **_):
         super().__init__()
+        spk_emb_dim_enc = spk_emb_dim_enc or spk_emb_dim
+        spk_emb_dim_dur = spk_emb_dim_dur or spk_emb_dim
+        spk_emb_dim_dec = spk_emb_dim_dec or spk_emb_dim
         self.n_spks = n_spks
         if n_spks > 1:
-            self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
-            self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
-            self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
+            self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_enc)
+            self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
+            self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dec)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
-                                   encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim)
+                                   encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim_enc)
         self.decoder = CFM(in_channels=2 * n_feats,
                            out_channel=n_feats,
-                           cfm_params=cfm, decoder_params=decoder, n_spks=n_spks, spk_emb_dim=spk_emb_dim)
+                           cfm_params=cfm, decoder_params=decoder, n_spks=n_spks, spk_emb_dim=spk_emb_dim_dec)
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
@@ -136,9 +139,6 @@ class MatchaTTSInfer(nn.Module):
         # Rounding up each phoneme duration, was causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
-
-        # Nudge short phonemes durations up, leaving longer ones mostly unaffected (no effect beyond ~4 frames)
-        # phoneme_durations = phoneme_durations * (1.0 + 0.3 * torch.exp(-phoneme_durations))
 
         # Round phoneme positions to avoid collisions (2 phonemes starting on the same position).
         # E.g. durations [1.5, 0.5, 1.5] -> cumsum [1.5, 2.0, 3.5] -> round [2, 2, 4].
@@ -246,12 +246,14 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
             debug=debug,
         )
     if not debug:
-        return to_waveform(output["mel"], vocoder)
+        return trim_trailing_silence(to_waveform(output["mel"], vocoder))
     x_phones = text_processed["x_phones"]
     phonemes = x_phones[1::2]
     durations = output["phoneme_durations"].squeeze(0).tolist()
     phoneme_dur_pairs = list(zip(phonemes, durations[1::2]))
-    return to_waveform(output["mel"], vocoder), to_waveform(output["encoder_mel"], vocoder), phoneme_dur_pairs
+    waveform = trim_trailing_silence(to_waveform(output["mel"], vocoder))
+    encoder_waveform = to_waveform(output["encoder_mel"], vocoder)
+    return waveform, encoder_waveform, phoneme_dur_pairs
 
 
 def to_waveform(mel, vocoder):
@@ -260,6 +262,28 @@ def to_waveform(mel, vocoder):
     if max_abs > 1.0:
         audio = audio / max_abs * 0.95
     return audio.cpu().squeeze()
+
+
+def trim_trailing_silence(audio, silence_threshold_db=-60.0):
+    """Trim trailing silence from a 1-D waveform tensor using 10ms RMS windows."""
+    window_frames = int(0.01 * SAMPLE_RATE)
+    silence_threshold_amp = 10 ** (silence_threshold_db / 20.0)
+
+    n_full_windows = len(audio) // window_frames
+    windowed = audio[:n_full_windows * window_frames].reshape(n_full_windows, window_frames)
+    rms = windowed.pow(2).mean(dim=1).sqrt()
+
+    trailing_silent_windows = 0
+    for i in range(len(rms) - 1, -1, -1):
+        if rms[i] < silence_threshold_amp:
+            trailing_silent_windows += 1
+        else:
+            break
+
+    trim_samples = trailing_silent_windows * window_frames
+    if trim_samples == 0:
+        return audio
+    return audio[:-trim_samples]
 
 
 def convert_to_mp3(waveform):
