@@ -13,6 +13,7 @@ from pathlib import Path
 cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
 os.environ["HF_HOME"] = str(cache_base / "huggingface")
 
+import types
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
@@ -31,10 +32,12 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 log = logging.getLogger(__name__)
 
 
+SPK_EMB_NAMES = ("encoder_speaker_embeddings.weight", "duration_speaker_embeddings.weight", "decoder_speaker_embeddings.weight")
+
+
 def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int):
-    spk_emb_names = {"spk_emb_encoder.weight", "spk_emb_duration.weight", "spk_emb_decoder.weight"}
     for name, param in model.named_parameters():
-        param.requires_grad = name in spk_emb_names
+        param.requires_grad = name in SPK_EMB_NAMES
 
     def _mask_grad(grad):
         masked = torch.zeros_like(grad)
@@ -44,6 +47,7 @@ def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int
     for emb in (model.encoder_speaker_embeddings, model.duration_speaker_embeddings, model.decoder_speaker_embeddings):
         emb.weight.register_hook(_mask_grad)
     log.info(f"Unfrozen spk_emb_encoder/duration/decoder row {target_speaker} only. All other parameters frozen.")
+
 
 
 def filter_dataset_to_speaker(datamodule: LightningDataModule, target_speaker: int):
@@ -71,14 +75,31 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     model.sample_rate = cfg.data.sample_rate
     model.hop_length = cfg.data.hop_length
 
-    # Load checkpoint weights before freezing, so optimizer only sees spk_emb params
     ckpt_path = cfg.get("ckpt_path")
-    if ckpt_path:
-        log.info(f"Loading checkpoint: {ckpt_path}")
-        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        model.on_load_checkpoint(ckpt)
-        model.load_state_dict(ckpt["state_dict"])
-        resumed_epoch = ckpt["epoch"]
+
+    original_on_load_checkpoint = model.on_load_checkpoint
+
+    def patched_on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        original_on_load_checkpoint(checkpoint)
+        all_param_names = [name for name, _ in self.named_parameters()]
+        spk_emb_indices = [all_param_names.index(n) for n in all_param_names if n in SPK_EMB_NAMES]
+        for opt_state in checkpoint.get("optimizer_states", []):
+            old_state = opt_state.get("state", {})
+            opt_state["state"] = {
+                new_idx: old_state.get(old_idx, old_state.get(str(old_idx)))
+                for new_idx, old_idx in enumerate(spk_emb_indices)
+                if old_idx in old_state or str(old_idx) in old_state
+            }
+            for param_group in opt_state.get("param_groups", []):
+                param_group["params"] = list(range(len(spk_emb_indices)))
+
+    model.on_load_checkpoint = types.MethodType(patched_on_load_checkpoint, model)
+
+    def patched_configure_optimizers(self):
+        spk_emb_params = [p for n, p in self.named_parameters() if n in SPK_EMB_NAMES]
+        return self.hparams.optimizer(params=spk_emb_params)
+
+    model.configure_optimizers = types.MethodType(patched_configure_optimizers, model)
 
     freeze_all_except_target_speaker(model, target_speaker)
 
@@ -108,11 +129,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if logger:
         utils.log_hyperparameters(object_dict)
 
-    if ckpt_path:
-        trainer.fit_loop.epoch_progress.current.completed = resumed_epoch
-
-    # Pass ckpt_path=None since we loaded weights manually above
-    trainer.fit(model=model, datamodule=datamodule)
+    trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
     return trainer.callback_metrics, object_dict
 
