@@ -21,10 +21,8 @@ class BASECFM(torch.nn.Module, ABC):
         self.n_spks = n_spks
         self.spk_emb_dim = spk_emb_dim
         self.solver = cfm_params.solver
-        if hasattr(cfm_params, "sigma_min"):
-            self.sigma_min = cfm_params.sigma_min
-        else:
-            self.sigma_min = 1e-4
+        self.sigma_min = getattr(cfm_params, "sigma_min", 1e-4)
+        self.use_mu_prior = getattr(cfm_params, "use_mu_prior", False)
 
         self.estimator = None
 
@@ -51,7 +49,17 @@ class BASECFM(torch.nn.Module, ABC):
         #  with each synthesis call so MCD metrics are not reliable.
         generator = torch.Generator(device=mu.device)
         generator.manual_seed(42)
-        z = torch.randn_like(mu, generator=generator)        
+        
+        # The MathaTTS white paper recommends to start from mu (the encoder's mel prediction) + noise.
+        # The decoder would then only need to refine it.
+        # Still, the original Matcha-TTS GIT code was not adding mu, and ODE was starting from pure noise.
+        # The author addressed this in GitHub Issue #141, arguing that mu is concatenated to the input of the UNet/Decoder. 
+        # Because the model "sees" mu at every step, the author found that it can learn to find the data just as well starting from.
+        # He noted that in practice, they didn't see much difference in quality when switching between the two. 
+        if self.use_mu_prior:
+            z = mu + torch.randn_like(mu, generator=generator)
+        else:
+            z = torch.randn_like(mu, generator=generator)
         
         t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
         return self.solve(z, t_span=t_span, mu=mu, mask=mask, spks=spks)
@@ -84,14 +92,17 @@ class BASECFM(torch.nn.Module, ABC):
 
         # random timestep
         t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
-        # sample noise p(x_0)
-        z = torch.randn_like(x1)
+        # Start from mu + noise or pure noise depending on use_mu_prior (see cfm yaml), must match inference.
+        if self.use_mu_prior:
+            x0 = mu + torch.randn_like(x1)
+        else:
+            x0 = torch.randn_like(x1)
 
-        # "y" is an interpolated sample between pure noise and the target spectrogram at timestep t.
+        # "y" is an interpolated sample between prior and the target spectrogram at timestep t.
         # It represents what the mel-spectrogram looks like at time t during the diffusion process.
-        y = (1 - (1 - self.sigma_min) * t) * z + t * x1
-        # "u" is the target velocity - the optimal direction to flow from noise to target.
-        u = x1 - (1 - self.sigma_min) * z
+        y = (1 - (1 - self.sigma_min) * t) * x0 + t * x1
+        # "u" is the target velocity - the optimal direction to flow from prior to target.
+        u = x1 - (1 - self.sigma_min) * x0
         
         pred = self.estimator(y, mask, mu, t.squeeze(), spks)
 
