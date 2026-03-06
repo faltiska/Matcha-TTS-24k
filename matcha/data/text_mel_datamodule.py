@@ -280,7 +280,7 @@ class TextMelDataModule(LightningDataModule):
         f_max,
         data_statistics,
         seed,
-        load_durations,
+        load_durations=True,
         mel_dir: Optional[str] = None,
         persistent_workers: bool = True,
         mel_backend="vocos",
