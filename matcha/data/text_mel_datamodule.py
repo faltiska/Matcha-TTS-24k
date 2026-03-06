@@ -266,7 +266,6 @@ class TextMelDataModule(LightningDataModule):
         name,
         train_filelist_path,
         valid_filelist_path,
-        batch_size,
         num_workers,
         pin_memory,
         add_blank,
@@ -280,11 +279,9 @@ class TextMelDataModule(LightningDataModule):
         f_max,
         data_statistics,
         seed,
-        load_durations=True,
         mel_dir: Optional[str] = None,
         persistent_workers: bool = True,
         mel_backend="vocos",
-        drop_last: bool = False,
         max_frames_per_batch: Optional[int] = None,            
     ):
         super().__init__()
@@ -301,7 +298,6 @@ class TextMelDataModule(LightningDataModule):
         """
         self.trainset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.train_filelist_path,
-            self.hparams.n_spks,
             self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
@@ -312,13 +308,11 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f_max,
             self.hparams.data_statistics,
             self.hparams.seed,
-            self.hparams.load_durations,
             self.hparams.mel_dir,
             self.hparams.mel_backend,
         )
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
-            self.hparams.n_spks,
             self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
@@ -329,7 +323,6 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f_max,
             self.hparams.data_statistics,
             self.hparams.seed,
-            self.hparams.load_durations,
             self.hparams.mel_dir,
             self.hparams.mel_backend,
         )
@@ -385,7 +378,6 @@ class TextMelDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         filelist_path,
-        n_spks,
         add_blank=True,
         n_fft=1024,
         n_mels=80,
@@ -396,14 +388,12 @@ class TextMelDataset(torch.utils.data.Dataset):
         f_max=8000,
         data_parameters=None,
         seed=None,
-        load_durations=False,
         mel_dir=None,
         mel_backend="vocos",
     ):
         self.filelist_path = Path(filelist_path)
         self.filelist_dir = self.filelist_path.parent
         self.filepaths_and_text = parse_filelist(filelist_path)
-        self.n_spks = n_spks
         self.add_blank = add_blank
         self.n_fft = n_fft
         self.n_mels = n_mels
@@ -412,7 +402,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.win_length = win_length
         self.f_min = f_min
         self.f_max = f_max
-        self.load_durations = load_durations
         self.mel_dir = mel_dir
         self.mel_backend = mel_backend
         self.mel_extractor = get_mel_extractor(
@@ -451,36 +440,15 @@ class TextMelDataset(torch.utils.data.Dataset):
         
         mel = self.get_mel(rel_base_path)
 
-        if self.load_durations:
-            durations = self.get_durations(rel_base_path, phoneme_ids)
-        else:
-            durations = None
-
         sample = {
             "x": phoneme_ids,
             "y": mel,
             "spk": spk,
             "filepath": rel_base_path,
             "x_text": phonemes,
-            "durations": durations,
         }
 
         return sample
-
-    def get_durations(self, rel_base_path, text):
-        dur_loc = self.filelist_dir / "durations" / (rel_base_path + ".npy")
-
-        try:
-            durs = torch.from_numpy(np.load(dur_loc).astype(int))
-        except FileNotFoundError as e:
-            raise FileNotFoundError(
-                f"Tried loading the durations but durations didn't exist at {dur_loc}, make sure you've generated the durations"
-                f" first using: python -m matcha.utils.get_durations_from_trained_model or python -m matcha.utils.precompute_corpus --extract-durations\n"
-            ) from e
-
-        assert len(durs) == len(text), f"Length of durations {len(durs)} and text {len(text)} do not match"
-
-        return durs
 
     def get_mel(self, rel_base_path):
         # rel_base_path is like "1/abc"
@@ -529,7 +497,6 @@ class TextMelBatchCollate:
 
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
         x = torch.zeros((B, x_max_length), dtype=torch.long)
-        durations = torch.zeros((B, x_max_length), dtype=torch.long)
 
         y_lengths, x_lengths = [], []
         spks = []
@@ -543,8 +510,6 @@ class TextMelBatchCollate:
             spks.append(item["spk"])
             filepaths.append(item["filepath"])
             x_texts.append(item["x_text"])
-            if item["durations"] is not None:
-                durations[i, : item["durations"].shape[-1]] = item["durations"]
 
         y_lengths = torch.tensor(y_lengths, dtype=torch.long)
         x_lengths = torch.tensor(x_lengths, dtype=torch.long)
@@ -558,7 +523,6 @@ class TextMelBatchCollate:
             "spks": spks,
             "filepaths": filepaths,
             "x_texts": x_texts,
-            "durations": durations if not torch.eq(durations, 0).all() else None,
         }
 
 

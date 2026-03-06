@@ -6,19 +6,13 @@ valid_filelist_path: data/corpus-small-24k/validate.csv
 mel_dir: data/corpus-small-24k/mels
 
 # Not used, use max_frames_per_batch instead 
-batch_size: 33
+# batch_size: 33
 
 # See DynamicBatchSampler in text_mel_datamodule
-max_frames_per_batch: 36000
+max_frames_per_batch: 32000
 
 num_workers: 16
 persistent_workers: true
-
-# Set drop_last to true to drop the last batch which will most likely have a smaller
-# number of samples than set by batch_size, resulting in model recompilation. 
-# last_batch_size = num_samples % batch_size 
-# num_samples is the number of lines you have in your train.csv file.
-drop_last: false
 
 pin_memory: True
 add_blank: True
@@ -31,7 +25,6 @@ win_length: 1024
 f_min: 0
 f_max: 12000
 seed: ${seed}
-load_durations: false
 
 data_statistics:
   mel_mean: -3.306311

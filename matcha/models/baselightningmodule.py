@@ -44,7 +44,6 @@ class BaseLightningClass(LightningModule, ABC):
             y=y,
             y_lengths=y_lengths,
             spks=spks,
-            durations=batch["durations"],
         )
 
         return diff_loss, dur_loss, prior_loss
