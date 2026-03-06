@@ -13,10 +13,6 @@ defaults:
   - extras: default
   - hydra: default
 
-  # experiment configs allow for version control of specific hyperparameters
-  # e.g. best hyperparameters for given model and datamodule
-  - experiment: null
-
   # config for hyperparameter optimization
   - hparams_search: null
 
@@ -30,7 +26,7 @@ defaults:
 # task name, determines output directory path
 task_name: "train"
 
-run_name: corpus-small-24k
+run_name: v4
 
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs

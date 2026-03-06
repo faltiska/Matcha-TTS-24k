@@ -9,8 +9,20 @@ _target_: matcha.models.matcha_tts.MatchaTTS
 n_vocab: 156
 
 n_spks: ${data.n_spks}
-spk_emb_dim: 96
+
+spk_emb_dim: null  # legacy v4 compat; use spk_emb_dim_enc/dur/dec instead
+spk_emb_dim_enc: 96
+
+spk_emb_dim_dur: 64
+
+# Speaker embedding size for the decoder.
+# decoder concatenates the speaker embedding to the input at every time step, 
+# so this size does not increase its model size.
+# Decoder channels must be at least 2 * n_feats + spk_emb_dim => 200 + 120 = 320.
+spk_emb_dim_dec: 120
+
+# Shared speaker embedding size for the encoder and duration predictor.
+# The decoder has its own spk_emb_dim defined in configs/model/decoder/default.yaml.
 n_feats: ${data.n_feats}
 data_statistics: ${data.data_statistics}
 prior_loss: true
-use_precomputed_durations: ${data.load_durations}

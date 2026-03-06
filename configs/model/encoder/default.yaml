@@ -1,44 +1,51 @@
-# TextEncoder model size increased to 12.9M params
-
 encoder_type: RoPE Encoder
 encoder_params:
-  n_feats: ${model.n_feats}
+  n_feats: ${model.n_feats} # 100, imposed by vocos
+  
+  # Increased from 192
   # I am training with multiple speakers, so the total number of channels is: (n_channels + spk_emb_dim) = 288
   # (n_channels + spk_emb_dim) / n_heads should be a multiple of 8
   n_channels: 192
   
-  # Changed from 768, because I want it to be 3x the total number of channels (and a multiple of 8)
-  filter_channels: 864
+  # Changed from 768
+  # Usually it is 3x or 4x the total number of channels (and a multiple of 8).
+  filter_channels: 1152
   
-  # Changed from 256 for smarter duration predictor to keep up with the number of speakers
-  filter_channels_dp: 320
-  
-  # Changed n_heads from 2, for better prosody. Allows the encoder to produce a much more 
+  # Changed from 2, for better prosody. Allows the encoder to produce a much more 
   # accurate prior mu, reducing the "work" the CFM decoder has to do to reach the target mel.
-  n_heads: 6
+  # It used to be recommended that (n_channels + spk_emb_dim) / n_heads is more than 64, but
+  # I think having 6 heads here was beneficial even if it reduced head space to 48
+  n_heads: 6 
   
   n_layers: 4
   
   # Increased from 3. It controls receptive field in FFN layers.
-  # Each position sees itself + 2 neighbors on each side for local phonetic context
+  # Each position sees itself + 2 neighbors on each side for better local phonetic context
+  # kernel_size is hardcoded to 5 in prenet, so this value only controls the kernel for the FFN layers 
   kernel_size: 5
   
-  # Increase to 0.15, if you see overfitting 
-  p_dropout: 0.15
-  
-  # Increased from 64 to 96 (defined in matcha.yaml)
-  spk_emb_dim: ${model.spk_emb_dim}
+  # Not a lot of overfitting, no need for a larger value; It does not learn properly with 0.15
+  p_dropout: 0.1
   
   prenet: true
 
 duration_predictor_params:
-  filter_channels_dp: ${model.encoder.encoder_params.filter_channels_dp}
-  # Changed from 3. 
-  # It looks at the phoneme plus 2 neighbors on each side (5 phonemes total)
+  # 'conv1' uses the original DurationPredictor1
+  # 'conv2' uses the modified DurationPredictor2
+  type: conv2
+
+  # A value of 64 is probably good, with DurationPredictor2, which injects the spk_emb after LayerNorm into every layer.
+  # DurationPredictor1 with 256 was overfitting badly. 
+  # DurationPredictor1 only concatenates the spk_emb into the input, not into every layer.
+  filter_channels_dp: 64
+  
+  # Originally 3
   kernel_size: 5
-  # This is the one most prone to overfitting, I think I can train with 0.15 if using 2 layers.  
-  # Original was set to same value as the text encoder (0.1).
-  p_dropout: 0.15
-  # I tried to use 4 layers, but it's too much, the model overfits quickly.
-  # I think, no matter how many speakers I have, there are not so many duration rules to learn.
-  n_layers: 2
+  
+  # Increase from 0.1 to fight overfitting 
+  # DurationPredictor1 with filter_channels_dp: 256, and a dropout of 0.4 still shows more overfitting than diff and prior  
+  p_dropout: 0.1
+  
+  # Increased from 2 
+  # Having 4 layers instead of 2 improved the duration estimations dramatically.
+  n_layers: 4

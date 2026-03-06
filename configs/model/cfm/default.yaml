@@ -4,3 +4,6 @@ name: CFM
 solver: midpoint 
 
 sigma_min: 1e-4
+
+# Start the ODE from prior+noise (true) or pure white noise (false).
+use_mu_prior: true

@@ -1,0 +1,36 @@
+# @package _global_
+# Overrides v5 defaults back to v4 architecture for resuming training from a v4 checkpoint.
+
+run_name: v4
+
+data:
+  max_frames_per_batch: 32000
+  
+model:
+  spk_emb_dim: 96
+  spk_emb_dim_enc: null
+  spk_emb_dim_dur: null
+  spk_emb_dim_dec: null
+
+  encoder:
+    encoder_params:
+      filter_channels: 864
+      n_heads: 4
+      p_dropout: 0.05
+    duration_predictor_params:
+      type: conv
+      filter_channels_dp: 256
+      kernel_size: 3
+      p_dropout: 0.1
+      n_layers: 2
+
+  decoder:
+    attention_head_dim: 80
+    num_heads: 4
+
+  cfm:
+    use_mu_prior: false
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-3
