@@ -1,9 +1,3 @@
-# Bug flagged by Gemini
-I didn't spend a log if time on this, but Gemini thinks there's a bug in this code from flow_matching.py
-```
-y = (1 - (1 - self.sigma_min) * t) * z + t * x1
-```
-
 # Log sub-losses per speaker per epoch.
 
 And don't log losses per step anymore, I never look at those.
@@ -148,43 +142,3 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 Use a LR scheduler
 Train with bigvgan mels (or Try to convert Vocos mels to bigvgan mels)
 Take 579 and run a traininig with just Brian speaker embeddings enabled
-
-
-## Precompute Phoneme Durations Using a Forced Aligner
-
-Currently, phoneme durations are computed during training via Monotonic Alignment Search (MAS), which aligns
-the encoder's `mu_x` against the ground truth mel using a Gaussian log-likelihood score. MAS works well but
-recomputes alignments every epoch and produces noisier targets early in training when `mu_x` is still poor.
-
-An alternative is to precompute durations once, before training, using a forced aligner, and store them as
-`.npy` files. The infrastructure for this already exists: `load_durations=True` in the data config, and
-`get_durations()` in `TextMelDataset` which loads from `data/<corpus>/durations/<rel_base_path>.npy`.
-
-### Recommended model: `facebook/wav2vec2-lv-60-espeak-cv-ft`
-
-- Available on Hugging Face
-- Fine-tuned with CTC to output **eSpeak IPA phonemes directly** — the same phoneme set used by this project
-- Trained on 36 languages including English, French, Italian, Spanish, Portuguese, German, Russian
-- Romanian is not in the training set, but shares most phonemes with the Romance languages that are
-- Expects 16kHz audio — resample in memory at compute time, no need to save 16kHz copies
-
-### Implementation outline
-
-Write `matcha/utils/compute_durations.py`:
-1. Load the model and processor from `facebook/wav2vec2-lv-60-espeak-cv-ft`
-2. For each row in the CSV: load wav, resample to 16kHz, run `torchaudio.functional.forced_align`
-   with the eSpeak phoneme sequence as the target transcript
-3. Convert frame-level CTC alignment to per-phoneme frame counts at 24kHz hop_length
-4. Account for `add_blank` (interspersed zeros) — assign 0 frames to blank tokens
-5. Save as `data/<corpus>/durations/<rel_base_path>.npy`
-
-Then set `load_durations: true` in the data config and `use_precomputed_durations: true` in `train.yaml`.
-
-### Expected benefit
-
-- Duration targets are fixed and consistent across all epochs
-- No MAS computation during training (small speed improvement)
-- Duration predictor trains on ground-truth acoustic boundaries from the start,
-  rather than noisy MAS alignments that improve only as `mu_x` improves
-
-
