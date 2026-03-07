@@ -13,6 +13,9 @@ n_spks: ${data.n_spks}
 spk_emb_dim: null  # legacy v4 compat; use spk_emb_dim_enc/dur/dec instead
 spk_emb_dim_enc: 96
 
+# Speaker embedding size for the duration predictor.
+# DurationPredictor2/3 add the speaker embedding to every layer. 
+# DurationPredictor1 adds the speaker embedding only at input, in the first layer. 
 spk_emb_dim_dur: 64
 
 # Speaker embedding size for the decoder.
