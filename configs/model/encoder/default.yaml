@@ -30,16 +30,16 @@ encoder_params:
   prenet: true
 
 duration_predictor_params:
-  # 'conv1' uses the original DurationPredictor1
-  # 'conv2' uses the modified DurationPredictor2
-  type: conv2
+  # Use 'conv1/2/3' to specify which implementation to be used: ConvDurationPredictor1/2/3
+  # See text_encoder.py for details.
+  type: conv1
 
   # A value of 64 is probably good, with DurationPredictor2, which injects the spk_emb after LayerNorm into every layer.
   # DurationPredictor1 with 256 was overfitting badly. 
   # DurationPredictor1 only concatenates the spk_emb into the input, not into every layer.
-  filter_channels_dp: 64
+  filter_channels_dp: 128
   
-  # Originally 3
+  # Originally 3; must be an odd number
   kernel_size: 5
   
   # Increase from 0.1 to fight overfitting 
