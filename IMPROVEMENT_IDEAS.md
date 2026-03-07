@@ -1,11 +1,12 @@
-# Log sub-losses per speaker per epoch.
+# Add a list of accepted symbols
+and update the unit test
 
+# Log sub-losses per speaker per epoch.
 And don't log losses per step anymore, I never look at those.
 
 # CFM / Diffusion improvement 
 
 ## 1. The "Beta" Schedule (Shifted Sampling)
-
 Instead of weighting the loss (which keeps the gradients the same but scales them), try changing **which** timesteps the model sees more often.
 In mel-spectrogram generation, the model often struggles with the fine details that emerge near.
 Instead of `torch.rand`, sample  from a **Beta distribution**.

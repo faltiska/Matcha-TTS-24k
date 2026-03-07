@@ -1,0 +1,31 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: speaker-style-encoder
+  - model: style_encoder/default
+  - callbacks: default
+  - logger: tensorboard
+  - trainer: default
+  - paths: default
+  - extras: default
+  - hydra: default
+  - optional local: default
+  - debug: null
+
+task_name: "train_style_encoder"
+
+run_name: v1
+
+tags: ["dev"]
+
+train: True
+
+ckpt_path: null
+
+seed: 1234
+
+# Path to the MatchaTTS checkpoint used as the source of ground-truth speaker embeddings.
+# Must be set on the command line or in a local override:
+#   python -m matcha.train_style_encoder matcha_ckpt=logs/train/v6/checkpoint.ckpt
+matcha_ckpt: logs/train/v4/checkpoint_epoch=1189.ckpt
