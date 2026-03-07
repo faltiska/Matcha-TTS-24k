@@ -155,7 +155,60 @@ class ConvDurationPredictor2(nn.Module):
             x = self.drop(x)
         x = self.proj(x * x_mask)
         return x * x_mask
-    
+
+
+class ConvDurationPredictor3(nn.Module):
+    """Predicts phoneme durations using stacked convolutional layers.
+
+    Uses FiLM conditioning: the speaker embedding is projected to scale (gamma) and shift (beta)
+    and applied after LayerNorm at every layer, vs. ConvDurationPredictor2 which only adds a shift.
+    """
+    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=64):
+        super().__init__()
+        self.in_channels = in_channels
+        self.filter_channels = filter_channels
+        self.p_dropout = p_dropout
+        self.spk_emb_dim = spk_emb_dim
+
+        self.drop = torch.nn.Dropout(p_dropout)
+        self.conv_layers = torch.nn.ModuleList()
+        self.norm_layers = torch.nn.ModuleList()
+
+        # Project to 2x filter_channels to get both scale (gamma) and shift (beta)
+        self.spk_proj = torch.nn.Linear(spk_emb_dim, filter_channels * 2)
+
+        self.conv_layers.append(
+            torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+        )
+        self.norm_layers.append(LayerNorm(filter_channels))
+
+        for _ in range(n_layers - 1):
+            self.conv_layers.append(
+                torch.nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+            )
+            self.norm_layers.append(LayerNorm(filter_channels))
+
+        self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
+
+    def forward(self, x, x_mask, spk_emb=None):
+        if spk_emb is not None:
+            # Generate scale (gamma) and shift (beta)
+            film_params = self.spk_proj(spk_emb).unsqueeze(-1)
+            gamma, beta = torch.split(film_params, self.filter_channels, dim=1)
+        else:
+            gamma = torch.ones(x.shape[0], self.filter_channels, 1, device=x.device, dtype=x.dtype)
+            beta = torch.zeros(x.shape[0], self.filter_channels, 1, device=x.device, dtype=x.dtype)
+
+        for conv, norm in zip(self.conv_layers, self.norm_layers):
+            x = conv(x * x_mask)
+            x = torch.relu(x)
+            x = norm(x)
+            # Apply FiLM conditioning: scale and shift
+            x = (x * gamma) + beta
+            x = self.drop(x)
+
+        x = self.proj(x * x_mask)
+        return x * x_mask
 
 class RotaryPositionalEmbeddings(nn.Module):
     """
@@ -442,12 +495,23 @@ class TextEncoder(nn.Module):
 
         self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim_enc, self.n_feats, 1)
         dp_type = getattr(duration_predictor_params, 'type', 'conv1')
-        if dp_type == 'conv2':
+        dp_n_layers = getattr(duration_predictor_params, 'n_layers', 2)
+        if dp_type == 'conv3':
+            self.proj_w = ConvDurationPredictor3(
+                self.n_channels,
+                duration_predictor_params.filter_channels_dp,
+                duration_predictor_params.kernel_size,
+                duration_predictor_params.p_dropout,
+                n_layers=dp_n_layers,
+                spk_emb_dim=self.spk_emb_dim_dur,
+            )
+        elif dp_type == 'conv2':
             self.proj_w = ConvDurationPredictor2(
                 self.n_channels,
                 duration_predictor_params.filter_channels_dp,
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
+                n_layers=dp_n_layers,
                 spk_emb_dim=self.spk_emb_dim_dur,
             )
         else:
@@ -456,6 +520,7 @@ class TextEncoder(nn.Module):
                 duration_predictor_params.filter_channels_dp,
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
+                n_layers=dp_n_layers,
                 spk_emb_dim=self.spk_emb_dim_dur,
             )
 
