@@ -2,16 +2,14 @@
 # Documents all changes from v4 to v5 architecture.
 # The current default configs already contain these values.
 
-run_name: v5
+run_name: v6
 
 data:
   max_frames_per_batch: 32000
 
-ckpt_path: logs/train/v5/runs/2026-03-06_15-54-57/checkpoints/checkpoint_epoch=234.ckpt
+ckpt_path: null
 
 model:
-  # v4: spk_emb_dim: 96 (single dim for all 3 components)
-  # v5: separate dims per component
   spk_emb_dim: null
   spk_emb_dim_enc: 96
   spk_emb_dim_dur: 64
@@ -19,30 +17,22 @@ model:
 
   encoder:
     encoder_params:
-      # v4: filter_channels: 864
       filter_channels: 1152
-      # v4: n_heads: 4
       n_heads: 6
-      # v4: p_dropout: 0.05
       p_dropout: 0.05
     duration_predictor_params:
-      # v4: type: conv1
-      type: conv2
-      # v4: filter_channels_dp: 256
+      # v5: type: conv2
+      type: conv3
       filter_channels_dp: 128
-      # v4: kernel_size: 3
       kernel_size: 5
-      # there was a bung in the code, and n_layers was actually 2 regardless of this config 
-      n_layers: 2
+      # v4: n_layers: 2
+      n_layers: 4
 
   decoder:
-    # v4: attention_head_dim: 80
     attention_head_dim: 64
-    # v4: num_heads: 4
     num_heads: 5
 
   cfm:
-    # v4: false
     use_mu_prior: true
 
   optimizer:
