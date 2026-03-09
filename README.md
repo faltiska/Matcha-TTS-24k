@@ -7,9 +7,31 @@ uv pip install torch torchaudio torchvision torchcodec --index-url https://downl
   or use the 2.9.1 version, it was slightly faster than 0.10.0
 uv pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 torchcodec==0.9.1 --index-url https://download.pytorch.org/whl/cu130 --upgrade
 uv pip install -r requirements.txt --upgrade
-python setup.py build_ext --inplace --force
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
+```
+
+## A note on running inference and training at the same time
+Sometimes I need to test a checkpoint while training still runs. 
+I start a server app which loads the model into memory and waits for POST requests that trigger inference. 
+I have enough GPU VRAM to both tasks. The inference request works fine 99% of the time.
+Once in a while, both processes freeze like they are waiting for one another. 
+If I stop the server with kill -9, the trainer continues.
+A possible explanation is that PyTorch's CUDA caching allocator is not designed for multi-process sharing. 
+When it can't satisfy an allocation from its internal free pool, it calls cudaMalloc or attempts to release 
+blocks back to the driver — both of which contend on the driver-level mutex. 
+Under memory pressure (common during training), this happens frequently.
+The easiest fix is to run this before starting either process. 
+```
+nvidia-cuda-mps-control -d
+```
+I can stop it later, though I don't know why I should:
+```
+echo quit | nvidia-cuda-mps-control
+```
+Also, Sonnet said that this might help the training process:
+```
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,garbage_collection_threshold:0.8
 ```
 
 ## Inference
@@ -52,7 +74,7 @@ After running, verify the normalization by measuring again - all speakers should
 Delete the mels folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
-matcha-data-stats -i corpus-small-24k.yaml
+python -m matcha.utils.generate_data_statistics -i corpus-small-24k.yaml
 ```
 It will output something like
 {'mel_mean': -1.7744582891464233, 'mel_std': 4.116815090179443}
@@ -65,23 +87,14 @@ This avoids recomputing mels every epoch and reduces data-loading overhead.
 python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-24k.yaml
 ```
 
-You can test the precomputed mel files using the vocoder wrapper scripts.
-For a 22KHz corpus, and the HiFiGAN vocoder:
-```
-python -m matcha.hifigan.models --wav input.wav --data-config  configs/data/corpus-small-22k.yaml --vocoder-id hifigan_T2_v1
-python -m matcha.hifigan.models --mel input.mel --data-config  configs/data/corpus-small-22k.yaml --vocoder-id hifigan_T2_v1
-```
-which will output a file called vocoder-test.wav in the project root.
-
-For a 24KHz corpus, and Vocos:
+You can test the precomputed mel files using the vocoder wrapper scripts:
 ```
 python -m matcha.vocos24k.vocos_wrapper --wav input.wav --data-config  configs/data/corpus-small-24k.yaml
 python -m matcha.vocos24k.vocos_wrapper --mel input.mel --data-config  configs/data/corpus-small-24k.yaml
 ```
 which will output a file called vocoder-test24k.wav
 
-You can compare the reconstituted files to the original input wav, to asses the quality of the vocoder.
-I find hifigan_T2_v1 better than hifigan_univ_v1, and Vocos at 24KHz better than hifigan_T2_v1.
+You can compare the reconstituted files to the original input wav, to assess the quality of the vocoder.
 
 ### Train
 ```
@@ -91,6 +104,7 @@ python -m matcha.train
 Monitor training with: 
 ```
 tensorboard --logdir logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
+watch -n 1 nvidia-smi
 ```
 
 Profile your trainer with:
@@ -121,13 +135,14 @@ python -m matcha.finetune_speaker +target_speaker=10 data=my-new-speaker data.n_
 Where configs/data/my-new-speaker.yaml has the new speaker's train/validate CSVs.
 
 ### Average checkpoints:
-Averaging weights from multiple checkpoints can improve model quality and stability.
+Averaging weights from multiple checkpoints can improve give you a little better quality overall.
+You can expect the worst speakers to get a bit better but the best speakers to get a bit worse.
 ```
 python -m matcha.utils.average_checkpoints \
-<ckpt1.ckpt> \
-<ckpt2.ckpt> \
-[<ckpt3.ckpt> ...] \
--o averaged.ckpt
+"logs/train/v4/runs/to average/checkpoint_epoch=1189.ckpt" \
+"logs/train/v4/runs/to average/checkpoint_epoch=1200.ckpt" \
+"logs/train/v4/runs/to average/checkpoint_epoch=1208.ckpt" \
+-o logs/train/v4/averaged2.ckpt
 ```
 
 ### Transplant a speaker embedding from one checkpoint to another:
@@ -153,13 +168,13 @@ Compared to the original MatchaTTS, I did the following:
   This speeds up training a bit
 - Switched to the torch built in ODE solver 
   No need to maintain our own version, since the torch one supports all algorithms. 
-- Made some performance improvements to the CPU based monotonic_align implementation
 - Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
-  It is fast, but not really faster than the CPU version
 - Found a series of other performance improvements
 - Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
 - Made changes to get the model to compile ofr training, but since using the dynamic data loader, it does not help
 - Made changes to get the model to compile for inference, it improves synthesis time 3x
+- Added a script that precomputes durations using Facebook's wav2vec2 so I don't have to calculate them using MAS during training
+- Added two smarter Duration Predictor models 
 
 # PyTorch stuff
 
