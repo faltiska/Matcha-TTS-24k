@@ -17,38 +17,31 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id": "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.11},  #1.11 
-    {"id": "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.08},  #1.08
-    {"id": "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.06},  #1.06
-    {"id": "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.03},  #1.03
-    {"id": "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.09},  #1.09
-    {"id": "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.11},  #1.11
-    {"id": "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.04},  #1.04
-    {"id": "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.09},  #1.09
-    {"id": "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.08},  #1.08
-    {"id": "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.06},  #1.06
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.12}, 
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.07},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.05},
+    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.05},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.10},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.11},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.02},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.09},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.07},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.04},
 ]
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics,
-                 spk_emb_dim=None, spk_emb_dim_enc=None, spk_emb_dim_dur=None, spk_emb_dim_dec=None, **_):
+    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim_enc=None, spk_emb_dim_dur=None, **_):
         super().__init__()
-        spk_emb_dim_enc = spk_emb_dim_enc or spk_emb_dim
-        spk_emb_dim_dur = spk_emb_dim_dur or spk_emb_dim
-        spk_emb_dim_dec = spk_emb_dim_dec or spk_emb_dim
         self.n_spks = n_spks
         if n_spks > 1:
             self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_enc)
             self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
-            self.decoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dec)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim_enc, spk_emb_dim_dur)
-        self.decoder = CFM(in_channels=2 * n_feats,
-                           out_channel=n_feats,
-                           cfm_params=cfm, decoder_params=decoder, n_spks=n_spks, spk_emb_dim=spk_emb_dim_dec)
+        self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
@@ -70,15 +63,14 @@ class MatchaTTSInfer(nn.Module):
         Example:
             [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
         Returns:
-            tuple: (encoder_emb, duration_emb, decoder_emb), each shape (1, spk_emb_dim)
+            tuple: (encoder_emb, duration_emb), each shape (1, spk_emb_dim)
         """
         if self.n_spks <= 1:
-            return None, None, None
+            return None, None
         device = next(self.parameters()).device
         return (
             self._mix(self.encoder_speaker_embeddings, speaker_mix, device),
             self._mix(self.duration_speaker_embeddings, speaker_mix, device),
-            self._mix(self.decoder_speaker_embeddings, speaker_mix, device),
         )
 
     def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0, debug=False):
@@ -118,16 +110,15 @@ class MatchaTTSInfer(nn.Module):
             }
         """
 
-        encoder_speaker_embedding = duration_speaker_embedding = decoder_speaker_embedding = None
+        encoder_speaker_embedding = duration_speaker_embedding = None
         if self.n_spks > 1:
             if voice_mix is not None:
-                encoder_speaker_embedding, duration_speaker_embedding, decoder_speaker_embedding = self.mix_speakers(voice_mix)
+                encoder_speaker_embedding, duration_speaker_embedding = self.mix_speakers(voice_mix)
             else:
                 device = next(self.parameters()).device
                 spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
                 encoder_speaker_embedding = self.encoder_speaker_embeddings(spk_tensor)
                 duration_speaker_embedding = self.duration_speaker_embeddings(spk_tensor)
-                decoder_speaker_embedding = self.decoder_speaker_embeddings(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
@@ -166,7 +157,7 @@ class MatchaTTSInfer(nn.Module):
         mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Generate speech tracing the probability flow
-        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps, spks=decoder_speaker_embedding)
+        decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         mel = denormalize(decoder_outputs, self.mel_mean, self.mel_std)
@@ -187,21 +178,6 @@ def load_matcha(model_name, checkpoint_path):
     hparams.pop("optimizer", None)
     hparams.pop("scheduler", None)
     sd = ckpt["state_dict"]
-    # BEGIN legacy checkpoint migration - delete when all checkpoints use current names
-    if "spk_emb.weight" in sd and "encoder_speaker_embeddings.weight" not in sd:
-        old = sd.pop("spk_emb.weight")
-        sd["encoder_speaker_embeddings.weight"] = old.clone()
-        sd["duration_speaker_embeddings.weight"] = old.clone()
-        sd["decoder_speaker_embeddings.weight"] = old.clone()
-    old_to_new = {
-        "spk_emb_encoder.weight": "encoder_speaker_embeddings.weight",
-        "spk_emb_duration.weight": "duration_speaker_embeddings.weight",
-        "spk_emb_decoder.weight": "decoder_speaker_embeddings.weight",
-    }
-    for old_key, new_key in old_to_new.items():
-        if old_key in sd:
-            sd[new_key] = sd.pop(old_key)
-    # END legacy checkpoint migration
     model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(sd, strict=False)
     model.eval()
