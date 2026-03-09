@@ -43,3 +43,9 @@ Speaker embeddings learn encoder-optimal representations.
 Then, the embeddings for 10 different speakers are injected in to both the Duration Predictor and into the Decoder, as they are.
 This forces the 2 components to adapt to 10 speakers.
 Fix was to separate the one embeddings tensor into 3, one per component.
+
+9. Later on I have removed the speaker embedding from CFM.
+Given the encoder generated mel and the actual ground truth mel as inputs, the CFM can learn to find the velocity field that takes 
+one to the other without any speaker conditioning. The optimal path for that does not depend on the speaker.
+The encoder mel is almost identical to the ground truth. I have converted it to audio, it sounds like the ground truth, except a 
+bit more metallic and a with some rare cracks and pops. The CFM just has to add finer detail to it.
