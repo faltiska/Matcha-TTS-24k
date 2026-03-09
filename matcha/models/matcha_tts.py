@@ -26,10 +26,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder,
         cfm,
         data_statistics,
-        spk_emb_dim=None,
+        spk_emb_dim=None, # Only needed for V6 ckpt compatibility
         spk_emb_dim_enc=None,
         spk_emb_dim_dur=None,
-        spk_emb_dim_dec=None,
+        spk_emb_dim_dec=None, # Only needed for V6 ckpt compatibility
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
@@ -39,15 +39,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.save_hyperparameters(logger=False)
 
-        spk_emb_dim_enc = spk_emb_dim_enc or spk_emb_dim
-        spk_emb_dim_dur = spk_emb_dim_dur or spk_emb_dim
-        spk_emb_dim_dec = spk_emb_dim_dec or spk_emb_dim
-
         self.n_vocab = n_vocab
         self.n_spks = n_spks
         self.spk_emb_dim_enc = spk_emb_dim_enc
         self.spk_emb_dim_dur = spk_emb_dim_dur
-        self.spk_emb_dim_dec = spk_emb_dim_dec
         self.n_feats = n_feats
         self.prior_loss = prior_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
@@ -56,7 +51,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         if n_spks > 1:
             self.encoder_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim_enc)
             self.duration_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim_dur)
-            self.decoder_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim_dec)
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -73,8 +67,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             out_channel=encoder.encoder_params.n_feats,
             cfm_params=cfm,
             decoder_params=decoder,
-            n_spks=n_spks,
-            spk_emb_dim=spk_emb_dim_dec,
         )
 
         self.update_data_statistics(data_statistics)
@@ -101,9 +93,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         if self.n_spks > 1:
             encoder_speaker_embedding = self.encoder_speaker_embeddings(spks)
             duration_speaker_embedding = self.duration_speaker_embeddings(spks)
-            decoder_speaker_embedding = self.decoder_speaker_embeddings(spks)
         else:
-            encoder_speaker_embedding = duration_speaker_embedding = decoder_speaker_embedding = None
+            encoder_speaker_embedding = duration_speaker_embedding = None
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
@@ -151,7 +142,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         detached_mu_y = mu_y.detach()
 
         # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y, spks=decoder_speaker_embedding)
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y)
 
         if self.prior_loss:
             # Original code was: 

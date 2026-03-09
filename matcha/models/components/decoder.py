@@ -6,7 +6,7 @@ import torch.nn as nn  # pylint: disable=consider-using-from-import
 import torch.nn.functional as F
 from conformer import ConformerBlock
 from diffusers.models.activations import get_activation
-from einops import pack, rearrange, repeat
+from einops import pack, rearrange
 
 from matcha.models.components.transformer import BasicTransformerBlock
 
@@ -360,31 +360,19 @@ class Decoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
-    def forward(self, x, mask, mu, t, spks=None):
+    def forward(self, x, mask, mu, t):
         """Forward pass of the UNet1DConditional model.
 
         Args:
             x (torch.Tensor): shape (batch_size, in_channels, time)
             mask (_type_): shape (batch_size, 1, time)
             t (_type_): shape (batch_size)
-            spks (_type_, optional): shape: (batch_size, condition_channels). Defaults to None.
-
-        Raises:
-            ValueError: _description_
-            ValueError: _description_
-
-        Returns:
-            _type_: _description_
         """
 
         t = self.time_embeddings(t)
         t = self.time_mlp(t)
 
         x = pack([x, mu], "b * t")[0]
-
-        if spks is not None:
-            spks = repeat(spks, "b c -> b c t", t=x.shape[-1])
-            x = pack([x, spks], "b * t")[0]
 
         hiddens = []
         masks = [mask]
