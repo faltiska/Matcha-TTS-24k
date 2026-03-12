@@ -31,9 +31,7 @@
 #  Average         4.88 dB   4.80 dB   4.59 dB   4.51 dB   4.44 dB   4.37 dB   4.39 dB   4.33 dB   4.29 dB
 
 CHECKPOINTS=(
-     "logs/train/v6/checkpoint_epoch=874.ckpt"
-     "logs/train/v6/checkpoint_epoch=879.ckpt"
-     "logs/train/v6/checkpoint_epoch=889.ckpt"
+     "logs/train/v6/checkpoint_epoch=939.ckpt"
  )
    
 for CHECKPOINT_PATH in "${CHECKPOINTS[@]}"; do
