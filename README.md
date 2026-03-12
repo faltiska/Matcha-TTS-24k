@@ -17,22 +17,7 @@ I start a server app which loads the model into memory and waits for POST reques
 I have enough GPU VRAM to both tasks. The inference request works fine 99% of the time.
 Once in a while, both processes freeze like they are waiting for one another. 
 If I stop the server with kill -9, the trainer continues.
-A possible explanation is that PyTorch's CUDA caching allocator is not designed for multi-process sharing. 
-When it can't satisfy an allocation from its internal free pool, it calls cudaMalloc or attempts to release 
-blocks back to the driver — both of which contend on the driver-level mutex. 
-Under memory pressure (common during training), this happens frequently.
-The easiest fix is to run this before starting either process. 
-```
-nvidia-cuda-mps-control -d
-```
-I can stop it later, though I don't know why I should:
-```
-echo quit | nvidia-cuda-mps-control
-```
-Also, Sonnet said that this might help the training process:
-```
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,garbage_collection_threshold:0.8
-```
+
 
 ## Inference
 Run inference with:
