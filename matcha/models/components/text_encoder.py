@@ -560,6 +560,12 @@ class TextEncoder(nn.Module):
         if self.n_spks > 1:
             x = x[:, :-self.spk_emb_dim, :]
         x_dp = x.detach()
+        # V7 IDEA: pass encoder_speaker_embedding.detach() instead of duration_speaker_embedding.
+        # The encoder embedding is tightly constrained and carries both timbre and rhythm information
+        # (rhythm indirectly, because MAS durations are derived from the encoder output).
+        # This would make the duration_speaker_embeddings lookup table and spk_emb_dim_dur redundant
+        # and allow removing them from the architecture entirely, along with the RSE in the Style Encoder.
+        # Use ConvDurationPredictor3 (FiLM) with spk_emb_dim matching spk_emb_dim_enc.
         logw = self.proj_w(x_dp, x_mask, duration_speaker_embedding)
 
         return mu, logw, x_mask

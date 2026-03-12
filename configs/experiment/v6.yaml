@@ -7,7 +7,7 @@ run_name: v6
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: logs/train/v6/runs/2026-03-07_23-11-35/checkpoints/checkpoint_epoch=299.ckpt
+ckpt_path: logs/train/v6/checkpoint_epoch=889.ckpt
 
 model:
   spk_emb_dim_enc: 96
@@ -18,6 +18,7 @@ model:
       filter_channels: 1152
       n_heads: 6
       p_dropout: 0.05
+      
     duration_predictor_params:
       # v5: type: conv2
       type: conv3
@@ -25,11 +26,13 @@ model:
       kernel_size: 5
       # v4: n_layers: 2
       n_layers: 4
+      p_dropout: 0.1
 
   decoder:
     channels: [384, 384]
     attention_head_dim: 64
     num_heads: 6
+    dropout: 0.05
 
   cfm:
     use_mu_prior: true

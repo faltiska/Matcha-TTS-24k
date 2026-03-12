@@ -1,0 +1,28 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: corpus-small-24k
+  - model: style_encoder/default
+  - callbacks: default
+  - logger: tensorboard
+  - trainer: default
+  - paths: default
+  - extras: default
+  - hydra: default
+  - optional local: default
+  - debug: null
+
+task_name: "train_style_encoder"
+run_name: style_encoder_v1
+tags: ["style_encoder"]
+
+train: True
+test: False
+limit_val_batches: 0
+
+data:
+  num_workers: 2
+
+ckpt_path: null
+seed: 1234
