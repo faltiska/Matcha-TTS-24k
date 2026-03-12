@@ -37,6 +37,7 @@ Assign intermediate results to named variables instead.
    - Find the right balance between fast code and efficient memory allocations
    - Avoid moving data between CPU and GPU
 
-# Other rules
-1. Be brief and stay focused.
-2. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
+# General rules
+1. Please do not answer using variable names, I am a human being, cannot remember the code by heart, I do not know what things like "logw_pred" represent.
+2. KIF that was trueep your answers short and focused.
+3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
