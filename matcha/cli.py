@@ -10,7 +10,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HOP_LENGTH, ODE_SOLVER, VOICES
 
 VOCODERS = { "vocos", "bigvgan" }
 
@@ -195,10 +195,16 @@ def speak(args, model, vocoder, text, speaker=0):
         save_to_folder(f"{base_name}_encoder", encoder_wav.cpu().numpy(), args.output_folder)
 
         dur_path = Path(args.output_folder) / f"{base_name}_durations.txt"
-        dur_path.write_text(
-            "\n".join(f"{ph}\t{dur:.3f}" for ph, dur in phoneme_dur_pairs),
-            encoding="utf-8",
-        )
+        # Columns: phoneme | raw duration (frames) | enforced duration (frames) | start time (seconds)
+        # Raw duration is the duration predictor output before the monotonic enforcement in synthesise().
+        frame_seconds = HOP_LENGTH / SAMPLE_RATE
+        lines = []
+        cumulative_frames = 0
+        for ph, raw, dur, blank_dur in phoneme_dur_pairs:
+            start_seconds = cumulative_frames * frame_seconds
+            lines.append(f"{ph}\t{raw:.2f}\t{int(dur)}\t{start_seconds:.3f}")
+            cumulative_frames += int(blank_dur) + int(dur)
+        dur_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
     else:
         waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, length_scale)

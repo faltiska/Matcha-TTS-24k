@@ -34,24 +34,22 @@ ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim_enc=None, spk_emb_dim_dur=None, **_):
+    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim_enc, spk_emb_dim_dur, **_):
         super().__init__()
-        self.n_spks = n_spks
-        if n_spks > 1:
-            self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_enc)
-            self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
+        self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_enc)
+        self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
-                                   encoder.duration_predictor_params, n_vocab, n_spks, spk_emb_dim_enc, spk_emb_dim_dur)
+                                   encoder.duration_predictor_params, n_vocab, spk_emb_dim_enc, spk_emb_dim_dur)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
 
-    def _mix(self, emb_table, speaker_mix, device):
+    def _mix(self, speaker_embeddings, speaker_mix, device):
         mixed = None
         for spk_id, weight in speaker_mix:
             spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
-            e = emb_table(spk_tensor)
+            e = speaker_embeddings(spk_tensor)
             mixed = weight * e if mixed is None else mixed + weight * e
         return mixed
 
@@ -66,8 +64,6 @@ class MatchaTTSInfer(nn.Module):
         Returns:
             tuple: (encoder_emb, duration_emb), each shape (1, spk_emb_dim)
         """
-        if self.n_spks <= 1:
-            return None, None
         device = next(self.parameters()).device
         return (
             self._mix(self.encoder_speaker_embeddings, speaker_mix, device),
@@ -111,15 +107,13 @@ class MatchaTTSInfer(nn.Module):
             }
         """
 
-        encoder_speaker_embedding = duration_speaker_embedding = None
-        if self.n_spks > 1:
-            if voice_mix is not None:
-                encoder_speaker_embedding, duration_speaker_embedding = self.mix_speakers(voice_mix)
-            else:
-                device = next(self.parameters()).device
-                spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
-                encoder_speaker_embedding = self.encoder_speaker_embeddings(spk_tensor)
-                duration_speaker_embedding = self.duration_speaker_embeddings(spk_tensor)
+        if voice_mix is not None:
+            encoder_speaker_embedding, duration_speaker_embedding = self.mix_speakers(voice_mix)
+        else:
+            device = next(self.parameters()).device
+            spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
+            encoder_speaker_embedding = self.encoder_speaker_embeddings(spk_tensor)
+            duration_speaker_embedding = self.duration_speaker_embeddings(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
@@ -131,6 +125,7 @@ class MatchaTTSInfer(nn.Module):
         # Rounding up each phoneme duration, was causing the generated speech to be consistently too slow.
         # But generate_path can handle fractional durations so I can pass w as is.
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
+        raw_phoneme_durations = phoneme_durations.clone()
 
         # Round phoneme positions to avoid collisions (2 phonemes starting on the same position).
         # E.g. durations [1.5, 0.5, 1.5] -> cumsum [1.5, 2.0, 3.5] -> round [2, 2, 4].
@@ -167,6 +162,7 @@ class MatchaTTSInfer(nn.Module):
                 "mel": mel,
                 "encoder_mel": denormalize(mu_y[:, :, :y_max_length], self.mel_mean, self.mel_std),
                 "phoneme_durations": phoneme_durations.squeeze(1),
+                "raw_phoneme_durations": raw_phoneme_durations.squeeze(1),
             }
         else:
             return { "mel":  mel }
@@ -226,8 +222,9 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
         return trim_trailing_silence(to_waveform(output["mel"], vocoder))
     x_phones = text_processed["x_phones"]
     phonemes = x_phones[1::2]
-    durations = output["phoneme_durations"].squeeze(0).tolist()
-    phoneme_dur_pairs = list(zip(phonemes, durations[1::2]))
+    all_durations = output["phoneme_durations"].squeeze(0).tolist()
+    all_raw_durations = output["raw_phoneme_durations"].squeeze(0).tolist()
+    phoneme_dur_pairs = list(zip(phonemes, all_raw_durations[1::2], all_durations[1::2], all_durations[0::2]))
     waveform = trim_trailing_silence(to_waveform(output["mel"], vocoder))
     encoder_waveform = to_waveform(output["encoder_mel"], vocoder)
     return waveform, encoder_waveform, phoneme_dur_pairs

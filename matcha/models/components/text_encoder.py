@@ -94,9 +94,8 @@ class ConvDurationPredictor1(nn.Module):
 
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
-    def forward(self, x, x_mask, spk_emb=None):
-        if spk_emb is not None:
-            x = torch.cat([x, spk_emb.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
+    def forward(self, x, x_mask, spk_emb):
+        x = torch.cat([x, spk_emb.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
             x = torch.relu(x)
@@ -140,13 +139,8 @@ class ConvDurationPredictor2(nn.Module):
 
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
-    def forward(self, x, x_mask, spk_emb=None):
-        # Prepare speaker conditioning (B, C, 1)
-        if spk_emb is not None:
-            g = self.spk_proj(spk_emb).unsqueeze(-1)
-        else:
-            g = torch.zeros(x.shape[0], self.filter_channels, 1, device=x.device, dtype=x.dtype)
-
+    def forward(self, x, x_mask, spk_emb):
+        g = self.spk_proj(spk_emb).unsqueeze(-1)  # (B, C, 1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
             x = torch.relu(x)
@@ -190,15 +184,10 @@ class ConvDurationPredictor3(nn.Module):
 
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
-    def forward(self, x, x_mask, spk_emb=None):
-        if spk_emb is not None:
-            # Generate scale (gamma) and shift (beta)
-            film_params = self.spk_proj(spk_emb).unsqueeze(-1)
-            gamma, beta = torch.split(film_params, self.filter_channels, dim=1)
-        else:
-            gamma = torch.ones(x.shape[0], self.filter_channels, 1, device=x.device, dtype=x.dtype)
-            beta = torch.zeros(x.shape[0], self.filter_channels, 1, device=x.device, dtype=x.dtype)
-
+    def forward(self, x, x_mask, spk_emb):
+        # Generate scale (gamma) and shift (beta)
+        film_params = self.spk_proj(spk_emb).unsqueeze(-1)
+        gamma, beta = torch.split(film_params, self.filter_channels, dim=1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
             x = torch.relu(x)
@@ -456,7 +445,6 @@ class TextEncoder(nn.Module):
         encoder_params,
         duration_predictor_params,
         n_vocab,
-        n_spks=1,
         spk_emb_dim_enc=128,
         spk_emb_dim_dur=128,
     ):
@@ -465,9 +453,8 @@ class TextEncoder(nn.Module):
         self.n_vocab = n_vocab
         self.n_feats = encoder_params.n_feats
         self.n_channels = encoder_params.n_channels
-        self.spk_emb_dim = spk_emb_dim_enc
+        self.spk_emb_dim_enc = spk_emb_dim_enc
         self.spk_emb_dim_dur = spk_emb_dim_dur
-        self.n_spks = n_spks
 
         self.emb = torch.nn.Embedding(n_vocab, self.n_channels)
         torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels ** -0.5)
@@ -550,22 +537,22 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-        if self.n_spks > 1:
-            x = torch.cat([x, encoder_speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
+
+        # This uses the prenet output as conditioning signal for Duration Prediction.
+        # At this point, x only has local phonetic context, no acoustic information yet.
+        # x_dp = x.detach()
+        
+        x = torch.cat([x, encoder_speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        # spk_emb_encoder was concatenated into x above, so we have to strip it before
-        # passing it to DurationPredictor, which has its own embeddings.
-        if self.n_spks > 1:
-            x = x[:, :-self.spk_emb_dim, :]
-        x_dp = x.detach()
-        # V7 IDEA: pass encoder_speaker_embedding.detach() instead of duration_speaker_embedding.
-        # The encoder embedding is tightly constrained and carries both timbre and rhythm information
-        # (rhythm indirectly, because MAS durations are derived from the encoder output).
-        # This would make the duration_speaker_embeddings lookup table and spk_emb_dim_dur redundant
-        # and allow removing them from the architecture entirely, along with the RSE in the Style Encoder.
-        # Use ConvDurationPredictor3 (FiLM) with spk_emb_dim matching spk_emb_dim_enc.
-        logw = self.proj_w(x_dp, x_mask, duration_speaker_embedding)
+        # This uses the encoder output as conditioning signal for Duration Prediction.
+        # The encoder output contains acoustic information already, it is just one convolution away from
+        # being a full mel spectrogram.
+        # Because encoder_speaker_embedding was concatenated into x, so we have to strip it before
+        # passing it to DurationPredictor, which has its own embedding.
+        x = x[:, :-self.spk_emb_dim_enc, :]
+
+        logw = self.proj_w(x.detach(), x_mask, duration_speaker_embedding)
 
         return mu, logw, x_mask

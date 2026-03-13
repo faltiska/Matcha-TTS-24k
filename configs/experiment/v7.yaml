@@ -1,0 +1,41 @@
+# @package _global_
+# Documents all changes from v6 to v7 architecture.
+# V7: single speaker embedding shared by encoder and duration predictor.
+# Removes duration_speaker_embeddings lookup table and spk_emb_dim_dur.
+
+run_name: v7
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: null
+
+model:
+  spk_emb_dim_enc: 96
+  spk_emb_dim_dur: 16
+
+  encoder:
+    encoder_params:
+      filter_channels: 1152
+      n_heads: 6
+      p_dropout: 0.05
+      
+    duration_predictor_params:
+      type: conv3
+      filter_channels_dp: 128
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-3

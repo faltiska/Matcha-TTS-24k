@@ -16,70 +16,76 @@ from matcha.text.phonemizers import cleanup_text, normalize_text, multilingual_p
 
 class TestCleanupText:
     def test_plain_sentence_unchanged(self):
-        assert cleanup_text("I live for live broadcasts.") == "I live for live broadcasts."
+        assert cleanup_text("I live for live broadcasts.") == "I live for live broadcasts. "
 
     def test_adds_period_when_missing(self):
-        assert cleanup_text("Word") == "Word."
+        assert cleanup_text("Word") == "Word. "
 
     def test_trailing_spaces(self):
-        assert cleanup_text("Word   ") == "Word."
+        assert cleanup_text("Word   ") == "Word. "
 
     def test_trailing_newlines(self):
-        assert cleanup_text("Word\n\n") == "Word."
+        assert cleanup_text("Word\n\n") == "Word. "
 
     def test_trailing_tab(self):
-        assert cleanup_text("Word\t") == "Word."
+        assert cleanup_text("Word\t") == "Word. "
 
     def test_preserves_question_mark(self):
-        assert cleanup_text("Oare?") == "Oare?"
+        assert cleanup_text("Oare?") == "Oare? "
 
     def test_preserves_exclamation(self):
-        assert cleanup_text("Doare!") == "Doare!"
+        assert cleanup_text("Doare!") == "Doare! "
 
     def test_en_left_single_quote_removed(self):
-        assert cleanup_text("He said “hello” to me and I've said ‘hello’ back.") == "He said hello to me and I've said ‘hello’ back."
+        assert cleanup_text("He said “hello” to me and I've said ‘hello’ back.") == "He said hello to me and I've said ‘hello’ back. "
 
     def test_removes_fancy_quotes(self):
-        assert cleanup_text('„“Hello”.') == "Hello."
+        assert cleanup_text('„“Hello”.') == "Hello. "
 
     def test_removes_guillemets(self):
-        assert cleanup_text("Elle a dit «bonjour» à lui.") == "Elle a dit bonjour à lui."
+        assert cleanup_text("Elle a dit «bonjour» à lui.") == "Elle a dit bonjour à lui. "
 
     def test_angle_brackets_become_comma(self):
-        assert cleanup_text("The value is <10>.") == "The value is, 10."
+        assert cleanup_text("The value is <10>.") == "The value is , 10. "
 
     def test_parens_become_comma(self):
-        assert cleanup_text("The value is (20).") == "The value is, 20."
+        assert cleanup_text("The value is (20).") == "The value is , 20. "
 
     def test_square_brackets_become_comma(self):
-        assert cleanup_text("The value is [30].") == "The value is, 30."
+        assert cleanup_text("The value is [30].") == "The value is , 30. "
 
     def test_curly_brackets_become_comma(self):
-        assert cleanup_text("The value is {40}.") == "The value is, 40."
+        assert cleanup_text("The value is {40}.") == "The value is , 40. "
 
     def test_em_dash_becomes_comma(self):
-        assert cleanup_text("night—except.") == "night, except."
+        assert cleanup_text("night—except.") == "night , except. "
 
     def test_en_dash_becomes_comma(self):
-        assert cleanup_text("2020–2025.") == "2020, 2025."
+        assert cleanup_text("2020–2025.") == "2020 , 2025. "
 
     def test_ellipsis_becomes_comma(self):
-        assert cleanup_text("He thought… and then spoke.") == "He thought, and then spoke."
+        assert cleanup_text("He thought… and then spoke.") == "He thought , and then spoke. "
 
     def test_leading_bracket_no_leading_comma(self):
-        assert cleanup_text("<10> items.") == "10, items."
+        """
+        When a bracket opens the text, the leading comma it would produce is stripped.
+        The space after the closing bracket is consumed by the regex (\s* after the bracket),
+        so only one space appears after the comma, not two.
+        '<10> items.' -> ', 10, items.' -> '10, items.' -> '10 , items. '
+        """
+        assert cleanup_text("<10> items.") == "10 , items. "
 
     def test_double_comma_collapsed(self):
-        assert cleanup_text("a,, b.") == "a, b."
+        assert cleanup_text("a,, b.") == "a , b. "
 
     def test_comma_before_period_removed(self):
-        assert cleanup_text("end,.") == "end."
+        assert cleanup_text("end,.") == "end. "
 
     def test_comma_before_question_removed(self):
-        assert cleanup_text("end,?") == "end?"
+        assert cleanup_text("end,?") == "end? "
 
     def test_hyphen_preserved(self):
-        assert cleanup_text("N-are.") == "N-are."
+        assert cleanup_text("N-are.") == "N-are. "
 
 
 class TestNormalizeText:
@@ -141,13 +147,13 @@ class TestMultilingualPhonemizer:
         assert self._p("Dr. Jones will see you at 15:00.", "en-us") == "dˈɑːktɚ dʒˈoʊnz wɪl sˈiː juː æt fˈɪftiːn əklˈɑːk."
 
     def test_en_price(self):
-        assert self._p("The price is $5.00 as of Jan 21st, 2026.", "en-us") == "ðə pɹˈaɪs ɪz fˈaɪv dˈɑːlɚz æz ʌv dʒˈænjuːˌɛɹi twˈɛnti fˈɜːst, twˈɛnti twˈɛnti sˈɪks."
+        assert self._p("The price is $5.00 as of Jan 21st, 2026.", "en-us") == "ðə pɹˈaɪs ɪz fˈaɪv dˈɑːlɚz æz ʌv dʒˈænjuːˌɛɹi twˈɛnti fˈɜːst , twˈɛnti twˈɛnti sˈɪks."
 
     def test_en_temperature(self):
         assert self._p("The temperature is -5°C or 23°F.", "en-us") == "ðə tˈɛmpɹɪtʃɚɹ ɪz mˈaɪnəs fˈaɪv dᵻɡɹˈiːz sˈɛlsɪəs ɔːɹ twˈɛnti θɹˈiː dᵻɡɹˈiːz fˈæɹənhˌaɪt."
 
     def test_en_ellipsis(self):
-        assert self._p("He thought… and then spoke.", "en-us") == "hiː θˈɔːt, ænd ðˈɛn spˈoʊk."
+        assert self._p("He thought… and then spoke.", "en-us") == "hiː θˈɔːt , ænd ðˈɛn spˈoʊk."
 
     def test_en_url(self):
         assert self._p("Visit http://example.com/path for details.", "en-us") == "vˈɪzɪt ˌeɪtʃtˌiːtˌiːpˈiː kˈoʊlən slˈæʃ slˈæʃ ɛɡzˈæmpəl dˈɑːt kˈɑːm slˈæʃ pˈæθ fɔːɹ diːtˈeɪlz."
@@ -156,16 +162,16 @@ class TestMultilingualPhonemizer:
         assert self._p("C:\\Users\\name\\file.txt was found.", "en-us") == "sˈiː:bˈækslæʃ jˈuːzɚz bˈækslæʃ nˈeɪm bˈækslæʃ fˈaɪl.tˌiːˌɛkstˈiː wʌz fˈaʊnd."
 
     def test_en_brackets(self):
-        assert self._p("The value is <10> or (20) or [30] or {40}.", "en-us") == "ðə vˈæljuː ɪz, tˈɛn, ɔːɹ, twˈɛnti, ɔːɹ, θˈɜːɾi, ɔːɹ, fˈɔːɹɾi."
+        assert self._p("The value is <10> or (20) or [30] or {40}.", "en-us") == "ðə vˈæljuː ɪz , tˈɛn , ɔːɹ , twˈɛnti , ɔːɹ , θˈɜːɾi , ɔːɹ , fˈɔːɹɾi."
 
     def test_en_em_dash(self):
-        assert self._p("It was a dark and stormy night—except at occasional intervals.", "en-us") == "ɪt wʌzɐ dˈɑːɹk ænd stˈoːɹmi nˈaɪt, ɛksˈɛpt æɾ əkˈeɪʒənəl ˈɪntɚvəlz."
+        assert self._p("It was a dark and stormy night—except at occasional intervals.", "en-us") == "ɪt wʌzɐ dˈɑːɹk ænd stˈoːɹmi nˈaɪt , ɛksˈɛpt æɾ əkˈeɪʒənəl ˈɪntɚvəlz."
 
     def test_fr_guillemets_removed(self):
         assert self._p("Elle a dit «bonjour» à lui.", "fr-fr") == "ɛl a dˈi bɔ̃ʒˈuʁ a lyˈi."
 
     def test_fr_em_dash(self):
-        assert self._p("La pluie tombait à torrents—sauf à intervalles occasionnels.", "fr-fr") == "la- plyˈi tɔ̃bˈɛt a toʁˈɑ̃, sˈof a ɛ̃tɛʁvˈalz ɔkazjɔnˈɛl."
+        assert self._p("La pluie tombait à torrents—sauf à intervalles occasionnels.", "fr-fr") == "la- plyˈi tɔ̃bˈɛt a toʁˈɑ̃ , sˈof a ɛ̃tɛʁvˈalz ɔkazjɔnˈɛl."
 
     def test_ro_question(self):
         assert self._p("Oare?", "ro") == "ˈɔaɾe?"
@@ -180,7 +186,7 @@ class TestMultilingualPhonemizer:
         assert self._p("Cuvânt   ", "ro") == "kuvˈɨnt."
 
     def test_ro_em_dash(self):
-        assert self._p("Ploaia cădea în torente—cu excepția momentelor ocazionale.", "ro") == "plˈɔaja kədˈea ɨn toɾˈente, ku ekstʃˈeptsja mˌomentˈelor ˌokazjonˈale."
+        assert self._p("Ploaia cădea în torente—cu excepția momentelor ocazionale.", "ro") == "plˈɔaja kədˈea ɨn toɾˈente , ku ekstʃˈeptsja mˌomentˈelor ˌokazjonˈale."
 
     # --- missing EN cases from original main() ---
 
@@ -191,7 +197,7 @@ class TestMultilingualPhonemizer:
         assert self._p("Call me at 555-1234 or visit 123 Main St.", "en-us") == "kˈɔːl mˌiː æt fˈaɪv hˈʌndɹɪd ænd fˈɪfti fˈaɪv twˈɛlv θˈɜːɾi fˈoːɹ ɔːɹ vˈɪzɪt wˈʌn twˈɛnti θɹˈiː mˈeɪn stɹˈiːt."
 
     def test_en_years_en_dash(self):
-        assert self._p("The years 2020—2025 were challenging.", "en-us") == "ðə jˈɪɹz twˈɛnti twˈɛnti, twˈɛnti twˈɛnti fˈaɪv wɜː tʃˈæləndʒˌɪŋ."
+        assert self._p("The years 2020—2025 were challenging.", "en-us") == "ðə jˈɪɹz twˈɛnti twˈɛnti , twˈɛnti twˈɛnti fˈaɪv wɜː tʃˈæləndʒˌɪŋ."
 
     def test_en_smart_quotes_and_right_single(self):
         assert self._p("He said “hello” to me and I've said ‘hello’ back.", "en-us") == "hiː sˈɛd həlˈoʊ tə mˌiː ænd aɪv sˈɛd həlˈoʊ bˈæk."
@@ -222,7 +228,7 @@ class TestMultilingualPhonemizer:
         assert self._p("Dr. M\u00fcller sieht Sie um 15:00 Uhr.", "de") == "dˈɔktoːɾ mˈylɜ zˈiːt ziː ʊm fˈynftseːn ˈuːɾ ."
 
     def test_de_preis(self):
-        assert self._p("Der Preis beträgt 5,00€ ab dem 21. Januar 2026.", "de") == "dɛɾ pɾˈaɪs bətɾˈɛːkt fˈynf,nˈʊl nˈʊl ˈɔøroː ap deːm aɪn ʊnt tsvˈantsɪçstɜ jˈanuːˌɑːɾ tsvˈaɪ tˈaʊzənt zˈɛks ʊnt tsvˈantsɪçstə."
+        assert self._p("Der Preis beträgt 5,00€ ab dem 21. Januar 2026.", "de") == "dɛɾ pɾˈaɪs bətɾˈɛːkt fˈynf ,nˈʊl nˈʊl ˈɔøroː ap deːm aɪn ʊnt tsvˈantsɪçstɜ jˈanuːˌɑːɾ tsvˈaɪ tˈaʊzənt zˈɛks ʊnt tsvˈantsɪçstə."
 
     def test_de_temperatur(self):
         assert self._p("Die Temperatur beträgt -5°C oder 23°F.", "de") == "diː tˌɛmpeːratˈuːɾ bətɾˈɛːkt mˈiːnʊs fˈynf ɡɾˈɑːt tsˈɛlziːˌʊs ˌoːdɜ dɾˈaɪ ʊnt tsvˈantsɪç ɡɾˈɑːt fˈɑːrənhˌaɪt ."
@@ -244,7 +250,7 @@ class TestMultilingualPhonemizer:
         assert self._p("O Dr. Silva verá você às 15:00.", "pt") == "ʊ dowtˈor. sˈilvɐ vɨɾˈa vosˌe ɐɐʃ kˈiŋzɨ:zˈɛɾu zˈɛɾu."
 
     def test_pt_price(self):
-        assert self._p("O preço é R$ 5,00 desde 21 de janeiro de 2026.", "pt") == "ʊ pɹˈesw ɛ ʁɨˈaʊ sˈiŋku,zˈɛɾu zˈɛɾu dˈeʒdɨ vˈiŋtɨiˈum dɨ ʒɐnˈeɪɾʊ dɨ dˈoɪʒ mˈil i vˈiŋtɨisˈeɪʃ."
+        assert self._p("O preço é R$ 5,00 desde 21 de janeiro de 2026.", "pt") == "ʊ pɹˈesw ɛ ʁɨˈaʊ sˈiŋku ,zˈɛɾu zˈɛɾu dˈeʒdɨ vˈiŋtɨiˈum dɨ ʒɐnˈeɪɾʊ dɨ dˈoɪʒ mˈil i vˈiŋtɨisˈeɪʃ."
 
     def test_pt_temperature(self):
         assert self._p("A temperatura é -5°C ou 23°F.", "pt") == "ɐ tˌeɪmpɨɾɐtˈuɾɐ ɛ mˈenʊs sˈiŋku ɡɹˈaʊ sˈe ˈow vˈiŋtɨitɹˈeʒ ɡɹˈaʊ ˈɛf."

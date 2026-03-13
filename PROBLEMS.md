@@ -35,17 +35,13 @@ I have removed the concept of temperature entirely and tht improved the MCD by a
 
 8. One single speaker embedding tensor, shared by all 3 components, but optimized only by encoder gradients.
 Encoder, duration predictor, decoder all use same `spk_emb` vector
-Duration predictor gradients are detached and don't flow back into the encoder, so they don't influence the encoder core model.
-The encoder must be trained to reproduce the ground truth mels as close as possible. 
-Decoder gradients to are detached and they do not flow back into the encoder, for the same reason.
-The above also mean they do not flow back into the speaker embeddings.
-Speaker embeddings learn encoder-optimal representations.
-Then, the embeddings for 10 different speakers are injected in to both the Duration Predictor and into the Decoder, as they are.
-This forces the 2 components to adapt to 10 speakers.
-Fix was to separate the one embeddings tensor into 3, one per component.
+The Duration Predictor had to continuously adapt to the encoder speaker embeddings that continuously change during training.
+The fix was to introduce separate speaker embeddings for the duration predictor. 
+It learns faster now.
 
-9. Later on I have removed the speaker embedding from CFM.
+9. I have removed the speaker embedding from CFM.
 Given the encoder generated mel and the actual ground truth mel as inputs, the CFM can learn to find the velocity field that takes 
 one to the other without any speaker conditioning. The optimal path for that does not depend on the speaker.
 The encoder mel is almost identical to the ground truth. I have converted it to audio, it sounds like the ground truth, except a 
 bit more metallic and a with some rare cracks and pops. The CFM just has to add finer detail to it.
+It learns faster now.

@@ -10,7 +10,6 @@ n_vocab: 156
 
 n_spks: ${data.n_spks}
 
-spk_emb_dim: null  # legacy v4 compat; use spk_emb_dim_enc/dur/dec instead
 spk_emb_dim_enc: 96
 
 # Speaker embedding size for the duration predictor.

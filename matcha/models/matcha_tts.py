@@ -26,7 +26,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder,
         cfm,
         data_statistics,
-        spk_emb_dim=None, # Only needed for V6 ckpt compatibility
         spk_emb_dim_enc=None,
         spk_emb_dim_dur=None,
         spk_emb_dim_dec=None, # Only needed for V6 ckpt compatibility
@@ -40,7 +39,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.save_hyperparameters(logger=False)
 
         self.n_vocab = n_vocab
-        self.n_spks = n_spks
         self.spk_emb_dim_enc = spk_emb_dim_enc
         self.spk_emb_dim_dur = spk_emb_dim_dur
         self.n_feats = n_feats
@@ -57,7 +55,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             encoder.encoder_params,
             encoder.duration_predictor_params,
             n_vocab,
-            n_spks,
             spk_emb_dim_enc,
             spk_emb_dim_dur,
         )
@@ -71,7 +68,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.update_data_statistics(data_statistics)
 
-    def forward(self, x, x_lengths, y, y_lengths, spks=None):
+    def forward(self, x, x_lengths, y, y_lengths, spks):
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -90,11 +87,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
         """
-        if self.n_spks > 1:
-            encoder_speaker_embedding = self.encoder_speaker_embeddings(spks)
-            duration_speaker_embedding = self.duration_speaker_embeddings(spks)
-        else:
-            encoder_speaker_embedding = duration_speaker_embedding = None
+        encoder_speaker_embedding = self.encoder_speaker_embeddings(spks)
+        duration_speaker_embedding = self.duration_speaker_embeddings(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)

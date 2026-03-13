@@ -54,11 +54,21 @@ def cleanup_text(text):
     text = re.sub(r'^,\s*', '', text)
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.?!])', r'\1', text)
+    
+    # My model has problem understanding that comma is silence.
+    # It confuses the comma with the previous symbol sometimes.
+    # I decided to make it "space comma space" hoping it would help.
+    text = re.sub(r'(?<! ),', ' ,', text)
 
     text = text.rstrip()
     if not text.endswith(('.', '?', '!')):
         text = text + '.'
 
+    # I also think that the model sees '.', '?', '!' as indications for 
+    # pronouncing of the previous symbol (flat or rising pitch). 
+    # I am not sure if it also understands that it is a termination so maybe adding a space helps.
+    text = text + ' '
+    
     return text
 
 
