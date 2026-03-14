@@ -11,8 +11,6 @@ from lightning import LightningModule
 from lightning.pytorch.utilities import grad_norm
 
 import logging
-from matcha import utils
-from matcha.utils.utils import plot_tensor
 
 log = logging.getLogger(__name__)
 
