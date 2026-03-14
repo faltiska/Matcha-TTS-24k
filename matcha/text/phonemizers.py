@@ -88,7 +88,4 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    # Any audio file starts with a bit is silence and ends with a lot.
-    # eSpeak already adds a space at the end, I add one at the start,  
-    # I hope MAS will assign the silence to them.
-    return ' ' + phonemizer.phonemize([text])[0]
+    return phonemizer.phonemize([text])[0]
