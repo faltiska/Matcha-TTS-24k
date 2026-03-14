@@ -1,8 +1,8 @@
 """
-Test corpus IPA symbols against symbols.py.
+Validate corpus IPA symbols against symbols.py.
 
 Usage:
-  python -m matcha.utils.test_corpus_ipa corpus.csv
+  python -m matcha.utils.validate_corpus_ipa corpus.csv
 """
 
 import argparse
@@ -29,7 +29,7 @@ def main():
     unknown_symbols = set()
 
     print(f"[test_corpus_ipa] Input: {input_path}")
-    print(f"[test_corpus_ipa] Processing {total} entries...")
+    print(f"[test_corpus_ipa] Found {total} entries...")
 
     for i, parts in enumerate(entries, start=1):
         if len(parts) < 4:
