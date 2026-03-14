@@ -2,7 +2,7 @@
 
 defaults:
   - _self_
-  - data: corpus-small-24k
+  - data: corpus-24k
   - model: style_encoder/default
   - callbacks: default
   - logger: tensorboard

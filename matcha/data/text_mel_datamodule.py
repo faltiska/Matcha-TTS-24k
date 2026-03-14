@@ -1,6 +1,6 @@
 """
     Run the DynamicBatchSampler with:
-        python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 37000 32 > output.csv
+        python -m matcha.data.text_mel_datamodule data/corpus-24k/train.csv 37000 32 > output.csv
         
     Unit test it with: 
         python -m pytest tests/test_dynamic_batch_sampler.py -v
@@ -530,13 +530,13 @@ if __name__ == "__main__":
     """
     Computes batch statistics to assess the space wasted on padding.
     Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> <batch_size> > output.csv
-    Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 32 > output.csv
+    Example: python -m matcha.data.text_mel_datamodule data/corpus-24k/train.csv 40000 32 > output.csv
     CSV output goes to file, summary goes to console.
     """
     import sys
     if len(sys.argv) < 4:
         print("Usage: python -m matcha.data.text_mel_datamodule <train.csv> <max_frames> <batch_size> > output.csv")
-        print("Example: python -m matcha.data.text_mel_datamodule data/corpus-small-24k/train.csv 40000 32 > output.csv")
+        print("Example: python -m matcha.data.text_mel_datamodule data/corpus-24k/train.csv 40000 32 > output.csv")
         sys.exit(1)
     
     class MockDataset:

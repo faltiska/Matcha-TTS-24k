@@ -34,24 +34,15 @@ ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim_enc, spk_emb_dim_dur, **_):
+    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
         super().__init__()
-        self.encoder_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_enc)
-        self.duration_speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim_dur)
+        self.speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
-                                   encoder.duration_predictor_params, n_vocab, spk_emb_dim_enc, spk_emb_dim_dur)
+                                   encoder.duration_predictor_params, n_vocab, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
-
-    def _mix(self, speaker_embeddings, speaker_mix, device):
-        mixed = None
-        for spk_id, weight in speaker_mix:
-            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
-            e = speaker_embeddings(spk_tensor)
-            mixed = weight * e if mixed is None else mixed + weight * e
-        return mixed
 
     def mix_speakers(self, speaker_mix):
         """
@@ -62,13 +53,15 @@ class MatchaTTSInfer(nn.Module):
         Example:
             [(2, 0.7), (5, 0.3)] for 70% speaker 2 + 30% speaker 5
         Returns:
-            tuple: (encoder_emb, duration_emb), each shape (1, spk_emb_dim)
+            speaker embeddings, shape (1, spk_emb_dim)
         """
         device = next(self.parameters()).device
-        return (
-            self._mix(self.encoder_speaker_embeddings, speaker_mix, device),
-            self._mix(self.duration_speaker_embeddings, speaker_mix, device),
-        )
+        mixed = None
+        for spk_id, weight in speaker_mix:
+            spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
+            e = self.speaker_embeddings(spk_tensor)
+            mixed = weight * e if mixed is None else mixed + weight * e
+        return mixed
 
     def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, length_scale=1.0, debug=False):
         """
@@ -108,15 +101,14 @@ class MatchaTTSInfer(nn.Module):
         """
 
         if voice_mix is not None:
-            encoder_speaker_embedding, duration_speaker_embedding = self.mix_speakers(voice_mix)
+            speaker_embedding = self.mix_speakers(voice_mix)
         else:
             device = next(self.parameters()).device
             spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
-            encoder_speaker_embedding = self.encoder_speaker_embeddings(spk_tensor)
-            duration_speaker_embedding = self.duration_speaker_embeddings(spk_tensor)
+            speaker_embedding = self.speaker_embeddings(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
 
         # Original code was:
         #  w = torch.exp(logw) * x_mask

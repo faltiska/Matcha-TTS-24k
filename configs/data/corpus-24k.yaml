@@ -1,6 +1,6 @@
 _target_: matcha.data.text_mel_datamodule.TextMelDataModule
 name: corpus-small-24k
-train_filelist_path: data/corpus-24k/train-small.csv
+train_filelist_path: data/corpus-24k/train.csv
 valid_filelist_path: data/corpus-24k/validate.csv
 # The precompute script will put mels here:
 mel_dir: data/corpus-24k/mels

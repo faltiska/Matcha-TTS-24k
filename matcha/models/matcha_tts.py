@@ -26,8 +26,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         decoder,
         cfm,
         data_statistics,
-        spk_emb_dim_enc=None,
-        spk_emb_dim_dur=None,
+        spk_emb_dim=None,
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
@@ -38,24 +37,21 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.save_hyperparameters(logger=False)
 
         self.n_vocab = n_vocab
-        self.spk_emb_dim_enc = spk_emb_dim_enc
-        self.spk_emb_dim_dur = spk_emb_dim_dur
+        self.spk_emb_dim = spk_emb_dim
         self.n_feats = n_feats
         self.prior_loss = prior_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
         self.mas_const = -0.5 * LOG_2_PI * n_feats
 
         if n_spks > 1:
-            self.encoder_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim_enc)
-            self.duration_speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim_dur)
+            self.speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
             encoder.encoder_params,
             encoder.duration_predictor_params,
             n_vocab,
-            spk_emb_dim_enc,
-            spk_emb_dim_dur,
+            spk_emb_dim,
         )
 
         self.decoder = CFM(
@@ -86,11 +82,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
         """
-        encoder_speaker_embedding = self.encoder_speaker_embeddings(spks)
-        duration_speaker_embedding = self.duration_speaker_embeddings(spks)
+        speaker_embedding = self.speaker_embeddings(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, encoder_speaker_embedding, duration_speaker_embedding)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
         y_max_length = y.shape[-1]
 
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)

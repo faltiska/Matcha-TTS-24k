@@ -90,8 +90,7 @@ def main():
     ckpt = torch.load(output_path, map_location="cpu", weights_only=False)
 
     sd = ckpt["state_dict"]
-    new_n_spks = expand_embedding_table(sd, "encoder_speaker_embeddings.weight", avg_spk_emb)
-    expand_embedding_table(sd, "duration_speaker_embeddings.weight", avg_spk_emb)
+    new_n_spks = expand_embedding_table(sd, "speaker_embeddings.weight", avg_spk_emb)
     ckpt["hyper_parameters"]["n_spks"] = new_n_spks
 
     torch.save(ckpt, output_path)

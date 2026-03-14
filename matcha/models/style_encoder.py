@@ -94,7 +94,7 @@ class StyleEncoderLightningModule(LightningModule):
         y, y_lengths = batch["y"], batch["y_lengths"]
         spks = batch["spks"]
 
-        real_spk_emb = self.matcha.encoder_speaker_embeddings(spks)
+        real_spk_emb = self.matcha.speaker_embeddings(spks)
 
         y_mask = sequence_mask(y_lengths, y.shape[-1]).unsqueeze(1).to(y.dtype)
 

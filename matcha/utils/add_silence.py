@@ -29,7 +29,7 @@ than silence patterns.
 
 Usage:
   # Add silence to corpus
-  python -m matcha.utils.add_silence -i configs/data/corpus-small-24k.yaml --target_silence 0.8
+  python -m matcha.utils.add_silence -i configs/data/corpus-24k.yaml --target_silence 0.8
   
   # Process single file
   python -m matcha.utils.add_silence -f input.wav --target_silence 0.8 -o output.wav
@@ -129,7 +129,7 @@ def main():
     parser.add_argument(
         "-i",
         "--data-config",
-        help="Path to data YAML (e.g., configs/data/corpus-small-24k.yaml)",
+        help="Path to data YAML (e.g., configs/data/corpus-24k.yaml)",
     )
     parser.add_argument(
         "-f",

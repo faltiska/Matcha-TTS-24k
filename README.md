@@ -30,27 +30,27 @@ python -m matcha.cli --text "You're leaving?" --vocoder vocos --checkpoint_path 
 ### Check your corpus
 Filter out files that are longer than N seconds
 ```
-python -m matcha.utils.filter_by_wav_duration data/corpus-small-24k/train.csv 12
-python -m matcha.utils.filter_by_wav_duration data/corpus-small-24k/validate.csv 12
+python -m matcha.utils.filter_by_wav_duration data/corpus-24k/train.csv 12
+python -m matcha.utils.filter_by_wav_duration data/corpus-24k/validate.csv 12
 ```
 
 Check if the corpus uses any unknown IPA symbol. 
 eSpeak could generate a symbol we do not have in our symbols.py map.
 ```
-python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/train.csv
-python -m matcha.utils.validate_corpus_ipa data/corpus-small-24k/validate.csv
+python -m matcha.utils.validate_corpus_ipa data/corpus-24k/train.csv
+python -m matcha.utils.validate_corpus_ipa data/corpus-24k/validate.csv
 ```
 
 Measure trailing silence per speaker to check for inconsistencies.
 Different speakers may have different amounts of trailing silence, which can cause the model to learn silence duration as a spurious feature for speaker identification 
 instead of actual voice characteristics.
 ```
-python -m matcha.utils.measure_silence -i configs/data/corpus-small-24k.yaml
+python -m matcha.utils.measure_silence -i configs/data/corpus-24k.yaml
 ```
 If you see significant variation in trailing silence between speakers (e.g., some speakers with ~300ms and others with ~900ms), you should normalize it.
 Backup your wav files first, then add silence to reach a consistent target duration:
 ```
-python -m matcha.utils.add_silence -i configs/data/corpus-small-24k.yaml --target_silence 0.8
+python -m matcha.utils.add_silence -i configs/data/corpus-24k.yaml --target_silence 0.8
 ```
 The script measures current silence at -60dB threshold and adds only what's needed to reach the target.
 After running, verify the normalization by measuring again - all speakers should now have the same trailing silence duration.
@@ -59,7 +59,7 @@ After running, verify the normalization by measuring again - all speakers should
 Delete the mels folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
-python -m matcha.utils.generate_data_statistics -i corpus-small-24k.yaml
+python -m matcha.utils.generate_data_statistics -i corpus-24k.yaml
 ```
 It will output something like
 {'mel_mean': -1.7744582891464233, 'mel_std': 4.116815090179443}
@@ -69,13 +69,13 @@ Take the values and put them in the yaml file.
 Precompute mel spectrogram cache to speed up training. 
 This avoids recomputing mels every epoch and reduces data-loading overhead.
 ```
-python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-24k.yaml
+python -m matcha.utils.precompute_corpus -i configs/data/corpus-24k.yaml
 ```
 
 You can test the precomputed mel files using the vocoder wrapper scripts:
 ```
-python -m matcha.vocos24k.vocos_wrapper --wav input.wav --data-config  configs/data/corpus-small-24k.yaml
-python -m matcha.vocos24k.vocos_wrapper --mel input.mel --data-config  configs/data/corpus-small-24k.yaml
+python -m matcha.vocos24k.vocos_wrapper --wav input.wav --data-config  configs/data/corpus-24k.yaml
+python -m matcha.vocos24k.vocos_wrapper --mel input.mel --data-config  configs/data/corpus-24k.yaml
 ```
 which will output a file called vocoder-test24k.wav
 
@@ -88,7 +88,7 @@ python -m matcha.train
 
 Monitor training with: 
 ```
-tensorboard --logdir logs/train/corpus-small-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
+tensorboard --logdir logs/train/corpus-24k/runs/2025-11-26_09-03-10/tensorboard/version_0
 watch -n 1 nvidia-smi
 ```
 
@@ -100,7 +100,7 @@ This will generate a profile report at the end of training, so maybe set it to r
 
 See how much audio you have in the corpus:
 ```
-python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
+python -m matcha.utils.compute_corpus_duration data/corpus-24k/train.csv data/corpus-24k/validate.csv
 ```
 ### Fine-tune an existing speaker:
 Tuning uses the full corpus yaml, but filters the dataset by speaker.

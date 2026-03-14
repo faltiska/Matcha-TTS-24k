@@ -6,7 +6,7 @@ runs inference for each speaker using their own ground truth lines, and reports 
 
 Usage:
     python -m matcha.utils.mcd_validate --checkpoint averaged.ckpt
-    python -m matcha.utils.mcd_validate --checkpoint averaged.ckpt --data-config configs/data/corpus-small-24k.yaml --vocoder vocos --steps 20
+    python -m matcha.utils.mcd_validate --checkpoint averaged.ckpt --data-config configs/data/corpus-24k.yaml --vocoder vocos --steps 20
 
                   v4/1189      v6/89     v6/144   v6/189   v6/299   V6/414   v6/519   v6/629   v6/684   v6/874   v6/949
 speaker_000 MCD:  4.59 dB      5.33 dB   5.16 dB  4.93 dB  4.82 dB  4.67 dB  4.75 dB  4.72 dB  4.55 dB  4.57 dB  4.49 dB
@@ -100,7 +100,7 @@ def compute_mcd(gen_wav: torch.Tensor, ref_wav_path: Path, mcd_toolbox: Calculat
 def main():
     parser = argparse.ArgumentParser(description="MCD validation: compare TTS output to ground truth per speaker")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
-    parser.add_argument("--data-config", default="configs/data/corpus-small-24k.yaml")
+    parser.add_argument("--data-config", default="configs/data/corpus-24k.yaml")
     parser.add_argument("--vocoder", default="vocos", choices=["vocos", "bigvgan"])
     parser.add_argument("--steps", type=int, default=20)
     args = parser.parse_args()

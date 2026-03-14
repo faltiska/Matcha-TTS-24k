@@ -2,7 +2,7 @@
 Compute total audio duration for train and validation sets.
 
 Usage:
-  python -m matcha.utils.compute_corpus_duration data/corpus-small-24k/train.csv data/corpus-small-24k/validate.csv
+  python -m matcha.utils.compute_corpus_duration data/corpus-24k/train.csv data/corpus-24k/validate.csv
 """
 
 import argparse

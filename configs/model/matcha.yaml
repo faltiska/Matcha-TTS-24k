@@ -10,12 +10,7 @@ n_vocab: 156
 
 n_spks: ${data.n_spks}
 
-spk_emb_dim_enc: 96
-
-# Speaker embedding size for the duration predictor.
-# DurationPredictor2/3 add the speaker embedding to every layer. 
-# DurationPredictor1 adds the speaker embedding only at input, in the first layer. 
-spk_emb_dim_dur: 64
+spk_emb_dim: 96
 
 # Shared speaker embedding size for the encoder and duration predictor.
 # The decoder has its own spk_emb_dim defined in configs/model/decoder/default.yaml.

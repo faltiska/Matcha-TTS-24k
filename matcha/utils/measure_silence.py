@@ -2,7 +2,7 @@
 Measure trailing silence per speaker in a corpus.
 
 Usage:
-  python -m matcha.utils.measure_silence -i configs/data/corpus-small-24k.yaml
+  python -m matcha.utils.measure_silence -i configs/data/corpus-24k.yaml
   
 """
 
@@ -111,7 +111,7 @@ def main():
     parser.add_argument(
         "-i",
         "--data-config",
-        help="Path to data YAML (e.g., configs/data/corpus-small-24k.yaml)",
+        help="Path to data YAML (e.g., configs/data/corpus-24k.yaml)",
     )
     parser.add_argument(
         "-f",

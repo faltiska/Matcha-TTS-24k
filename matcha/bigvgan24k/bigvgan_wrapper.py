@@ -79,7 +79,7 @@ if __name__ == "__main__":
     from pymcd.mcd import Calculate_MCD
     from matcha.bigvgan24k.meldataset import get_mel_spectrogram
 
-    cfg_path = Path("configs/data/corpus-small-24k.yaml")
+    cfg_path = Path("configs/data/corpus-24k.yaml")
     with open(cfg_path, "r") as f:
         config = yaml.safe_load(f)
     
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     out_dir.mkdir(exist_ok=True)
     
     for spk, audio_rel_path in samples:
-        wav_path = Path("data/corpus-small-24k/wav") / f"{audio_rel_path}.wav"
+        wav_path = Path("data/corpus-24k/wav") / f"{audio_rel_path}.wav"
         
         # Load wav using torchaudio
         waveform, sr = ta.load(str(wav_path))

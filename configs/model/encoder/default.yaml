@@ -23,7 +23,7 @@ encoder_params:
   # kernel_size is hardcoded to 5 in prenet, so this value only controls the kernel for the FFN layers 
   kernel_size: 5
   
-  # Not a lot of overfitting, no need for a larger value; It does not learn properly with 0.15
+  # Not a lot of overfitting, no need for a larger value; 
   p_dropout: 0.1
   
   prenet: true

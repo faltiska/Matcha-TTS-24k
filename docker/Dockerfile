@@ -17,7 +17,7 @@ WORKDIR /app
 
 COPY --chown=appuser:appuser requirements-inference.txt ./
 COPY --chown=appuser:appuser matcha ./matcha
-COPY --chown=appuser:appuser logs/train/corpus-small-24k/v1/checkpoint_epoch=579.ckpt ./models/checkpoint.ckpt
+COPY --chown=appuser:appuser logs/train/corpus-24k/v1/checkpoint_epoch=579.ckpt ./models/checkpoint.ckpt
 COPY --chown=appuser:appuser .cache ./.cache
 
 RUN --mount=type=cache,target=/uv-cache,uid=1001 \

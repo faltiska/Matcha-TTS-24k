@@ -445,16 +445,14 @@ class TextEncoder(nn.Module):
         encoder_params,
         duration_predictor_params,
         n_vocab,
-        spk_emb_dim_enc=128,
-        spk_emb_dim_dur=128,
+        spk_emb_dim=128,
     ):
         super().__init__()
         self.encoder_type = encoder_type
         self.n_vocab = n_vocab
         self.n_feats = encoder_params.n_feats
         self.n_channels = encoder_params.n_channels
-        self.spk_emb_dim_enc = spk_emb_dim_enc
-        self.spk_emb_dim_dur = spk_emb_dim_dur
+        self.spk_emb_dim = spk_emb_dim
 
         self.emb = torch.nn.Embedding(n_vocab, self.n_channels)
         torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels ** -0.5)
@@ -472,7 +470,7 @@ class TextEncoder(nn.Module):
             self.prenet = lambda x, x_mask: x
 
         self.encoder = Encoder(
-            encoder_params.n_channels + spk_emb_dim_enc,
+            encoder_params.n_channels + spk_emb_dim,
             encoder_params.filter_channels,
             encoder_params.n_heads,
             encoder_params.n_layers,
@@ -480,7 +478,7 @@ class TextEncoder(nn.Module):
             encoder_params.p_dropout,
         )
 
-        self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim_enc, self.n_feats, 1)
+        self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
         dp_type = getattr(duration_predictor_params, 'type', 'conv1')
         dp_n_layers = getattr(duration_predictor_params, 'n_layers', 2)
         if dp_type == 'conv3':
@@ -490,7 +488,7 @@ class TextEncoder(nn.Module):
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
                 n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim_dur,
+                spk_emb_dim=self.spk_emb_dim,
             )
         elif dp_type == 'conv2':
             self.proj_w = ConvDurationPredictor2(
@@ -499,7 +497,7 @@ class TextEncoder(nn.Module):
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
                 n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim_dur,
+                spk_emb_dim=self.spk_emb_dim,
             )
         else:
             self.proj_w = ConvDurationPredictor1(
@@ -508,10 +506,10 @@ class TextEncoder(nn.Module):
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
                 n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim_dur,
+                spk_emb_dim=self.spk_emb_dim,
             )
 
-    def forward(self, x, x_lengths, encoder_speaker_embedding=None, duration_speaker_embedding=None):
+    def forward(self, x, x_lengths, speaker_embedding=None):
         """Run forward pass to the transformer based encoder and duration predictor
 
         Args:
@@ -519,9 +517,7 @@ class TextEncoder(nn.Module):
                 shape: (batch_size, max_text_length)
             x_lengths (torch.Tensor): text input lengths
                 shape: (batch_size,)
-            encoder_speaker_embedding (torch.Tensor, optional): speaker embedding for the encoder
-                shape: (batch_size, spk_emb_dim)
-            duration_speaker_embedding (torch.Tensor, optional): speaker embedding for the duration predictor
+            speaker_embedding (torch.Tensor, optional): speaker embedding
                 shape: (batch_size, spk_emb_dim)
 
         Returns:
@@ -537,15 +533,14 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-        x = torch.cat([x, encoder_speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
+        x = torch.cat([x, speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        # Because encoder_speaker_embedding was concatenated into x, so we have to strip it before
+        # Because speaker_embedding was concatenated into x, so we have to strip it before
         # passing it to DurationPredictor, which gets the embedding as a separate param.
-        x = x[:, :-self.spk_emb_dim_enc, :]
-        x_dp = x.detach()
+        x = x[:, :-self.spk_emb_dim, :]
 
-        logw = self.proj_w(x_dp, x_mask, encoder_speaker_embedding.detach())
+        logw = self.proj_w(x.detach(), x_mask, speaker_embedding.detach())
 
         return mu, logw, x_mask
