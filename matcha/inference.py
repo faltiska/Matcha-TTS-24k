@@ -213,10 +213,9 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
     if not debug:
         return trim_trailing_silence(to_waveform(output["mel"], vocoder))
     x_phones = text_processed["x_phones"]
-    phonemes = x_phones[1::2]
     all_durations = output["phoneme_durations"].squeeze(0).tolist()
     all_raw_durations = output["raw_phoneme_durations"].squeeze(0).tolist()
-    phoneme_dur_pairs = list(zip(phonemes, all_raw_durations[1::2], all_durations[1::2], all_durations[0::2]))
+    phoneme_dur_pairs = list(zip(x_phones, all_raw_durations, all_durations))
     waveform = trim_trailing_silence(to_waveform(output["mel"], vocoder))
     encoder_waveform = to_waveform(output["encoder_mel"], vocoder)
     return waveform, encoder_waveform, phoneme_dur_pairs

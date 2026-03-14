@@ -200,10 +200,10 @@ def speak(args, model, vocoder, text, speaker=0):
         frame_seconds = HOP_LENGTH / SAMPLE_RATE
         lines = []
         cumulative_frames = 0
-        for ph, raw, dur, blank_dur in phoneme_dur_pairs:
+        for symbol, raw, dur in phoneme_dur_pairs:
             start_seconds = cumulative_frames * frame_seconds
-            lines.append(f"{ph}\t{raw:.2f}\t{int(dur)}\t{start_seconds:.3f}")
-            cumulative_frames += int(blank_dur) + int(dur)
+            lines.append(f"{symbol}\t{raw:.2f}\t{int(dur)}\t{start_seconds:.3f}")
+            cumulative_frames += int(dur)
         dur_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
     else:
