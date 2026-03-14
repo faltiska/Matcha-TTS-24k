@@ -537,22 +537,15 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-
-        # This uses the prenet output as conditioning signal for Duration Prediction.
-        # At this point, x only has local phonetic context, no acoustic information yet.
-        # x_dp = x.detach()
-        
         x = torch.cat([x, encoder_speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        # This uses the encoder output as conditioning signal for Duration Prediction.
-        # The encoder output contains acoustic information already, it is just one convolution away from
-        # being a full mel spectrogram.
         # Because encoder_speaker_embedding was concatenated into x, so we have to strip it before
-        # passing it to DurationPredictor, which has its own embedding.
+        # passing it to DurationPredictor, which gets the embedding as a separate param.
         x = x[:, :-self.spk_emb_dim_enc, :]
+        x_dp = x.detach()
 
-        logw = self.proj_w(x.detach(), x_mask, duration_speaker_embedding)
+        logw = self.proj_w(x_dp, x_mask, encoder_speaker_embedding.detach())
 
         return mu, logw, x_mask

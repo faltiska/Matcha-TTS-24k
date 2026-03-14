@@ -38,8 +38,7 @@ def parse_csv(csv_path):
 
 
 def predict_embeddings(style_encoder, csv_rows, mel_dir):
-    enc_embs = []
-    dur_embs = []
+    embs = []
 
     for i, row in enumerate(csv_rows):
         rel_base = row[0]
@@ -49,17 +48,14 @@ def predict_embeddings(style_encoder, csv_rows, mel_dir):
         y = mel.unsqueeze(0)
 
         with torch.no_grad():
-            pred_enc_emb = style_encoder.acoustic_style_encoder(y, torch.ones(1, 1, y.shape[-1], device=DEVICE))
-            pred_dur_emb = style_encoder.rhythm_style_encoder(pred_enc_emb)
+            pred_spk_emb = style_encoder.acoustic_style_encoder(y, torch.ones(1, 1, y.shape[-1], device=DEVICE))
 
-        enc_embs.append(pred_enc_emb.squeeze(0))
-        dur_embs.append(pred_dur_emb.squeeze(0))
+        embs.append(pred_spk_emb.squeeze(0))
         print(f"\r[add_speaker] {i + 1}/{len(csv_rows)}", end="", flush=True)
 
     print()
-    avg_enc_emb = torch.stack(enc_embs).mean(dim=0)
-    avg_dur_emb = torch.stack(dur_embs).mean(dim=0)
-    return avg_enc_emb, avg_dur_emb
+    avg_spk_emb = torch.stack(embs).mean(dim=0)
+    return avg_spk_emb
 
 
 def expand_embedding_table(state_dict, key, new_row):
@@ -87,15 +83,15 @@ def main():
     csv_rows = parse_csv(args.csv)
     mel_dir = Path(args.csv).parent / "mels"
     print(f"[add_speaker] Processing {len(csv_rows)} recordings from {mel_dir}...")
-    avg_enc_emb, avg_dur_emb = predict_embeddings(style_encoder, csv_rows, mel_dir)
+    avg_spk_emb = predict_embeddings(style_encoder, csv_rows, mel_dir)
 
     output_path = Path(args.output)
     shutil.copy2(args.matcha_ckpt, output_path)
     ckpt = torch.load(output_path, map_location="cpu", weights_only=False)
 
     sd = ckpt["state_dict"]
-    new_n_spks = expand_embedding_table(sd, "encoder_speaker_embeddings.weight", avg_enc_emb)
-    expand_embedding_table(sd, "duration_speaker_embeddings.weight", avg_dur_emb)
+    new_n_spks = expand_embedding_table(sd, "encoder_speaker_embeddings.weight", avg_spk_emb)
+    expand_embedding_table(sd, "duration_speaker_embeddings.weight", avg_spk_emb)
     ckpt["hyper_parameters"]["n_spks"] = new_n_spks
 
     torch.save(ckpt, output_path)

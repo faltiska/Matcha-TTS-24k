@@ -2,7 +2,6 @@ encoder_type: RoPE Encoder
 encoder_params:
   n_feats: ${model.n_feats} # 100, imposed by vocos
   
-  # Increased from 192
   # I am training with multiple speakers, so the total number of channels is: (n_channels + spk_emb_dim) = 288
   # (n_channels + spk_emb_dim) / n_heads should be a multiple of 8
   n_channels: 192

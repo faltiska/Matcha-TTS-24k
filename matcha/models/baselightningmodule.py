@@ -72,7 +72,7 @@ class BaseLightningClass(LightningModule, ABC):
                     k in state_dict]
         if emb_keys:
             old_n_spks = state_dict[emb_keys[0]].shape[0]
-            new_n_spks = self.n_spks
+            new_n_spks = self.hparams.n_spks
 
             if old_n_spks < new_n_spks:
                 for emb_key in emb_keys:

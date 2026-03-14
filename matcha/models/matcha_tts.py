@@ -28,7 +28,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         data_statistics,
         spk_emb_dim_enc=None,
         spk_emb_dim_dur=None,
-        spk_emb_dim_dec=None, # Only needed for V6 ckpt compatibility
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,

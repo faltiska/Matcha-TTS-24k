@@ -5,14 +5,12 @@ defaults:
 _target_: matcha.models.style_encoder.StyleEncoderLightningModule
 
 # Path to a trained Matcha checkpoint
-matcha_checkpoint_path: logs/train/v6/checkpoint_epoch=519.ckpt
+matcha_checkpoint_path: logs/train/v7/checkpoint_epoch=099.ckpt
 
 # Must match the Matcha checkpoint's data config
 n_feats: 100
-n_channels: 192        # encoder_params.n_channels from matcha encoder config
-spk_emb_dim_enc: 96    # must match matcha spk_emb_dim_enc
-spk_emb_dim_dur: 64    # must match matcha spk_emb_dim_dur
+spk_emb_dim: 96
 
-# AcousticStyleEncoder architecture
+# StyleEncoder architecture
 ase_hidden_channels: 256
 ase_n_layers: 4

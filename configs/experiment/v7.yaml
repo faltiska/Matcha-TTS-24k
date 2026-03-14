@@ -12,7 +12,7 @@ ckpt_path: null
 
 model:
   spk_emb_dim_enc: 96
-  spk_emb_dim_dur: 16
+  spk_emb_dim_dur: 96
 
   encoder:
     encoder_params:
@@ -22,10 +22,10 @@ model:
       
     duration_predictor_params:
       type: conv3
-      filter_channels_dp: 128
+      filter_channels_dp: 192
       kernel_size: 5
       n_layers: 4
-      p_dropout: 0.05
+      p_dropout: 0.1
 
   decoder:
     channels: [384, 384]

@@ -54,21 +54,11 @@ def cleanup_text(text):
     text = re.sub(r'^,\s*', '', text)
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.?!])', r'\1', text)
-    
-    # My model has problem understanding that comma is silence.
-    # It confuses the comma with the previous symbol sometimes.
-    # I decided to make it "space comma space" hoping it would help.
-    text = re.sub(r'(?<! ),', ' ,', text)
 
-    text = text.rstrip()
+    text = text.strip()
     if not text.endswith(('.', '?', '!')):
         text = text + '.'
 
-    # I also think that the model sees '.', '?', '!' as indications for 
-    # pronouncing of the previous symbol (flat or rising pitch). 
-    # I am not sure if it also understands that it is a termination so maybe adding a space helps.
-    text = text + ' '
-    
     return text
 
 
@@ -98,6 +88,7 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    phonemes = phonemizer.phonemize([text])[0]
-
-    return phonemes
+    # Any audio file starts with a bit is silence and ends with a lot.
+    # eSpeak already adds a space at the end, I add one at the start,  
+    # I hope MAS will assign the silence to them.
+    return ' ' + phonemizer.phonemize([text])[0]
