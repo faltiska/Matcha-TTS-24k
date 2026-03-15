@@ -19,10 +19,17 @@ _punctuation = ';:,.!?¡¿_—…-\'"«»“”()[]/ '
 
 vowels = "aeiouɑɐɒæəɘɚɛɜɝɞɨɪɔøɵɤʉʊyɶœɯʏʌᵻ"
 consonants = "bβcçdðfɡɢɣhɦɧħɥjɟʝkʎlɭʟɬɫɮmɱnɳɲŋɴpɸqrɹɺɾɽɻʀʁsʂʃtʈθvʋⱱwʍxχzʐʒʑʔʕʢʡʙɕɖʜɰ"
-suprasegmentals = "ˈˌːˑ‿"
-pitch_markers = "↓↑→↗↘˥˦˧˨˩"
-diacritics = "ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚"
-voiced_phonemes = set(vowels + consonants)
+pre_annotations = "ˈˌ"
+post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚"
+
+ipa_symbols = vowels + consonants + pre_annotations + post_annotations
+
+symbols = [_separator] + list(_punctuation) + list(ipa_symbols)
+
+symbol_to_id = {s: i for i, s in enumerate(symbols)}
+id_to_symbol = {i: s for i, s in enumerate(symbols)}
+
+import unicodedata
 
 
 def to_phoneme_ids(phonemes):
@@ -41,10 +48,3 @@ def sequence_to_text(sequence):
     for symbol_id in sequence:
         result += id_to_symbol[symbol_id]
     return result
-ipa_symbols = vowels + consonants + suprasegmentals + pitch_markers + diacritics
-
-# Export all symbols:
-symbols = [_separator] + list(_punctuation) + list(ipa_symbols)
-
-symbol_to_id = {s: i for i, s in enumerate(symbols)}
-id_to_symbol = {i: s for i, s in enumerate(symbols)}

@@ -10,6 +10,7 @@ Test with: pytest tests/test_phonemizers.py
 import logging
 import re
 import os
+import unicodedata
 from pathlib import Path
 
 # Set cache directory for NeMo grammars
@@ -19,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import voiced_phonemes
+from matcha.text.symbols import _separator, post_annotations, pre_annotations
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -76,18 +77,34 @@ def normalize_text(lang_code, text):
     return text
 
 
-def insert_voiced_separators(phonemes):
+def split_ipa(phonemes):
+    """Splits a phoneme string into symbols, making sure it does not separate:
+     1. Combining codepoints for example "ã" is represented as two IPA codepoints: "a" and " ̃",
+        like in "un an" → "œ̃n ˈɑ̃" (French).  
+     2. Diacritics/stress markers from the character they annotate.
+        - pre-annotations (stress markers) attach to the next symbol: "about" → "əˈbaʊt"
+        - post-annotations (diacritics, length) attach to the previous symbol: "Bahn" → "baːn"
+    """
+    phonemes = unicodedata.normalize('NFD', phonemes)
     result = []
-    for i, symbol in enumerate(phonemes):
-        previous_symbol = phonemes[i - 1] if i > 0 else None
-        both_voiced = previous_symbol in voiced_phonemes and symbol in voiced_phonemes
-        if both_voiced:
-            result.append("|")
-        result.append(symbol)
-    return "".join(result)
+    force_combine_next = False
+    for char in phonemes:
+        cat = unicodedata.category(char)
+        is_combining = unicodedata.combining(char) > 0
+        is_modifier = cat in ('Lm', 'Sk')
+        is_tie = "DOUBLE" in unicodedata.name(char, "").upper()
+        is_backward_sticky = is_combining or is_modifier or char in post_annotations
+        if (is_backward_sticky or force_combine_next) and result:
+            result[-1] += char
+            force_combine_next = False
+        else:
+            result.append(char)
+        if is_tie or char in pre_annotations:
+            force_combine_next = True
+    return result
 
 
-def multilingual_phonemizer(text, language, add_blank=True):
+def multilingual_phonemizer(text, language, insert_separators=True):
     phonemizer = phonemizers.get(language)
     if phonemizer is None:
         raise ValueError(f"Unsupported {language=}")
@@ -102,9 +119,9 @@ def multilingual_phonemizer(text, language, add_blank=True):
     text = cleanup_text(text)
 
     phonemes = ' ' + phonemizer.phonemize([text])[0]
-    
-    if add_blank:
-        phonemes = insert_voiced_separators(phonemes)
+
+    if insert_separators:
+        phonemes = _separator.join(split_ipa(phonemes))
 
     return phonemes 
 
