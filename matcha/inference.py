@@ -6,8 +6,8 @@ import torch.nn.functional as functional
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
-from matcha.text import sequence_to_text, to_phoneme_ids, to_phonemes
-from matcha.utils.utils import intersperse
+from matcha.text.phonemizers import multilingual_phonemizer
+from matcha.text.symbols import sequence_to_text, to_phoneme_ids
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 import av
@@ -176,12 +176,12 @@ def load_matcha(model_name, checkpoint_path):
 
 def process_text(text: str, language: str):
     print(f"Input text: {text}")
-    phonemes = to_phonemes(text, language=language)
+    phonemes = multilingual_phonemizer(text, language)
     phoneme_ids = to_phoneme_ids(phonemes)
-    x = torch.tensor(intersperse(phoneme_ids, 0), dtype=torch.long, device=DEVICE)[None]
+    x = torch.tensor(phoneme_ids, dtype=torch.long, device=DEVICE)[None]
     x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
     x_phones = sequence_to_text(x.squeeze(0).tolist())
-    print(f"Phonetised text: {x_phones[1::2]}")
+    print(f"Phonetised text: {x_phones}")
     return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": x_phones}
 
 

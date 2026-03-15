@@ -17,8 +17,9 @@ cache_base = Path(os.environ.get("MATCHA_CACHE_DIR", Path.cwd() / ".cache"))
 cache_dir = cache_base / "nemo" / "grammars"
 cache_dir.mkdir(parents=True, exist_ok=True)
 
-import phonemizer
 from nemo_text_processing.text_normalization.normalize import Normalizer
+import phonemizer
+from matcha.text.symbols import voiced_phonemes
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -48,6 +49,7 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # Happens in other languages too, https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/es_list, 
 # https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
 
+
 def cleanup_text(text):
     text = re.sub('[\"„“”«»¡¿]', '', text)
     text = re.sub(r'\s*[<>()[\]{}—–…]\s*', ', ', text)
@@ -74,7 +76,18 @@ def normalize_text(lang_code, text):
     return text
 
 
-def multilingual_phonemizer(text, language):
+def insert_voiced_separators(phonemes):
+    result = []
+    for i, symbol in enumerate(phonemes):
+        previous_symbol = phonemes[i - 1] if i > 0 else None
+        both_voiced = previous_symbol in voiced_phonemes and symbol in voiced_phonemes
+        if both_voiced:
+            result.append("|")
+        result.append(symbol)
+    return "".join(result)
+
+
+def multilingual_phonemizer(text, language, add_blank=True):
     phonemizer = phonemizers.get(language)
     if phonemizer is None:
         raise ValueError(f"Unsupported {language=}")
@@ -88,4 +101,10 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    return phonemizer.phonemize([text])[0]
+    phonemes = ' ' + phonemizer.phonemize([text])[0]
+    
+    if add_blank:
+        phonemes = insert_voiced_separators(phonemes)
+
+    return phonemes 
+

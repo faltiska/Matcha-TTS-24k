@@ -8,7 +8,7 @@ Usage:
 import argparse
 from pathlib import Path
 
-from matcha.text import to_phonemes
+from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import symbols
 
 
@@ -38,7 +38,7 @@ def main():
 
         language=parts[2]
         text = parts[3]
-        ipa = to_phonemes(text, language=language)
+        ipa = multilingual_phonemizer(text, language)
 
         for char in ipa:
             if char not in symbol_set:

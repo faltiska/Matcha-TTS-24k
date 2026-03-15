@@ -17,10 +17,10 @@ from lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import Sampler
 
-from matcha.text import to_phoneme_ids, to_phonemes
+from matcha.text.phonemizers import multilingual_phonemizer
+from matcha.text.symbols import to_phoneme_ids
 from matcha.mel.extractors import get_mel_extractor
 from matcha.utils.model import fix_len_compatibility, normalize
-from matcha.utils.utils import intersperse
 from math import ceil
 
 NUM_REDISTRIBUTION_BATCHES = 8
@@ -432,10 +432,8 @@ class TextMelDataset(torch.utils.data.Dataset):
         language = csv_row[2]
         text = csv_row[3]
 
-        phonemes = to_phonemes(text, language=language)
+        phonemes = multilingual_phonemizer(text, language, self.add_blank)
         phoneme_ids = to_phoneme_ids(phonemes)
-        if self.add_blank:
-            phoneme_ids = intersperse(phoneme_ids, 0)
         phoneme_ids = torch.IntTensor(phoneme_ids)
         
         mel = self.get_mel(rel_base_path)
