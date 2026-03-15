@@ -37,8 +37,8 @@ Output CSV format (one file per input CSV, e.g. train.dur.csv):
 Durations are in mel frames (target_sr / hop_length).
 
 Usage:
-  python -m matcha.utils.compute_durations -i configs/data/corpus-24k.yaml
-  python -m matcha.utils.compute_durations -i configs/data/corpus-24k.yaml --model facebook/wav2vec2-lv-60-espeak-cv-ft
+  python -m matcha.utils.precompute_durations -i configs/data/corpus-24k.yaml
+  python -m matcha.utils.precompute_durations -i configs/data/corpus-24k.yaml --model facebook/wav2vec2-lv-60-espeak-cv-ft
 """
 
 import os
