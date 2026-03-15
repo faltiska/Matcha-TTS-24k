@@ -10,7 +10,6 @@ defaults:
 
 data:
   max_frames_per_batch: 30000
-  add_blank: False
 
 ckpt_path: null
 
