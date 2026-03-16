@@ -41,3 +41,4 @@ Assign intermediate results to named variables instead.
 1. Please do not answer using variable names, I am a human being, cannot remember the code by heart, I do not know what things like "logw_pred" represent.
 2. KIF that was trueep your answers short and focused.
 3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
+4. When executing grp commands, always exclude the "logs" and ".venv" folders  

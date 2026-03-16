@@ -10,8 +10,6 @@ defaults:
   - paths: default
   - extras: default
   - hydra: default
-  - optional local: default
-  - debug: null
 
 task_name: "train_style_encoder"
 run_name: style_encoder_v1
