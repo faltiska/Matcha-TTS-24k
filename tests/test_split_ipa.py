@@ -79,7 +79,17 @@ class TestTieCharacters:
         assert len(result) == 1
         assert result[0] == "d͡ʒ"
 
+    def test_double_vertical_line_is_not_a_tie(self):
+        # U+2016 DOUBLE VERTICAL LINE contains "DOUBLE" in its Unicode name but is not a tie bar.
+        # The character after it must start a new group, not be merged into the previous one.
+        result = split_ipa("a‖b")
+        assert result == ["a", "‖", "b"]
 
+    def test_tie_followed_by_pre_annotation(self):
+        # ˈ should start a new group, not get swallowed into the affricate
+        result = split_ipa("t͡ˈʃ")
+        assert result == ["t͡", "ˈʃ"], f"Got: {result}"
+    
 class TestRomanianEspeakBugs:
     def test_double_palatalization_splits_into_two_groups(self):
         # eSpeak Romanian bug: emits "nʲʲ" instead of "nʲ"
@@ -114,3 +124,4 @@ class TestEdgeCases:
 
     def test_plain_phonemes_unchanged(self):
         assert split_ipa("bat") == ["b", "a", "t"]
+

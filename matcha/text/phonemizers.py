@@ -79,17 +79,10 @@ def normalize_text(lang_code, text):
 
 def split_ipa(phonemes):
     """
-    Splits an IPA string into a list of phoneme symbols, keeping multi-codepoint
-    characters together as a single symbol.
-
-    The string is first NFD-decomposed so that composed characters (e.g. "ã") are
-    broken into a base letter plus combining codepoints. After splitting, each
-    symbol is re-composed to NFC before being returned.
-
     This method creates phonemes groups that contain phonemes that only make sense together:
 
     1. Pre-annotations like stress markers ("ˈˌ") stay with the phoneme right after them.
-       Example: "əˈbaʊt" → ["ə", "ˈb", "aʊ", "t"]
+       Example: "əˈbaʊt" → ["ə", "ˈb", "a", "ʊ", "t"]
 
     2. Post-annotations like diacritics and length marks ("ː,") stay with the phoneme right before them.
        Example: "baːn" → ["b", "aː", "n"]
@@ -116,26 +109,31 @@ def split_ipa(phonemes):
     force_combine_next = False
     for char in phonemes:
         cat = unicodedata.category(char)
+        
         is_combining = unicodedata.combining(char) > 0
         is_modifier = cat in ('Lm', 'Sk')
-        is_tie = "DOUBLE" in unicodedata.name(char, "").upper()
-        is_backward_sticky = (is_combining or is_modifier or char in post_annotations) and char not in pre_annotations
-        is_annotation = char in pre_annotations or char in post_annotations
+        is_tie = char in ('͜', '͡')
+        is_pre_annotation = char in pre_annotations
+        is_post_annotation = char in post_annotations
+        is_backward_sticky = (is_combining or is_modifier or is_post_annotation) and not is_pre_annotation
         last_char_of_group = result[-1][-1] if result else ''
         last_char_is_annotation = last_char_of_group in all_annotations
+
         if char in _punctuation:
             result.append(char)
             force_combine_next = False
-        elif last_char_is_annotation and is_annotation:
+        elif last_char_is_annotation and (is_pre_annotation or is_post_annotation):
             result.append(char)
             force_combine_next = False
-        elif (is_backward_sticky or force_combine_next) and result:
+        elif (is_backward_sticky or force_combine_next) and result and not is_pre_annotation:
             result[-1] += char
             force_combine_next = False            
         else:
             result.append(char)
-        if is_tie or char in pre_annotations:
+            
+        if is_tie or is_pre_annotation:
             force_combine_next = True
+            
     return [unicodedata.normalize('NFC', symbol) for symbol in result]
 
 
