@@ -101,7 +101,7 @@ def main():
     parser = argparse.ArgumentParser(description="MCD validation: compare TTS output to ground truth per speaker")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
     parser.add_argument("--data-config", default="configs/data/corpus-24k.yaml")
-    parser.add_argument("--vocoder", default="vocos", choices=["vocos", "bigvgan"])
+    parser.add_argument("--vocoder", default="vocos", choices=["vocos"])
     parser.add_argument("--steps", type=int, default=20)
     args = parser.parse_args()
 

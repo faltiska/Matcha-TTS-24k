@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
-import rootutils
 import torch
 import torchaudio as ta
 import numpy as np
@@ -173,8 +172,6 @@ def main():
 
     with initialize(version_base="1.3", config_path="../../configs/data"):
         cfg = compose(config_name=args.input_config, return_hydra_config=True, overrides=[])
-
-    root_path = rootutils.find_root(search_from=__file__, indicator=".project-root")
 
     with open_dict(cfg):
         del cfg["hydra"]

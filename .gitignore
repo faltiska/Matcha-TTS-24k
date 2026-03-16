@@ -7,4 +7,3 @@
 docker/checkpoint.ckpt
 /.cache/
 /matcha_tts.egg-info/
-/matcha/bigvgan24k/bigvgan_generator.pt

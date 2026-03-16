@@ -141,5 +141,3 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 
 ## Code changes I can consider in the future (not now!)
 Use a LR scheduler
-Train with bigvgan mels (or Try to convert Vocos mels to bigvgan mels)
-Take 579 and run a traininig with just Brian speaker embeddings enabled

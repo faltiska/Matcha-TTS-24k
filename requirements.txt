@@ -1,53 +1,30 @@
-# --------- pytorch --------- #
 torch>=2.9.1
 torchaudio>=2.9.1
-torchvision>=0.24.1
 lightning>=2.6.0
 torchmetrics>=1.8.2
 torchcodec>=0.8.1
 torchdiffeq>=0.2.5
 torch-ema>=0.3
-
-# --------- hydra --------- #
+phonemizer
+nemo_text_processing
+vocos
+av
 hydra-core
 hydra-colorlog
 hydra-optuna-sweeper
-
-# --------- loggers --------- #
-# wandb
-# neptune-client
-# mlflow
-# comet-ml
-# aim>=3.16.2  # no lower than 3.16.2, see https://github.com/aimhubio/aim/issues/2550
-
-# --------- others --------- #
-rootutils       # standardizing the project root setup
-pre-commit      # hooks for applying linters on commit
-rich            # beautiful text formatting in terminal
-pytest          # tests
-# sh            # for running bash commands in some tests (linux/macos only)
-phonemizer      # phonemization of text
+omegaconf
+rich
+pytest
 tensorboard
 librosa
-Cython
 numpy
 einops
 inflect
 scipy
-torchaudio
-matplotlib
-pandas
 conformer
-diffusers # developed using version ==0.25.0
-notebook
-ipywidgets
-gradio
-seaborn
-vocos
-bigvgan
+diffusers
 parse
 pymcd
-
-nemo_text_processing  # nvidia nemo text normalization
-
-transformers # for phoneme durations precomputation 
+fastapi
+uvicorn[standard]
+pydantic

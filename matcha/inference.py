@@ -9,7 +9,6 @@ from matcha.utils.model import denormalize, fix_len_compatibility, generate_path
 from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import to_phoneme_ids, symbols
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
-from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 import av
 import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
@@ -189,8 +188,6 @@ def load_vocoder(vocoder_name):
     print(f"[!] Loading {vocoder_name}!")
     if vocoder_name == "vocos":
         vocoder = load_vocos(DEVICE)
-    elif vocoder_name == "bigvgan":
-        vocoder = load_bigvgan(DEVICE)
     else:
         raise NotImplementedError(f"Vocoder {vocoder_name} not implemented!")
     print(f"[+] {vocoder_name} loaded!")

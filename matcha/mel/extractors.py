@@ -27,7 +27,4 @@ def get_mel_extractor(
     if b == "vocos":
         from matcha.vocos24k.mel_extractor import get_mel_extractor as _ext
         return _ext(**kwargs)
-    if b == "bigvgan":
-        from matcha.bigvgan24k.mel_extractor import get_mel_extractor as _ext
-        return _ext(**kwargs)
-    raise ValueError(f"Unknown mel backend: '{backend}'. Supported: 'vocos', 'bigvgan'")
+    raise ValueError(f"Unknown mel backend: '{backend}'. Supported: 'vocos'")

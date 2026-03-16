@@ -12,7 +12,7 @@ import torch
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HOP_LENGTH, ODE_SOLVER, VOICES
 
-VOCODERS = { "vocos", "bigvgan" }
+VOCODERS = { "vocos" }
 
 def save_to_folder(filename: str, waveform: dict, folder: str):
     folder = Path(folder)
