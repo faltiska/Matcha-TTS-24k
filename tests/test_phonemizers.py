@@ -135,119 +135,119 @@ class TestMultilingualPhonemizer:
         return multilingual_phonemizer(text, lang)
 
     def test_en_plain(self):
-        assert self._p("I live for live broadcasts.", "en-us") == " aɪ lˈɪv fɔːɹ lˈaɪv bɹˈɔːdkæsts. "
+        assert self._p("I live for live broadcasts.", "en-us") == " |a|ɪ| |l|ˈɪ|v| |f|ɔː|ɹ| |l|ˈa|ɪ|v| |b|ɹ|ˈɔː|d|k|æ|s|t|s|.| "
 
     def test_en_doctor(self):
-        assert self._p("Dr. Jones will see you at 15:00.", "en-us") == " dˈɑːktɚ dʒˈoʊnz wɪl sˈiː juː æt fˈɪftiːn əklˈɑːk. "
+        assert self._p("Dr. Jones will see you at 15:00.", "en-us") == " |d|ˈɑː|k|t|ɚ| |d|ʒ|ˈo|ʊ|n|z| |w|ɪ|l| |s|ˈiː| |j|uː| |æ|t| |f|ˈɪ|f|t|iː|n| |ə|k|l|ˈɑː|k|.| "
 
     def test_en_price(self):
-        assert self._p("The price is $5.00 as of Jan 21st, 2026.", "en-us") == " ðə pɹˈaɪs ɪz fˈaɪv dˈɑːlɚz æz ʌv dʒˈænjuːˌɛɹi twˈɛnti fˈɜːst, twˈɛnti twˈɛnti sˈɪks. "
+        assert self._p("The price is $5.00 as of Jan 21st, 2026.", "en-us") == " |ð|ə| |p|ɹ|ˈa|ɪ|s| |ɪ|z| |f|ˈa|ɪ|v| |d|ˈɑː|l|ɚ|z| |æ|z| |ʌ|v| |d|ʒ|ˈæ|n|j|uː|ˌɛ|ɹ|i| |t|w|ˈɛ|n|t|i| |f|ˈɜː|s|t|,| |t|w|ˈɛ|n|t|i| |t|w|ˈɛ|n|t|i| |s|ˈɪ|k|s|.| "
 
     def test_en_temperature(self):
-        assert self._p("The temperature is -5°C or 23°F.", "en-us") == " ðə tˈɛmpɹɪtʃɚɹ ɪz mˈaɪnəs fˈaɪv dᵻɡɹˈiːz sˈɛlsɪəs ɔːɹ twˈɛnti θɹˈiː dᵻɡɹˈiːz fˈæɹənhˌaɪt. "
+        assert self._p("The temperature is -5°C or 23°F.", "en-us") == " |ð|ə| |t|ˈɛ|m|p|ɹ|ɪ|t|ʃ|ɚ|ɹ| |ɪ|z| |m|ˈa|ɪ|n|ə|s| |f|ˈa|ɪ|v| |d|ᵻ|ɡ|ɹ|ˈiː|z| |s|ˈɛ|l|s|ɪ|ə|s| |ɔː|ɹ| |t|w|ˈɛ|n|t|i| |θ|ɹ|ˈiː| |d|ᵻ|ɡ|ɹ|ˈiː|z| |f|ˈæ|ɹ|ə|n|h|ˌa|ɪ|t|.| "
 
     def test_en_ellipsis(self):
-        assert self._p("He thought… and then spoke.", "en-us") == " hiː θˈɔːt, ænd ðˈɛn spˈoʊk. "
+        assert self._p("He thought… and then spoke.", "en-us") == " |h|iː| |θ|ˈɔː|t|,| |æ|n|d| |ð|ˈɛ|n| |s|p|ˈo|ʊ|k|.| "
 
     def test_en_url(self):
-        assert self._p("Visit http://example.com/path for details.", "en-us") == " vˈɪzɪt ˌeɪtʃtˌiːtˌiːpˈiː kˈoʊlən slˈæʃ slˈæʃ ɛɡzˈæmpəl dˈɑːt kˈɑːm slˈæʃ pˈæθ fɔːɹ diːtˈeɪlz. "
+        assert self._p("Visit http://example.com/path for details.", "en-us") == " |v|ˈɪ|z|ɪ|t| |ˌe|ɪ|t|ʃ|t|ˌiː|t|ˌiː|p|ˈiː| |k|ˈo|ʊ|l|ə|n| |s|l|ˈæ|ʃ| |s|l|ˈæ|ʃ| |ɛ|ɡ|z|ˈæ|m|p|ə|l| |d|ˈɑː|t| |k|ˈɑː|m| |s|l|ˈæ|ʃ| |p|ˈæ|θ| |f|ɔː|ɹ| |d|iː|t|ˈe|ɪ|l|z|.| "
 
     def test_en_backslash_path(self):
-        assert self._p("C:\\Users\\name\\file.txt was found.", "en-us") == " sˈiː:bˈækslæʃ jˈuːzɚz bˈækslæʃ nˈeɪm bˈækslæʃ fˈaɪl.tˌiːˌɛkstˈiː wʌz fˈaʊnd. "
+        assert self._p("C:\\Users\\name\\file.txt was found.", "en-us") == " |s|ˈiː|:|b|ˈæ|k|s|l|æ|ʃ| |j|ˈuː|z|ɚ|z| |b|ˈæ|k|s|l|æ|ʃ| |n|ˈe|ɪ|m| |b|ˈæ|k|s|l|æ|ʃ| |f|ˈa|ɪ|l|.|t|ˌiː|ˌɛ|k|s|t|ˈiː| |w|ʌ|z| |f|ˈa|ʊ|n|d|.| "
 
     def test_en_brackets(self):
-        assert self._p("The value is <10> or (20) or [30] or {40}.", "en-us") == " ðə vˈæljuː ɪz, tˈɛn, ɔːɹ, twˈɛnti, ɔːɹ, θˈɜːɾi, ɔːɹ, fˈɔːɹɾi. "
+        assert self._p("The value is <10> or (20) or [30] or {40}.", "en-us") == " |ð|ə| |v|ˈæ|l|j|uː| |ɪ|z|,| |t|ˈɛ|n|,| |ɔː|ɹ|,| |t|w|ˈɛ|n|t|i|,| |ɔː|ɹ|,| |θ|ˈɜː|ɾ|i|,| |ɔː|ɹ|,| |f|ˈɔː|ɹ|ɾ|i|.| "
 
     def test_en_em_dash(self):
-        assert self._p("It was a dark and stormy night—except at occasional intervals.", "en-us") == " ɪt wʌzɐ dˈɑːɹk ænd stˈoːɹmi nˈaɪt, ɛksˈɛpt æɾ əkˈeɪʒənəl ˈɪntɚvəlz. "
+        assert self._p("It was a dark and stormy night—except at occasional intervals.", "en-us") == " |ɪ|t| |w|ʌ|z|ɐ| |d|ˈɑː|ɹ|k| |æ|n|d| |s|t|ˈoː|ɹ|m|i| |n|ˈa|ɪ|t|,| |ɛ|k|s|ˈɛ|p|t| |æ|ɾ| |ə|k|ˈe|ɪ|ʒ|ə|n|ə|l| |ˈɪ|n|t|ɚ|v|ə|l|z|.| "
 
     def test_fr_guillemets_removed(self):
-        assert self._p("Elle a dit «bonjour» à lui.", "fr-fr") == " ɛl a dˈi bɔ̃ʒˈuʁ a lyˈi. "
+        assert self._p("Elle a dit «bonjour» à lui.", "fr-fr") == " |ɛ|l| |a| |d|ˈi| |b|ɔ̃|ʒ|ˈu|ʁ| |a| |l|y|ˈi|.| "
 
     def test_fr_em_dash(self):
-        assert self._p("La pluie tombait à torrents—sauf à intervalles occasionnels.", "fr-fr") == " la- plyˈi tɔ̃bˈɛt a toʁˈɑ̃, sˈof a ɛ̃tɛʁvˈalz ɔkazjɔnˈɛl. "
+        assert self._p("La pluie tombait à torrents—sauf à intervalles occasionnels.", "fr-fr") == " |l|a|-| |p|l|y|ˈi| |t|ɔ̃|b|ˈɛ|t| |a| |t|o|ʁ|ˈɑ̃|,| |s|ˈo|f| |a| |ɛ̃|t|ɛ|ʁ|v|ˈa|l|z| |ɔ|k|a|z|j|ɔ|n|ˈɛ|l|.| "
 
     def test_ro_question(self):
-        assert self._p("Oare?", "ro") == " ˈɔaɾe? "
+        assert self._p("Oare?", "ro") == " |ˈɔ|a|ɾ|e|?| "
 
     def test_ro_exclamation(self):
-        assert self._p("Doare!", "ro") == " dˈɔaɾe! "
+        assert self._p("Doare!", "ro") == " |d|ˈɔ|a|ɾ|e|!| "
 
     def test_ro_hyphen(self):
-        assert self._p("N-are.", "ro") == " nˈaɾe. "
+        assert self._p("N-are.", "ro") == " |n|ˈa|ɾ|e|.| "
 
     def test_ro_trailing_whitespace(self):
-        assert self._p("Cuvânt   ", "ro") == " kuvˈɨnt. "
+        assert self._p("Cuvânt   ", "ro") == " |k|u|v|ˈɨ|n|t|.| "
 
     def test_ro_em_dash(self):
-        assert self._p("Ploaia cădea în torente—cu excepția momentelor ocazionale.", "ro") == " plˈɔaja kədˈea ɨn toɾˈente, ku ekstʃˈeptsja mˌomentˈelor ˌokazjonˈale. "
+        assert self._p("Ploaia cădea în torente—cu excepția momentelor ocazionale.", "ro") == " |p|l|ˈɔ|a|j|a| |k|ə|d|ˈe|a| |ɨ|n| |t|o|ɾ|ˈe|n|t|e|,| |k|u| |e|k|s|t|ʃ|ˈe|p|t|s|j|a| |m|ˌo|m|e|n|t|ˈe|l|o|r| |ˌo|k|a|z|j|o|n|ˈa|l|e|.| "
 
     # --- missing EN cases from original main() ---
 
     def test_en_percent(self):
-        assert self._p("He scored 95% on the test.", "en-us") == " hiː skˈoːɹd nˈaɪnti fˈaɪv pɚsˈɛnt ɔnðə tˈɛst. "
+        assert self._p("He scored 95% on the test.", "en-us") == " |h|iː| |s|k|ˈoː|ɹ|d| |n|ˈa|ɪ|n|t|i| |f|ˈa|ɪ|v| |p|ɚ|s|ˈɛ|n|t| |ɔ|n|ð|ə| |t|ˈɛ|s|t|.| "
 
     def test_en_phone_address(self):
-        assert self._p("Call me at 555-1234 or visit 123 Main St.", "en-us") == " kˈɔːl mˌiː æt fˈaɪv hˈʌndɹɪd ænd fˈɪfti fˈaɪv twˈɛlv θˈɜːɾi fˈoːɹ ɔːɹ vˈɪzɪt wˈʌn twˈɛnti θɹˈiː mˈeɪn stɹˈiːt. "
+        assert self._p("Call me at 555-1234 or visit 123 Main St.", "en-us") == " |k|ˈɔː|l| |m|ˌiː| |æ|t| |f|ˈa|ɪ|v| |h|ˈʌ|n|d|ɹ|ɪ|d| |æ|n|d| |f|ˈɪ|f|t|i| |f|ˈa|ɪ|v| |t|w|ˈɛ|l|v| |θ|ˈɜː|ɾ|i| |f|ˈoː|ɹ| |ɔː|ɹ| |v|ˈɪ|z|ɪ|t| |w|ˈʌ|n| |t|w|ˈɛ|n|t|i| |θ|ɹ|ˈiː| |m|ˈe|ɪ|n| |s|t|ɹ|ˈiː|t|.| "
 
     def test_en_years_en_dash(self):
-        assert self._p("The years 2020—2025 were challenging.", "en-us") == " ðə jˈɪɹz twˈɛnti twˈɛnti, twˈɛnti twˈɛnti fˈaɪv wɜː tʃˈæləndʒˌɪŋ. "
+        assert self._p("The years 2020—2025 were challenging.", "en-us") == " |ð|ə| |j|ˈɪ|ɹ|z| |t|w|ˈɛ|n|t|i| |t|w|ˈɛ|n|t|i|,| |t|w|ˈɛ|n|t|i| |t|w|ˈɛ|n|t|i| |f|ˈa|ɪ|v| |w|ɜː| |t|ʃ|ˈæ|l|ə|n|d|ʒ|ˌɪ|ŋ|.| "
 
     def test_en_smart_quotes_and_right_single(self):
-        assert self._p("He said “hello” to me and I've said ‘hello’ back.", "en-us") == " hiː sˈɛd həlˈoʊ tə mˌiː ænd aɪv sˈɛd həlˈoʊ bˈæk. "
+        assert self._p("He said “hello” to me and I've said ‘hello’ back.", "en-us") == " |h|iː| |s|ˈɛ|d| |h|ə|l|ˈo|ʊ| |t|ə| |m|ˌiː| |æ|n|d| |a|ɪ|v| |s|ˈɛ|d| |h|ə|l|ˈo|ʊ| |b|ˈæ|k|.| "
 
     # --- RO missing whitespace variants ---
 
     def test_ro_trailing_newlines(self):
-        assert self._p("Cuvânt\n\n", "ro") == " kuvˈɨnt. "
+        assert self._p("Cuvânt\n\n", "ro") == " |k|u|v|ˈɨ|n|t|.| "
 
     def test_ro_trailing_tab(self):
-        assert self._p("Cuvânt\t", "ro") == " kuvˈɨnt. "
+        assert self._p("Cuvânt\t", "ro") == " |k|u|v|ˈɨ|n|t|.| "
 
     # --- ES phonemizer ---
 
     def test_es_doctor(self):
-        assert self._p("El Dr. García llegará a las 15:00.", "es") == " el ðoktˈoɾ ɣaɾθˈia ʎˌeɣaɾˈa a las kˈinθe . "
+        assert self._p("El Dr. García llegará a las 15:00.", "es") == " |e|l| |ð|o|k|t|ˈo|ɾ| |ɣ|a|ɾ|θ|ˈi|a| |ʎ|ˌe|ɣ|a|ɾ|ˈa| |a| |l|a|s| |k|ˈi|n|θ|e| |.| "
 
     def test_es_precio(self):
         # NeMo ES does not handle $5.00 well - documents current behavior
-        assert self._p("El precio es $5.00 desde el 21 de enero de 2026.", "es") == " el pɾˈeθjo ˈes sˈiɡno ðe ðˈolaɾ θˈinko pˈunto θˈeɾo θˈeɾo ðˌesðe el βeɪntjˈuno ðe enˈeɾo ðe ðˈos mˈil βˌeɪntisˈeis . "
+        assert self._p("El precio es $5.00 desde el 21 de enero de 2026.", "es") == " |e|l| |p|ɾ|ˈe|θ|j|o| |ˈe|s| |s|ˈi|ɡ|n|o| |ð|e| |ð|ˈo|l|a|ɾ| |θ|ˈi|n|k|o| |p|ˈu|n|t|o| |θ|ˈe|ɾ|o| |θ|ˈe|ɾ|o| |ð|ˌe|s|ð|e| |e|l| |β|e|ɪ|n|t|j|ˈu|n|o| |ð|e| |e|n|ˈe|ɾ|o| |ð|e| |ð|ˈo|s| |m|ˈi|l| |β|ˌe|ɪ|n|t|i|s|ˈe|i|s| |.| "
 
     def test_es_temperatura(self):
-        assert self._p("La temperatura es -5°C o 23°F.", "es") == " la tˌempeɾatˈuɾa ˈes θˈinko ɣɾˈaðos θˈe o βˌeɪntitɾˈes ɣɾˈaðos ˈɛfe. "
+        assert self._p("La temperatura es -5°C o 23°F.", "es") == " |l|a| |t|ˌe|m|p|e|ɾ|a|t|ˈu|ɾ|a| |ˈe|s| |θ|ˈi|n|k|o| |ɣ|ɾ|ˈa|ð|o|s| |θ|ˈe| |o| |β|ˌe|ɪ|n|t|i|t|ɾ|ˈe|s| |ɣ|ɾ|ˈa|ð|o|s| |ˈɛ|f|e|.| "
 
     # --- DE phonemizer ---
 
     def test_de_doctor(self):
-        assert self._p("Dr. M\u00fcller sieht Sie um 15:00 Uhr.", "de") == " dˈɔktoːɾ mˈylɜ zˈiːt ziː ʊm fˈynftseːn ˈuːɾ . "
+        assert self._p("Dr. M\u00fcller sieht Sie um 15:00 Uhr.", "de") == " |d|ˈɔ|k|t|oː|ɾ| |m|ˈy|l|ɜ| |z|ˈiː|t| |z|iː| |ʊ|m| |f|ˈy|n|f|t|s|eː|n| |ˈuː|ɾ| |.| "
 
     def test_de_preis(self):
-        assert self._p("Der Preis beträgt 5,00€ ab dem 21. Januar 2026.", "de") == " dɛɾ pɾˈaɪs bətɾˈɛːkt fˈynf,nˈʊl nˈʊl ˈɔøroː ap deːm aɪn ʊnt tsvˈantsɪçstɜ jˈanuːˌɑːɾ tsvˈaɪ tˈaʊzənt zˈɛks ʊnt tsvˈantsɪçstə. "
+        assert self._p("Der Preis beträgt 5,00€ ab dem 21. Januar 2026.", "de") == " |d|ɛ|ɾ| |p|ɾ|ˈa|ɪ|s| |b|ə|t|ɾ|ˈɛː|k|t| |f|ˈy|n|f|,|n|ˈʊ|l| |n|ˈʊ|l| |ˈɔ|ø|r|oː| |a|p| |d|eː|m| |a|ɪ|n| |ʊ|n|t| |t|s|v|ˈa|n|t|s|ɪ|ç|s|t|ɜ| |j|ˈa|n|uː|ˌɑː|ɾ| |t|s|v|ˈa|ɪ| |t|ˈa|ʊ|z|ə|n|t| |z|ˈɛ|k|s| |ʊ|n|t| |t|s|v|ˈa|n|t|s|ɪ|ç|s|t|ə|.| "
 
     def test_de_temperatur(self):
-        assert self._p("Die Temperatur beträgt -5°C oder 23°F.", "de") == " diː tˌɛmpeːratˈuːɾ bətɾˈɛːkt mˈiːnʊs fˈynf ɡɾˈɑːt tsˈɛlziːˌʊs ˌoːdɜ dɾˈaɪ ʊnt tsvˈantsɪç ɡɾˈɑːt fˈɑːrənhˌaɪt . "
+        assert self._p("Die Temperatur beträgt -5°C oder 23°F.", "de") == " |d|iː| |t|ˌɛ|m|p|eː|r|a|t|ˈuː|ɾ| |b|ə|t|ɾ|ˈɛː|k|t| |m|ˈiː|n|ʊ|s| |f|ˈy|n|f| |ɡ|ɾ|ˈɑː|t| |t|s|ˈɛ|l|z|iː|ˌʊ|s| |ˌoː|d|ɜ| |d|ɾ|ˈa|ɪ| |ʊ|n|t| |t|s|v|ˈa|n|t|s|ɪ|ç| |ɡ|ɾ|ˈɑː|t| |f|ˈɑː|r|ə|n|h|ˌa|ɪ|t| |.| "
 
     # --- IT phonemizer ---
 
     def test_it_doctor(self):
-        assert self._p("Il Dr. Rossi la vedrà alle 15:00.", "it") == " il dotːˈɔr rˈossɪ la vedrˈa ˌalle kwˈinditʃɪ . "
+        assert self._p("Il Dr. Rossi la vedrà alle 15:00.", "it") == " |i|l| |d|o|tː|ˈɔ|r| |r|ˈo|s|s|ɪ| |l|a| |v|e|d|r|ˈa| |ˌa|l|l|e| |k|w|ˈi|n|d|i|t|ʃ|ɪ| |.| "
 
     def test_it_price(self):
-        assert self._p("Il prezzo è €5,00 dal 21 gennaio 2026.", "it") == " il prˈɛtsːo e tʃˈinkwe ˈɛʊro dzˈɛro dzˈɛro dal ventˈuno dʒennˈaio dʊemˈila ventɪsˈɛj . "
+        assert self._p("Il prezzo è €5,00 dal 21 gennaio 2026.", "it") == " |i|l| |p|r|ˈɛ|t|sː|o| |e| |t|ʃ|ˈi|n|k|w|e| |ˈɛ|ʊ|r|o| |d|z|ˈɛ|r|o| |d|z|ˈɛ|r|o| |d|a|l| |v|e|n|t|ˈu|n|o| |d|ʒ|e|n|n|ˈa|i|o| |d|ʊ|e|m|ˈi|l|a| |v|e|n|t|ɪ|s|ˈɛ|j| |.| "
 
     def test_it_temperature(self):
-        assert self._p("La temperatura è -5°C o 23°F.", "it") == " la temperatˈura e mˈeno tʃˈinkwe ɡrˈado tselsjˈus o ventitrˈe ɡrˈado fˈarenaɪt . "
+        assert self._p("La temperatura è -5°C o 23°F.", "it") == " |l|a| |t|e|m|p|e|r|a|t|ˈu|r|a| |e| |m|ˈe|n|o| |t|ʃ|ˈi|n|k|w|e| |ɡ|r|ˈa|d|o| |t|s|e|l|s|j|ˈu|s| |o| |v|e|n|t|i|t|r|ˈe| |ɡ|r|ˈa|d|o| |f|ˈa|r|e|n|a|ɪ|t| |.| "
 
     # --- PT phonemizer (no Nemo, eSpeak only) ---
 
     def test_pt_doctor(self):
-        assert self._p("O Dr. Silva verá você às 15:00.", "pt") == " ʊ dowtˈor. sˈilvɐ vɨɾˈa vosˌe ɐɐʃ kˈiŋzɨ:zˈɛɾu zˈɛɾu. "
+        assert self._p("O Dr. Silva verá você às 15:00.", "pt") == " |ʊ| |d|o|w|t|ˈo|r|.| |s|ˈi|l|v|ɐ| |v|ɨ|ɾ|ˈa| |v|o|s|ˌe| |ɐ|ɐ|ʃ| |k|ˈi|ŋ|z|ɨ|:|z|ˈɛ|ɾ|u| |z|ˈɛ|ɾ|u|.| "
 
     def test_pt_price(self):
-        assert self._p("O preço é R$ 5,00 desde 21 de janeiro de 2026.", "pt") == " ʊ pɹˈesw ɛ ʁɨˈaʊ sˈiŋku,zˈɛɾu zˈɛɾu dˈeʒdɨ vˈiŋtɨiˈum dɨ ʒɐnˈeɪɾʊ dɨ dˈoɪʒ mˈil i vˈiŋtɨisˈeɪʃ. "
+        assert self._p("O preço é R$ 5,00 desde 21 de janeiro de 2026.", "pt") == " |ʊ| |p|ɹ|ˈe|s|w| |ɛ| |ʁ|ɨ|ˈa|ʊ| |s|ˈi|ŋ|k|u|,|z|ˈɛ|ɾ|u| |z|ˈɛ|ɾ|u| |d|ˈe|ʒ|d|ɨ| |v|ˈi|ŋ|t|ɨ|i|ˈu|m| |d|ɨ| |ʒ|ɐ|n|ˈe|ɪ|ɾ|ʊ| |d|ɨ| |d|ˈo|ɪ|ʒ| |m|ˈi|l| |i| |v|ˈi|ŋ|t|ɨ|i|s|ˈe|ɪ|ʃ|.| "
 
     def test_pt_temperature(self):
-        assert self._p("A temperatura é -5°C ou 23°F.", "pt") == " ɐ tˌeɪmpɨɾɐtˈuɾɐ ɛ mˈenʊs sˈiŋku ɡɹˈaʊ sˈe ˈow vˈiŋtɨitɹˈeʒ ɡɹˈaʊ ˈɛf. "
+        assert self._p("A temperatura é -5°C ou 23°F.", "pt") == " |ɐ| |t|ˌe|ɪ|m|p|ɨ|ɾ|ɐ|t|ˈu|ɾ|ɐ| |ɛ| |m|ˈe|n|ʊ|s| |s|ˈi|ŋ|k|u| |ɡ|ɹ|ˈa|ʊ| |s|ˈe| |ˈo|w| |v|ˈi|ŋ|t|ɨ|i|t|ɹ|ˈe|ʒ| |ɡ|ɹ|ˈa|ʊ| |ˈɛ|f|.| "
 
 
 class TestNormalizeTextFallback:

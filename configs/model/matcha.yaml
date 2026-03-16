@@ -6,8 +6,6 @@ defaults:
   - optimizer: adamw.yaml
 
 _target_: matcha.models.matcha_tts.MatchaTTS
-n_vocab: 156
-
 n_spks: ${data.n_spks}
 
 spk_emb_dim: 96

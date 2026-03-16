@@ -11,7 +11,6 @@ def dataset():
     return TextMelDataset(
         filelist_path="/home/alfred/projects/matcha-tts/data/corpus-24k/train.csv",
         n_spks=10,
-        add_blank=True,
         n_fft=1024,
         n_mels=100,
         sample_rate=24000,

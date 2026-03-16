@@ -3,13 +3,10 @@ import torch
 
 import logging
 from matcha.models.baselightningmodule import BaseLightningClass
+from matcha.text.symbols import symbols
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import (
-    duration_loss,
-    generate_path,
-    sequence_mask,
-)
+from matcha.utils.model import duration_loss, sequence_mask
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
 log = logging.getLogger(__name__)
@@ -19,7 +16,6 @@ LOG_2_PI = math.log(2 * math.pi)
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
         self,
-        n_vocab,
         n_spks,
         n_feats,
         encoder,
@@ -36,6 +32,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.save_hyperparameters(logger=False)
 
+        n_vocab = len(symbols)
         self.n_vocab = n_vocab
         self.spk_emb_dim = spk_emb_dim
         self.n_feats = n_feats

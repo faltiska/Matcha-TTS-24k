@@ -6,7 +6,7 @@
 run_name: v7
 
 defaults:
-  - override /data: corpus-small-24k
+  - override /data: corpus-24k
 
 data:
   max_frames_per_batch: 30000

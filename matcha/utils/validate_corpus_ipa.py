@@ -2,14 +2,15 @@
 Validate corpus IPA symbols against symbols.py.
 
 Usage:
-  python -m matcha.utils.validate_corpus_ipa corpus.csv
+  python -m matcha.utils.validate_corpus_ipa data/corpus-24k/train.csv
+  python -m matcha.utils.validate_corpus_ipa data/corpus-24k/validate.csv
 """
 
 import argparse
 from pathlib import Path
 
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import symbols
+from matcha.text.symbols import symbols, _separator
 
 
 def parse_filelist(filelist_path: Path, split_char: str = "|"):
@@ -40,12 +41,14 @@ def main():
         text = parts[3]
         ipa = multilingual_phonemizer(text, language)
 
-        for char in ipa:
-            if char not in symbol_set:
-                unknown_symbols.add(char)
+        for symbol in ipa.split(_separator):
+            if symbol not in symbol_set and symbol not in unknown_symbols:
+                unknown_symbols.add(symbol)
+                print(f"\n[test_corpus_ipa] Unknown symbol {repr(symbol)} in: {repr(text)}")
 
         print(f"\r[test_corpus_ipa] {i}/{total} done.", end="", flush=True)
 
+    print()
     if unknown_symbols:
         print(f"[test_corpus_ipa] WARNING: Found {len(unknown_symbols)} unknown symbols not in symbols.py:")
         print(f"[test_corpus_ipa] {sorted(unknown_symbols)}")

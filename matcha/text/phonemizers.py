@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import _separator, post_annotations, pre_annotations
+from matcha.text.symbols import _punctuation, _separator, all_annotations, post_annotations, pre_annotations
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -78,12 +78,38 @@ def normalize_text(lang_code, text):
 
 
 def split_ipa(phonemes):
-    """Splits a phoneme string into symbols, making sure it does not separate:
-     1. Combining codepoints for example "ã" is represented as two IPA codepoints: "a" and " ̃",
-        like in "un an" → "œ̃n ˈɑ̃" (French).  
-     2. Diacritics/stress markers from the character they annotate.
-        - pre-annotations (stress markers) attach to the next symbol: "about" → "əˈbaʊt"
-        - post-annotations (diacritics, length) attach to the previous symbol: "Bahn" → "baːn"
+    """
+    Splits an IPA string into a list of phoneme symbols, keeping multi-codepoint
+    characters together as a single symbol.
+
+    The string is first NFD-decomposed so that composed characters (e.g. "ã") are
+    broken into a base letter plus combining codepoints. After splitting, each
+    symbol is re-composed to NFC before being returned.
+
+    This method creates phonemes groups that contain phonemes that only make sense together:
+
+    1. Pre-annotations like stress markers ("ˈˌ") stay with the phoneme right after them.
+       Example: "əˈbaʊt" → ["ə", "ˈb", "aʊ", "t"]
+
+    2. Post-annotations like diacritics and length marks ("ː,") stay with the phoneme right before them.
+       Example: "baːn" → ["b", "aː", "n"]
+
+    3. Unicode combining codepoints are kept together with the character they modify.
+       These appear after NFD decomposition splits a composed character into its base letter
+       plus a combining codepoint. For example, the nasal vowel "ɑ̃" (French "an") is
+       decomposed into "ɑ" + combining tilde "̃", which must be kept together.
+       Example: "œ̃n ˈɑ̃" → ["œ̃", "n", " ", "ˈɑ̃"]
+
+    4. Modifier letters (Unicode spacing modifier letters not covered by post-annotations)
+       stay with the phoneme they modify, for the same reason as combining codepoints.
+
+    5. Punctuation should not be part of a group.
+
+    6. Two consecutive annotations should not be part of a group.
+
+    7. Affricate tie characters keep the two phonemes they bridge as one symbol.
+       An affricate is a single sound that begins as a stop and releases as a fricative,
+       like the "ch" in "church" ("t͡ʃ") or the "j" in "judge" ("d͡ʒ").
     """
     phonemes = unicodedata.normalize('NFD', phonemes)
     result = []
@@ -93,18 +119,27 @@ def split_ipa(phonemes):
         is_combining = unicodedata.combining(char) > 0
         is_modifier = cat in ('Lm', 'Sk')
         is_tie = "DOUBLE" in unicodedata.name(char, "").upper()
-        is_backward_sticky = is_combining or is_modifier or char in post_annotations
-        if (is_backward_sticky or force_combine_next) and result:
-            result[-1] += char
+        is_backward_sticky = (is_combining or is_modifier or char in post_annotations) and char not in pre_annotations
+        is_annotation = char in pre_annotations or char in post_annotations
+        last_char_of_group = result[-1][-1] if result else ''
+        last_char_is_annotation = last_char_of_group in all_annotations
+        if char in _punctuation:
+            result.append(char)
             force_combine_next = False
+        elif last_char_is_annotation and is_annotation:
+            result.append(char)
+            force_combine_next = False
+        elif (is_backward_sticky or force_combine_next) and result:
+            result[-1] += char
+            force_combine_next = False            
         else:
             result.append(char)
         if is_tie or char in pre_annotations:
             force_combine_next = True
-    return result
+    return [unicodedata.normalize('NFC', symbol) for symbol in result]
 
 
-def multilingual_phonemizer(text, language, insert_separators=True):
+def multilingual_phonemizer(text, language):
     phonemizer = phonemizers.get(language)
     if phonemizer is None:
         raise ValueError(f"Unsupported {language=}")
@@ -119,9 +154,13 @@ def multilingual_phonemizer(text, language, insert_separators=True):
     text = cleanup_text(text)
 
     phonemes = ' ' + phonemizer.phonemize([text])[0]
-
-    if insert_separators:
-        phonemes = _separator.join(split_ipa(phonemes))
+    
+    # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
+    # the sound of the new one and at the end, where the phoneme morphs into the the next one.   
+    # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
+    # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
+    # model the transitions too: phoneme - transition - phoneme - transition ...
+    phonemes = _separator.join(split_ipa(phonemes))
 
     return phonemes 
 

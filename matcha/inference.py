@@ -7,7 +7,7 @@ from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import sequence_to_text, to_phoneme_ids
+from matcha.text.symbols import to_phoneme_ids, symbols
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 from matcha.bigvgan24k.bigvgan_wrapper import load_bigvgan
 import av
@@ -17,26 +17,27 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.09},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.06},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.06},
-    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.02},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.08},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.07},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.00},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.07},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.05},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.04},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1.00},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.0},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.0},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.0},
+    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.0},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.0},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.0},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.0},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.0},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.0},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.0},
+    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1.0},
 ]
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_vocab, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
+    def __init__(self, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
         super().__init__()
         self.speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
+        n_vocab = len(symbols)
         self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
@@ -175,14 +176,13 @@ def load_matcha(model_name, checkpoint_path):
 
 
 def process_text(text: str, language: str):
-    print(f"Input text: {text}")
     phonemes = multilingual_phonemizer(text, language)
     phoneme_ids = to_phoneme_ids(phonemes)
     x = torch.tensor(phoneme_ids, dtype=torch.long, device=DEVICE)[None]
     x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
-    x_phones = sequence_to_text(x.squeeze(0).tolist())
-    print(f"Phonetised text: {x_phones}")
-    return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": x_phones}
+    print(f"Input text:      <{text}>")
+    print(f"Phonetised text: <{phonemes}>")
+    return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": phonemes}
 
 
 def load_vocoder(vocoder_name):

@@ -15,7 +15,6 @@ num_workers: 16
 persistent_workers: true
 
 pin_memory: True
-add_blank: True
 n_spks: 10
 n_fft: 1024
 n_feats: 100

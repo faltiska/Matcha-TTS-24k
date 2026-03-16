@@ -268,7 +268,6 @@ class TextMelDataModule(LightningDataModule):
         valid_filelist_path,
         num_workers,
         pin_memory,
-        add_blank,
         n_spks,
         n_fft,
         n_feats,
@@ -298,7 +297,6 @@ class TextMelDataModule(LightningDataModule):
         """
         self.trainset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.train_filelist_path,
-            self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
             self.hparams.sample_rate,
@@ -313,7 +311,6 @@ class TextMelDataModule(LightningDataModule):
         )
         self.validset = TextMelDataset(  # pylint: disable=attribute-defined-outside-init
             self.hparams.valid_filelist_path,
-            self.hparams.add_blank,
             self.hparams.n_fft,
             self.hparams.n_feats,
             self.hparams.sample_rate,
@@ -378,7 +375,6 @@ class TextMelDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         filelist_path,
-        add_blank=True,
         n_fft=1024,
         n_mels=80,
         sample_rate=22050,
@@ -394,7 +390,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.filelist_path = Path(filelist_path)
         self.filelist_dir = self.filelist_path.parent
         self.filepaths_and_text = parse_filelist(filelist_path)
-        self.add_blank = add_blank
         self.n_fft = n_fft
         self.n_mels = n_mels
         self.sample_rate = sample_rate
@@ -432,7 +427,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         language = csv_row[2]
         text = csv_row[3]
 
-        phonemes = multilingual_phonemizer(text, language, self.add_blank)
+        phonemes = multilingual_phonemizer(text, language)
         phoneme_ids = to_phoneme_ids(phonemes)
         phoneme_ids = torch.IntTensor(phoneme_ids)
         

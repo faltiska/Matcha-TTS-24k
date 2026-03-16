@@ -1,3 +1,5 @@
+import unicodedata
+
 """
 Defines the set of symbols used in text input to the model.
 """
@@ -21,15 +23,20 @@ vowels = "aeiouɑɐɒæəɘɚɛɜɝɞɨɪɔøɵɤʉʊyɶœɯʏʌᵻ"
 consonants = "bβcçdðfɡɢɣhɦɧħɥjɟʝkʎlɭʟɬɫɮmɱnɳɲŋɴpɸqrɹɺɾɽɻʀʁsʂʃtʈθvʋⱱwʍxχzʐʒʑʔʕʢʡʙɕɖʜɰ"
 pre_annotations = "ˈˌ"
 post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚"
+all_annotations = pre_annotations + post_annotations
 
 ipa_symbols = vowels + consonants + pre_annotations + post_annotations
 
-symbols = [_separator] + list(_punctuation) + list(ipa_symbols)
+base_phonemes = vowels + consonants
+pre_annotated = [pre + base for pre in pre_annotations for base in base_phonemes]
+post_annotated = [base + post for base in base_phonemes for post in post_annotations]
+pre_post_annotated = [pre + base + post for pre in pre_annotations for base in base_phonemes for post in post_annotations]
+
+symbols = [_separator] + list(_punctuation) + list(ipa_symbols) + pre_annotated + post_annotated + pre_post_annotated
 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
-id_to_symbol = {i: s for i, s in enumerate(symbols)}
 
-import unicodedata
+SPACE_ID = symbols.index(" ")
 
 
 def to_phoneme_ids(phonemes):
@@ -39,12 +46,9 @@ def to_phoneme_ids(phonemes):
     Returns:
       List of integers corresponding to the symbols in the text
     """
-    return [symbol_to_id[symbol] for symbol in phonemes]
-
-
-def sequence_to_text(sequence):
-    """Converts a sequence of IDs back to a string"""
-    result = ""
-    for symbol_id in sequence:
-        result += id_to_symbol[symbol_id]
-    return result
+    separator_id = symbol_to_id[_separator]
+    ids = []
+    for symbol in phonemes.split(_separator):
+        ids.append(symbol_to_id.get(symbol))
+        ids.append(separator_id)
+    return ids[:-1]  # remove trailing separator
