@@ -10,7 +10,6 @@ def dataset():
     """Load corpus-24k dataset once for all tests."""
     return TextMelDataset(
         filelist_path="/home/alfred/projects/matcha-tts/data/corpus-24k/train.csv",
-        n_spks=10,
         n_fft=1024,
         n_mels=100,
         sample_rate=24000,
@@ -20,7 +19,6 @@ def dataset():
         f_max=12000,
         data_parameters={"mel_mean": -3.186903, "mel_std": 5.36849},
         seed=1234,
-        load_durations=False,
         mel_dir="/home/alfred/projects/matcha-tts/data/corpus-24k/mels",
         mel_backend="vocos"
     )

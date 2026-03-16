@@ -1,5 +1,6 @@
 import pytest
 
+# Registers a --max-frames custom CLI argument for tests/test_dynamic_batch_sampler.py
 
 def pytest_addoption(parser):
     parser.addoption(
