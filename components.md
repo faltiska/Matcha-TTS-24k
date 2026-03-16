@@ -78,7 +78,6 @@ vector for the right number of frames), but the durations themselves are not pas
 - **Text Encoder & Duration Predictor**: `matcha/models/components/text_encoder.py`
 - **Flow Matching Decoder**: `matcha/models/components/flow_matching.py` and `matcha/models/components/decoder.py`
 - **MAS Alignment**: `matcha/models/matcha_tts.py` (uses `super_monotonic_align`)
-- **Precomputed Durations**: `matcha/utils/compute_durations.py`
 - **Main Model**: `matcha/models/matcha_tts.py`
 - **Vocos Vocoder**: `matcha/vocos24k/vocos_wrapper.py`
 - **HiFiGAN Vocoder**: `matcha/hifigan/models.py`

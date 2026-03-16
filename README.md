@@ -158,7 +158,6 @@ Compared to the original MatchaTTS, I did the following:
 - Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
 - Made changes to get the model to compile ofr training, but since using the dynamic data loader, it does not help
 - Made changes to get the model to compile for inference, it improves synthesis time 3x
-- Added a script that precomputes durations using Facebook's wav2vec2, so I don't have to calculate them using MAS during training
 - Added two smarter Duration Predictor models
 
 # PyTorch stuff
