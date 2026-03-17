@@ -2,11 +2,24 @@
 
 ## Prerequisites
 
+```bash
+sudo apt install unzip
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+aws configure
+# It will ask for: 
+# - Region: eu-west-1
+# - Access Key ID: use the key called "AWS CLI Access Key" from truekey
+```
+
+
 ### Local development
 ```
 sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo apt install docker.io
+sudo systemctl restart docker
 ```
 Install buildx from Docker's official repo (not in Ubuntu's default apt)
 ```
@@ -27,53 +40,36 @@ sudo apt update && sudo apt install docker-buildx-plugin
 - SSH Keys: https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#KeyPairs
 - Security Groups: https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#SecurityGroups
 
-## Local Testing (Optional)
+## Building and testing
 
 Test the Docker image locally with GPU support.
 See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=v1.0.0
-docker buildx build -f docker/Dockerfile -t 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG .
-docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG
+export TAG=26.03.17-1
+export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
+export IMAGE_NAME=evie/matcha
+
+# Update Dockerfile, copy checkpoint into docker/, build image
+cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
+
+docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
+
+docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/$IMAGE_NAME:$TAG
 
 # Log into container
 docker exec -it matcha /bin/bash
 
 # Cleanup
 docker container remove matcha
-docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/matcha-tts:$TAG
+docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/$IMAGE_NAME:$TAG
 ```
 
-## Build and Push to ECR
+## Push to ECR
 
-```powershell
-# PowerShell (WSL)
-$TAG="v1.0.0"
-$REGISTRY="678811077621.dkr.ecr.eu-west-1.amazonaws.com"
-$IMAGE_NAME="evie/matcha-tts"
-
-# Build image (copy checkpoint into docker/ first)
-cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
-docker buildx build -f docker/Dockerfile -t "$REGISTRY/$IMAGE_NAME:$TAG" .
-
-# Login to ECR
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-
-# Push image
-docker push "$REGISTRY/$IMAGE_NAME:$TAG"
-```
 
 ```bash
-# Linux/Mac
-export TAG=v1.0.0
-export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
-export IMAGE_NAME=evie/matcha-tts
-
-# Build image (copy checkpoint into docker/ first)
-cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
-docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker push $REGISTRY/$IMAGE_NAME:$TAG
 ```
@@ -81,10 +77,16 @@ docker push $REGISTRY/$IMAGE_NAME:$TAG
 ## EC2 Instance Setup
 
 ### SSH Access
-Log into EC2 using PuTTY (Windows) or ssh (Linux/Mac).
+Log into EC2 using ssh (Linux/Mac).
 Username: `ec2-user`
 
-May need to allow inbound access on port 22 in Security Groups.
+May need to allow inbound access on port 22 for my public IP in Security Groups in EC2.
+Public IP changes periodically.
+
+```bash
+cp /mnt/e/Programare/eVoiceReader/Resources/ec2-connect-key-ireland.pem ~/.ssh/
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+```
 
 ### One-Time Docker Swarm Setup
 
@@ -103,7 +105,7 @@ Add:
     },
     "default-runtime": "nvidia",
     "node-generic-resources": [
-        "gpu=GPU-all"
+        "NVIDIA-GPU=0"
     ]
 }
 ```
@@ -147,9 +149,9 @@ Both in EC2 VPC, with their own security group allowing:
 ### Initial Deployment
 
 ```bash
-export TAG=v1.0.0
+export TAG=26.03.17-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
-export IMAGE_NAME=evie/matcha-tts
+export IMAGE_NAME=evie/matcha
 
 # Login and pull
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
@@ -158,8 +160,8 @@ docker pull $REGISTRY/$IMAGE_NAME:$TAG
 # Create service with 3 replicas
 docker service create \
   --name matcha \
-  --replicas 3 \
-  --publish 8000:8000 \
+  --replicas 2 \
+  --publish 8881:8000 \
   --env CHECKPOINT_PATH=/app/models/checkpoint.ckpt \
   --env MAX_TEXT_LENGTH=500 \
   --generic-resource "NVIDIA-GPU=0" \
@@ -172,9 +174,9 @@ docker service create \
 ### Rolling Updates (Zero Downtime)
 
 ```bash
-export TAG=v1.0.1
+export TAG=26.03.17-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
-export IMAGE_NAME=evie/matcha-tts
+export IMAGE_NAME=evie/matcha
 
 # Login and pull new version
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
@@ -182,28 +184,6 @@ docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Update service (rolling update with 20s delay)
 docker service update --update-delay 20s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
-```
-
-### Alternative: Simple Docker Run (with downtime)
-
-If you don't need rolling updates:
-
-```bash
-export TAG=v1.0.0
-export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
-export IMAGE_NAME=evie/matcha-tts
-
-# Login and pull
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-docker pull $REGISTRY/$IMAGE_NAME:$TAG
-
-# Stop old, start new
-docker stop matcha
-docker container rm matcha
-docker run -d --restart unless-stopped --gpus all -p 8000:8000 --name matcha $REGISTRY/$IMAGE_NAME:$TAG
-
-# View logs
-docker logs -f matcha
 ```
 
 ## Monitoring and Management
