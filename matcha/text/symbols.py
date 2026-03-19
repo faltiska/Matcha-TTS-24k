@@ -28,9 +28,14 @@ all_annotations = pre_annotations + post_annotations
 ipa_symbols = vowels + consonants + pre_annotations + post_annotations
 
 base_phonemes = vowels + consonants
-pre_annotated = [pre + base for pre in pre_annotations for base in base_phonemes]
+
+syllabic_consonants = "nlm"
+semi_vowels = "wj"
+pre_annotatable = vowels + syllabic_consonants + semi_vowels
+
+pre_annotated = [pre + base for pre in pre_annotations for base in pre_annotatable]
 post_annotated = [base + post for base in base_phonemes for post in post_annotations]
-pre_post_annotated = [pre + base + post for pre in pre_annotations for base in base_phonemes for post in post_annotations]
+pre_post_annotated = [pre + base + post for pre in pre_annotations for base in pre_annotatable for post in post_annotations]
 
 symbols = [_separator] + list(_punctuation) + list(ipa_symbols) + pre_annotated + post_annotated + pre_post_annotated
 

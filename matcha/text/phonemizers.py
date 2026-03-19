@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import _punctuation, _separator, all_annotations, post_annotations, pre_annotations
+from matcha.text.symbols import _punctuation, _separator, all_annotations, post_annotations, pre_annotations, symbol_to_id
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -53,7 +53,8 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 
 def cleanup_text(text):
     text = re.sub('[\"„“”«»¡¿]', '', text)
-    text = re.sub(r'\s*[<>()[\]{}—–…]\s*', ', ', text)
+    text = re.sub(r'\s*[,<>()[\]{}—–…]\s*', ',', text)
+    text = re.sub(r'\s+([.?!,;:])', r'\1', text)
     text = re.sub(r'^,\s*', '', text)
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.?!])', r'\1', text)
@@ -75,6 +76,19 @@ def normalize_text(lang_code, text):
         normalizer = normalizers[lang_code]
         text = normalizer.normalize(text)
     return text
+
+
+def validate_group(group):
+    """
+    Checks whether combined_group is a known symbol.
+    If not, the last character should start a new group instead of being appended.
+    This is a safety net for phoneme combinations that split_ipa's grouping rules
+    would combine, but that are not present in the symbols vocabulary.
+    """
+    known_group = group in symbol_to_id
+    if not known_group:
+        logger.warning(f"Unknown phoneme group '{group}' — will keep individual characters.")
+    return known_group
 
 
 def split_ipa(phonemes):
@@ -126,7 +140,12 @@ def split_ipa(phonemes):
             result.append(char)
             force_combine_next = False
         elif (is_backward_sticky or force_combine_next) and result and not is_pre_annotation:
-            result[-1] += char
+            group = result[-1] + char
+            group = unicodedata.normalize('NFC', group)
+            if validate_group(group):
+                result[-1] = group
+            else:
+                result.append(char)
             force_combine_next = False            
         else:
             result.append(char)
@@ -134,7 +153,7 @@ def split_ipa(phonemes):
         if is_tie or is_pre_annotation:
             force_combine_next = True
             
-    return [unicodedata.normalize('NFC', symbol) for symbol in result]
+    return result
 
 
 def multilingual_phonemizer(text, language):
@@ -151,7 +170,7 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    phonemes = ' ' + phonemizer.phonemize([text])[0]
+    phonemes = phonemizer.phonemize([text])[0].rstrip()
     
     # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
     # the sound of the new one and at the end, where the phoneme morphs into the the next one.   
