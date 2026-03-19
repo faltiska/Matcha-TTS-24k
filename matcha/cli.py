@@ -14,6 +14,7 @@ from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3
 
 VOCODERS = { "vocos" }
 
+
 def save_to_folder(filename: str, waveform: dict, folder: str):
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
@@ -22,105 +23,37 @@ def save_to_folder(filename: str, waveform: dict, folder: str):
     return wav_path
 
 
-def validate_args(args):
-    assert (
-        args.text or args.file
-    ), "Either text or file must be provided Matcha-T(ea)TTS need sometext to whisk the waveforms."
-    assert args.steps > 0, "Number of ODE steps must be greater than 0"
-
-    if args.checkpoint_path is None:
-        # When using pretrained models
-        if args.model in SINGLESPEAKER_MODEL:
-            args = validate_args_for_single_speaker_model(args)
-
-        if args.model in MULTISPEAKER_MODEL:
-            args = validate_args_for_multispeaker_model(args)
-    else:
-        # When using a custom model
-        if args.vocoder is None:
-            args.vocoder = "vocos"
-            warn_ = f"[-] Using custom model checkpoint, but no vocoder specified, defaulting to {args.vocoder}."
-            warnings.warn(warn_, UserWarning)
-
-        if args.spk is not None:
-            args.spk = [int(s.strip()) for s in args.spk.split(",")]
-        else:
-            args.spk = [None]
-
-    assert args.speaking_rate is None or args.speaking_rate > 0, "Speaking rate must be greater than 0"
-
-    return args
-
-
-def validate_args_for_multispeaker_model(args):
-    if args.vocoder is not None:
-        if args.vocoder != MULTISPEAKER_MODEL[args.model]["vocoder"]:
-            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {MULTISPEAKER_MODEL[args.model]['vocoder']}"
-            warnings.warn(warn_, UserWarning)
-    else:
-        args.vocoder = MULTISPEAKER_MODEL[args.model]["vocoder"]
-
-    if args.speaking_rate is None:
-        args.speaking_rate = MULTISPEAKER_MODEL[args.model]["speaking_rate"]
-
-    spk_range = MULTISPEAKER_MODEL[args.model]["spk_range"]
-    if args.spk is not None:
-        spk_list = [int(s.strip()) for s in args.spk.split(",")]
-        for spk_id in spk_list:
-            assert (
-                spk_id >= spk_range[0] and spk_id <= spk_range[-1]
-            ), f"Speaker ID {spk_id} must be between {spk_range} for this model."
-        args.spk = spk_list
-    else:
-        available_spk_id = MULTISPEAKER_MODEL[args.model]["spk"]
-        warn_ = f"[!] Speaker ID not provided! Using speaker ID {available_spk_id}"
-        warnings.warn(warn_, UserWarning)
-        args.spk = [available_spk_id]
-
-    return args
-
-
-def validate_args_for_single_speaker_model(args):
-    if args.vocoder is not None:
-        if args.vocoder != SINGLESPEAKER_MODEL[args.model]["vocoder"]:
-            warn_ = f"[-] Using {args.model} model! I would suggest passing --vocoder {SINGLESPEAKER_MODEL[args.model]['vocoder']}"
-            warnings.warn(warn_, UserWarning)
-    else:
-        args.vocoder = SINGLESPEAKER_MODEL[args.model]["vocoder"]
-
-    if args.speaking_rate is None:
-        args.speaking_rate = SINGLESPEAKER_MODEL[args.model]["speaking_rate"]
-
-    if args.spk is not None:
-        warn_ = f"[-] Ignoring speaker id {args.spk} for {args.model}"
-        warnings.warn(warn_, UserWarning)
-    args.spk = [SINGLESPEAKER_MODEL[args.model]["spk"]]
-
-    return args
-
-
 def cli():
     parser = argparse.ArgumentParser(
-        description=" 🍵 Matcha-TTS: A fast TTS architecture with conditional flow matching"
+        description=" 🍵 Matcha-TTS: a modern non-autoregressive TTS."
     )
 
     parser.add_argument(
         "--checkpoint_path",
         type=str,
         default=None,
+        required=True,
         help="Path to the custom model checkpoint",
     )
-
     parser.add_argument(
         "--vocoder",
         type=str,
-        default=None,
-        help="Vocoder to use (default: will use the one suggested with the pretrained model))",
+        default="vocos",
+        help="Vocoder to use (default: Vocos)",
         choices=VOCODERS,
     )
-    parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
-    parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
-    parser.add_argument("--spk", type=str, default=None, help="Speaker ID or comma-separated list (e.g., 0 or 0,1,2)")
+    parser.add_argument("--text", 
+        type=str, 
+        default=None,
+        required=True,
+        help="Text to synthesize"
+    )
+    parser.add_argument("--spk", 
+        type=str, 
+        default=None,
+        required=True,
+        help="Speaker ID or comma-separated list of IDs (e.g., 0 or 0,1,2)"
+    )
     parser.add_argument(
         "--solver",
         type=str,
@@ -128,18 +61,15 @@ def cli():
         help="ODE solver to use (default: midpoint)",
     )
     parser.add_argument(
-        "--speaking_rate",
+        "--length_scale",
         type=float,
         default=None,
-        help="change the speaking rate, a higher value means slower speaking rate (default: 1.0)",
+        help="How much longer each phoneme duration should be compared to speaker's default.",
     )
-    parser.add_argument("--steps", type=int, default=20, help="Number of ODE steps  (default: 20)")
-    parser.add_argument(
-        "--denoiser_strength",
-        type=float,
-        default=0.00025,
-        help="Strength of the vocoder bias denoiser (default: 0.00025)",
-    )
+    parser.add_argument("--steps", 
+        type=int, 
+        default=20, 
+        help="Number of ODE steps  (default: 20)")
     parser.add_argument(
         "--output_folder",
         type=str,
@@ -149,22 +79,22 @@ def cli():
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Debug mode: save encoder mel wav and phoneme durations txt, skip mp3",
+        help="Save encoder mel wav too, and a phoneme durations file.",
     )
 
     args = parser.parse_args()
 
-    args = validate_args(args)
-    if args.checkpoint_path is not None:
-        print(f"[🍵] Loading custom model from {args.checkpoint_path}")
-        args.model = "custom_model"
+    args.spk = [int(s.strip()) for s in args.spk.split(",")]
+    
+    print(f"[🍵] Loading custom model from {args.checkpoint_path}")
+    args.model = "custom_model"
 
     model = load_matcha(args.model, args.checkpoint_path)
     model.decoder.solver = args.solver
     
     vocoder = load_vocoder(args.vocoder)
 
-    print_config(args, model)
+    print_config(args)
 
     spk_list = args.spk if args.spk[0] is not None else [None]
     for spk_id in spk_list:
@@ -178,8 +108,8 @@ def speak(args, model, vocoder, text, speaker=0):
     t = time.perf_counter()
     voice = next((v for v in VOICES if v["id"] == str(speaker)), VOICES[0])
     language = voice["lang"]
-    if args.speaking_rate is not None:
-        length_scale = args.speaking_rate
+    if args.length_scale is not None:
+        length_scale = args.length_scale
     else:
         length_scale = voice["default_scale"]
 
@@ -218,11 +148,11 @@ def speak(args, model, vocoder, text, speaker=0):
     print("".join(["="] * 100))
 
 
-def print_config(args, model):
+def print_config(args):
     print("[!] Configurations: ")
     print(f"\t- Model: {args.model}")
     print(f"\t- Vocoder: {args.vocoder}")
-    print(f"\t- Speaking rate: {args.speaking_rate}")
+    print(f"\t- Length scale: {args.length_scale}")
     print(f"\t- ODE steps: {args.steps}")
     print(f"\t- ODE Solver: {args.solver}")
     print(f"\t- Speaker: {args.spk}")
