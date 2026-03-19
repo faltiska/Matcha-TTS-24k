@@ -1,0 +1,48 @@
+# @package _global_
+# Documents all changes from v6 to v7 architecture.
+# V7: single speaker embedding shared by encoder and duration predictor.
+# Removes duration_speaker_embeddings lookup table and spk_emb_dim_dur.
+
+run_name: v8
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: logs/train/v8/checkpoint_epoch=274.ckpt
+
+model:
+  spk_emb_dim: 96
+
+  encoder:
+    encoder_params:
+      # 288 + 96 = 384
+      # 384 / 6 = 64, divisible by 8
+      n_channels: 288 
+      filter_channels: 1536
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      p_dropout: 0.05
+      
+    duration_predictor_params:
+      type: conv3
+      filter_channels_dp: 192
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 5e-5
+    weight_decay: 5e-4
