@@ -16,8 +16,6 @@ USER appuser
 WORKDIR /app
 
 COPY --chown=appuser:appuser requirements-inference.txt ./
-COPY --chown=appuser:appuser matcha ./matcha
-COPY --chown=appuser:appuser docker/checkpoint_epoch=144.ckpt ./models/checkpoint.ckpt
 COPY --chown=appuser:appuser .cache ./.cache
 
 RUN --mount=type=cache,target=/uv-cache,uid=1001 \
@@ -25,6 +23,9 @@ RUN --mount=type=cache,target=/uv-cache,uid=1001 \
     uv venv --python 3.13 && \
     UV_CACHE_DIR=/uv-cache uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 && \
     UV_CACHE_DIR=/uv-cache uv pip install -r requirements-inference.txt
+
+COPY --chown=appuser:appuser matcha ./matcha
+COPY --chown=appuser:appuser docker/checkpoint.ckpt ./models/checkpoint.ckpt
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

@@ -47,7 +47,7 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.03.17-1
+export TAG=26.03.18-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -66,11 +66,22 @@ docker container remove matcha
 docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/$IMAGE_NAME:$TAG
 ```
 
+## Cleanup docker caches
+Docker holds huge amounts of data. Check it with: 
+```
+docker system df
+```
+You can reclaim the space, but the next build command will be slow and will download some of those files again:
+```
+docker system prune -a --volumes -f
+```
+
 ## Push to ECR
 
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+
 docker push $REGISTRY/$IMAGE_NAME:$TAG
 ```
 
@@ -149,7 +160,7 @@ Both in EC2 VPC, with their own security group allowing:
 ### Initial Deployment
 
 ```bash
-export TAG=26.03.17-1
+export TAG=26.03.18-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -174,7 +185,7 @@ docker service create \
 ### Rolling Updates (Zero Downtime)
 
 ```bash
-export TAG=26.03.17-1
+export TAG=26.03.18-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -183,7 +194,13 @@ aws ecr get-login-password --region eu-west-1 | docker login --username AWS --pa
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Update service (rolling update with 20s delay)
-docker service update --update-delay 20s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+docker service update --update-delay 30s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+
+# Remove stopped containers
+docker container prune
+
+# Reclaim space occupied by images not used by any container
+docker image prune -a
 ```
 
 ## Monitoring and Management
@@ -239,15 +256,10 @@ docker service ps matcha --no-trunc
 docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi
 
 # Check daemon config
+```bash
 cat /etc/docker/daemon.json
 ```
 
-### Out of memory errors
-With 3 replicas, each loads ~3GB model = ~9-12GB VRAM total.
-Reduce replicas if needed:
-```bash
-docker service update matcha --replicas 2
-```
 
 ## Notes
 
