@@ -51,8 +51,7 @@ class ConvReluNorm(nn.Module):
             )
             self.norm_layers.append(LayerNorm(hidden_channels))
         self.proj = torch.nn.Conv1d(hidden_channels, out_channels, 1)
-        self.proj.weight.data.zero_()
-        self.proj.bias.data.zero_()
+        torch.nn.init.xavier_uniform_(self.proj.weight)
 
     def forward(self, x, x_mask):
         x_org = x
@@ -349,7 +348,7 @@ class MultiHeadAttention(nn.Module):
 
         if self.proximal_bias:
             assert t_s == t_t, "Proximal bias is only available for self-attention."
-            scores = scores + self._attention_bias_proximal(t_s).to(device=scores.device, dtype=scores.dtype)
+            scores = scores + self._attention_bias_proximal(t_s, scores.device, scores.dtype)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e4)
         p_attn = torch.nn.functional.softmax(scores, dim=-1)
@@ -359,8 +358,8 @@ class MultiHeadAttention(nn.Module):
         return output, p_attn
 
     @staticmethod
-    def _attention_bias_proximal(length):
-        r = torch.arange(length, dtype=torch.float32)
+    def _attention_bias_proximal(length, device, dtype):
+        r = torch.arange(length, dtype=dtype, device=device)
         diff = torch.unsqueeze(r, 0) - torch.unsqueeze(r, 1)
         return torch.unsqueeze(torch.unsqueeze(-torch.log1p(torch.abs(diff)), 0), 0)
 
@@ -462,9 +461,9 @@ class TextEncoder(nn.Module):
                 self.n_channels,
                 self.n_channels,
                 self.n_channels,
-                kernel_size=5,
-                n_layers=3,
-                p_dropout=0.5,
+                kernel_size=encoder_params.kernel_size,
+                n_layers=6,
+                p_dropout=0.05,
             )
         else:
             self.prenet = lambda x, x_mask: x
@@ -479,6 +478,14 @@ class TextEncoder(nn.Module):
         )
 
         self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
+
+        # I could try with a smarter mel generator 
+        # self.proj_m = torch.nn.Sequential(
+        #     torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),
+        #     torch.nn.ReLU(),
+        #     torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
+        # )
+
         dp_type = getattr(duration_predictor_params, 'type', 'conv1')
         dp_n_layers = getattr(duration_predictor_params, 'n_layers', 2)
         if dp_type == 'conv3':
@@ -533,7 +540,7 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-        x = torch.cat([x, speaker_embedding.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
+        x = torch.cat([x, speaker_embedding.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
