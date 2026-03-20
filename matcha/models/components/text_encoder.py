@@ -184,14 +184,15 @@ class ConvDurationPredictor3(nn.Module):
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
     def forward(self, x, x_mask, spk_emb):
-        # Generate scale (gamma) and shift (beta)
         film_params = self.spk_proj(spk_emb).unsqueeze(-1)
         gamma, beta = torch.split(film_params, self.filter_channels, dim=1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
             x = torch.relu(x)
             x = norm(x)
-            # Apply FiLM conditioning: scale and shift
+            # Both Sonet 4.6 Extended and Gemini Thinking flagged this as being out of order.
+            # I tested with the "right order" and found that the duration predictor is learning slower/less
+            # This is the code written by Amazon Q / Sonnet 4.6 
             x = (x * gamma) + beta
             x = self.drop(x)
 
@@ -463,7 +464,7 @@ class TextEncoder(nn.Module):
                 self.n_channels,
                 kernel_size=encoder_params.kernel_size,
                 n_layers=6,
-                p_dropout=0.05,
+                p_dropout=encoder_params.p_dropout,
             )
         else:
             self.prenet = lambda x, x_mask: x
