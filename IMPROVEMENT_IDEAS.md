@@ -1,8 +1,7 @@
-# Add a list of accepted symbols
-and update the unit test
+# Don't log losses per step anymore, I never look at those.
 
-# Log sub-losses per speaker per epoch.
-And don't log losses per step anymore, I never look at those.
+# Use FiLM within the Encoder blocks instead of concatenation
+As done in ConvDurationPredictor3
 
 # CFM / Diffusion improvement 
 
