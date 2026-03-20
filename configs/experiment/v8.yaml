@@ -1,7 +1,6 @@
 # @package _global_
 # Documents all changes from v6 to v7 architecture.
-# V7: single speaker embedding shared by encoder and duration predictor.
-# Removes duration_speaker_embeddings lookup table and spk_emb_dim_dur.
+# V8: trying to find a config that works with V7 improvements.
 
 run_name: v8
 
@@ -44,5 +43,5 @@ model:
     use_mu_prior: true
 
   optimizer:
-    lr: 5e-5
-    weight_decay: 5e-4
+    lr: 1e-4
+    weight_decay: 1e-3

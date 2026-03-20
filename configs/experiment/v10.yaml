@@ -1,13 +1,11 @@
 # @package _global_
 # Documents all changes from v6 to v7 architecture.
-# V9: Improved phonemizer to keep annotation symbol grouped with the phoneme they annotate,
-# and assigning durations only to voiced phonemes, not annotation symbols. Each symbol gets its own distinct id.
-# Larger text encoder to match the larger number of phonemes IDs produced by grouping.
+# V10: V9 with larger dropout and weight decay to fight overfitting
 
-run_name: v9
+run_name: v10
 
 defaults:
-  - override /data: corpus-small-24k
+  - override /data: corpus-24k
 
 data:
   max_frames_per_batch: 30000
@@ -27,7 +25,7 @@ model:
       n_heads: 8
       n_layers: 6
       kernel_size: 5
-      p_dropout: 0.05
+      p_dropout: 0.08
       prenet: true
     
     duration_predictor_params:
@@ -35,7 +33,7 @@ model:
       filter_channels_dp: 192
       kernel_size: 5
       n_layers: 4
-      p_dropout: 0.05
+      p_dropout: 0.08
 
   decoder:
     channels: [384, 384]
@@ -48,4 +46,4 @@ model:
 
   optimizer:
     lr: 1e-4
-    weight_decay: 1e-3
+    weight_decay: 2e-3
