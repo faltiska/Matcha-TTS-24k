@@ -44,7 +44,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             self.speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
-            encoder.encoder_type,
             encoder.encoder_params,
             encoder.duration_predictor_params,
             n_vocab,

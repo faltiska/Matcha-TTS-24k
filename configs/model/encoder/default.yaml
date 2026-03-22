@@ -1,4 +1,3 @@
-encoder_type: RoPE Encoder
 encoder_params:
   n_feats: ${model.n_feats} # 100, imposed by vocos
   
@@ -29,13 +28,6 @@ encoder_params:
   prenet: true
 
 duration_predictor_params:
-  # Use 'conv1/2/3' to specify which implementation to be used: ConvDurationPredictor1/2/3
-  # See text_encoder.py for details.
-  type: conv1
-
-  # A value of 64 is probably good, with DurationPredictor2, which injects the spk_emb after LayerNorm into every layer.
-  # DurationPredictor1 with 256 was overfitting badly. 
-  # DurationPredictor1 only concatenates the spk_emb into the input, not into every layer.
   filter_channels_dp: 128
   
   # Originally 3; must be an odd number

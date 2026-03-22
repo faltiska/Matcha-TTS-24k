@@ -1,11 +1,15 @@
 # @package _global_
 # Documents all changes from v6 to v7 architecture.
-# V10: V9 with weight decay to fight overfitting
+# Compared to V9: larger dropout and weight decay to fight overfitting.
+# Compared to V8, having tested with:
+# - fewer channels, more layers (V9)
+# - more channels, more layers (v10)
+# it is clear that having more both more channels and more layers is the very important. 
 
 run_name: v10
 
 defaults:
-  - override /data: corpus-24k
+  - override /data: corpus-small-24k
 
 data:
   max_frames_per_batch: 30000
@@ -20,8 +24,8 @@ model:
       # 288 + 96 = 384
       # 384 / 8 = 48, divisible by 8
       n_channels: 288
-      # 384 * 3 
-      filter_channels: 1152
+      # 384 * 4 
+      filter_channels: 1536
       n_heads: 8
       n_layers: 6
       kernel_size: 5
@@ -35,8 +39,9 @@ model:
       p_dropout: 0.05
 
   decoder:
-    channels: [384, 384]
-    attention_head_dim: 64
+    # it would be slightly better with 384 = 64 * 64 but there is a clear impact on performance
+    channels: [336, 336]
+    attention_head_dim: 56
     num_heads: 6
     dropout: 0.05
 

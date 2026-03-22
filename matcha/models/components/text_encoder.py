@@ -196,9 +196,7 @@ class MultiHeadAttention(nn.Module):
         self.channels = channels
         self.out_channels = out_channels
         self.n_heads = n_heads
-        self.heads_share = heads_share
         self.p_dropout = p_dropout
-        self.attn = None
 
         self.k_channels = channels // n_heads
         self.conv_q = torch.nn.Conv1d(channels, channels, 1)
@@ -222,7 +220,7 @@ class MultiHeadAttention(nn.Module):
         k = self.conv_k(c)
         v = self.conv_v(c)
 
-        x, self.attn = self.attention(q, k, v, mask=attn_mask)
+        x = self.attention(q, k, v, mask=attn_mask)
 
         x = self.conv_o(x)
         return x
@@ -244,7 +242,7 @@ class MultiHeadAttention(nn.Module):
             dropout_p=self.p_dropout if self.training else 0.0,
         )
         output = rearrange(output, "b h t c -> b (h c) t")
-        return output, None
+        return output
 
 
 class FFN(nn.Module):
@@ -323,14 +321,12 @@ class Encoder(nn.Module):
 class TextEncoder(nn.Module):
     def __init__(
         self,
-        encoder_type,
         encoder_params,
         duration_predictor_params,
         n_vocab,
         spk_emb_dim=128,
     ):
         super().__init__()
-        self.encoder_type = encoder_type
         self.n_vocab = n_vocab
         self.n_feats = encoder_params.n_feats
         self.n_channels = encoder_params.n_channels

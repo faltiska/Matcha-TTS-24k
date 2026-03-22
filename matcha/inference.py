@@ -16,18 +16,19 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.12},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.06},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.08},
-    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.06},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.14},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.11},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.02},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.08},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.09},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.04},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1.0},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.06},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.02},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.02},
+    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.01},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.04},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.07},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.00},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.05},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.03},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.01},
+    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1},
 ]
+
 HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
@@ -37,7 +38,7 @@ class MatchaTTSInfer(nn.Module):
         super().__init__()
         self.speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
         n_vocab = len(symbols)
-        self.encoder = TextEncoder(encoder.encoder_type, encoder.encoder_params,
+        self.encoder = TextEncoder(encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
         stats = data_statistics or {}
