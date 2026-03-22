@@ -10,7 +10,7 @@ from matcha.utils.model import sequence_mask
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-4):
+    def __init__(self, channels, eps=1e-5):
         super().__init__()
         self.channels = channels
         self.eps = eps
@@ -275,7 +275,6 @@ class MultiHeadAttention(nn.Module):
         n_heads,
         heads_share=True,
         p_dropout=0.0,
-        proximal_bias=False,
         proximal_init=False,
     ):
         super().__init__()
@@ -285,7 +284,6 @@ class MultiHeadAttention(nn.Module):
         self.out_channels = out_channels
         self.n_heads = n_heads
         self.heads_share = heads_share
-        self.proximal_bias = proximal_bias
         self.p_dropout = p_dropout
         self.attn = None
 
@@ -295,11 +293,9 @@ class MultiHeadAttention(nn.Module):
         self.conv_v = torch.nn.Conv1d(channels, channels, 1)
 
         # from https://nn.labml.ai/transformers/rope/index.html
-        self.query_rotary_pe = RotaryPositionalEmbeddings(self.k_channels * 0.5)
-        self.key_rotary_pe = RotaryPositionalEmbeddings(self.k_channels * 0.5)
+        self.rope = RotaryPositionalEmbeddings(self.k_channels * 0.5)
 
         self.conv_o = torch.nn.Conv1d(channels, out_channels, 1)
-        self.drop = torch.nn.Dropout(p_dropout)
 
         torch.nn.init.xavier_uniform_(self.conv_q.weight)
         torch.nn.init.xavier_uniform_(self.conv_k.weight)
@@ -323,26 +319,19 @@ class MultiHeadAttention(nn.Module):
         key = rearrange(key, "b (h c) t-> b h t c", h=self.n_heads)
         value = rearrange(value, "b (h c) t-> b h t c", h=self.n_heads)
 
-        query = self.query_rotary_pe(query)
-        key = self.key_rotary_pe(key)
+        query = self.rope(query)
+        key = self.rope(key)
 
-        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.k_channels)
-
-        if self.proximal_bias:
-            scores = scores + self._attention_bias_proximal(scores.shape[-1], scores.device, scores.dtype)
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e4)
-        p_attn = torch.nn.functional.softmax(scores, dim=-1)
-        p_attn = self.drop(p_attn)
-        output = torch.matmul(p_attn, value)
+        attn_mask = mask.bool() if mask is not None else None
+        # Uses FlashAttention when possible: fused kernel that avoids materializing the full attention matrix,
+        # reducing memory from O(n²) to O(n) and running significantly faster on modern GPUs.
+        output = torch.nn.functional.scaled_dot_product_attention(
+            query, key, value,
+            attn_mask=attn_mask,
+            dropout_p=self.p_dropout if self.training else 0.0,
+        )
         output = rearrange(output, "b h t c -> b (h c) t")
-        return output, p_attn
-
-    @staticmethod
-    def _attention_bias_proximal(length, device, dtype):
-        r = torch.arange(length, dtype=dtype, device=device)
-        diff = torch.unsqueeze(r, 0) - torch.unsqueeze(r, 1)
-        return torch.unsqueeze(torch.unsqueeze(-torch.log1p(torch.abs(diff)), 0), 0)
+        return output, None
 
 
 class FFN(nn.Module):
