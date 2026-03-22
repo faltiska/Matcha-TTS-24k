@@ -20,8 +20,6 @@ model:
       p_dropout: 0.05
       
     duration_predictor_params:
-      # v5: type: conv2
-      type: conv3
       filter_channels_dp: 128
       kernel_size: 5
       # v4: n_layers: 2

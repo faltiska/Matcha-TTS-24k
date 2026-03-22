@@ -1,16 +1,16 @@
 # @package _global_
 # Documents all changes from v6 to v7 architecture.
-# V8: trying to find a config that works with V7 improvements.
+# V10: V9 with larger dropout and weight decay to fight overfitting
 
-run_name: v8
+run_name: v11
 
 defaults:
-  - override /data: corpus-24k
+  - override /data: corpus-small-24k
 
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: logs/train/v8/checkpoint_epoch=274.ckpt
+ckpt_path: null
 
 model:
   spk_emb_dim: 96
@@ -18,14 +18,16 @@ model:
   encoder:
     encoder_params:
       # 288 + 96 = 384
-      # 384 / 6 = 64, divisible by 8
-      n_channels: 288 
+      # 384 / 8 = 48, divisible by 8
+      n_channels: 288
+      # 384 * 4 
       filter_channels: 1536
-      n_heads: 6
-      n_layers: 4
+      n_heads: 8
+      n_layers: 6
       kernel_size: 5
       p_dropout: 0.05
-      
+      prenet: true
+    
     duration_predictor_params:
       filter_channels_dp: 192
       kernel_size: 5
@@ -33,8 +35,8 @@ model:
       p_dropout: 0.05
 
   decoder:
-    channels: [384, 384]
-    attention_head_dim: 64
+    channels: [336, 336]
+    attention_head_dim: 56
     num_heads: 6
     dropout: 0.05
 
@@ -43,4 +45,4 @@ model:
 
   optimizer:
     lr: 1e-4
-    weight_decay: 1e-3
+    weight_decay: 1e-2

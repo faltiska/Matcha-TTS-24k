@@ -62,98 +62,11 @@ class ConvReluNorm(nn.Module):
         return x * x_mask
 
 
-class ConvDurationPredictor1(nn.Module):
-    """Predicts phoneme durations using stacked convolutional layers.
-    
-    The number of layers was fixed at 2 originally, and I made it configurable via n_layers parameter
-    in configs/model/encoder/default.yaml.
-    """
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=128):
-        super().__init__()
-        self.in_channels = in_channels
-        self.filter_channels = filter_channels
-        self.p_dropout = p_dropout
-        self.spk_emb_dim = spk_emb_dim
-
-        self.drop = torch.nn.Dropout(p_dropout)
-        self.conv_layers = torch.nn.ModuleList()
-        self.norm_layers = torch.nn.ModuleList()
-
-        self.conv_layers.append(
-            torch.nn.Conv1d(in_channels + spk_emb_dim, filter_channels, kernel_size, padding=kernel_size // 2)
-        )
-        self.norm_layers.append(LayerNorm(filter_channels))
-
-        for _ in range(n_layers - 1):
-            self.conv_layers.append(
-                torch.nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
-            )
-            self.norm_layers.append(LayerNorm(filter_channels))
-
-        self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
-
-    def forward(self, x, x_mask, spk_emb):
-        x = torch.cat([x, spk_emb.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
-        for conv, norm in zip(self.conv_layers, self.norm_layers):
-            x = conv(x * x_mask)
-            x = torch.relu(x)
-            x = norm(x)
-            x = self.drop(x)
-        x = self.proj(x * x_mask)
-        return x * x_mask
-
-
-class ConvDurationPredictor2(nn.Module):
-    """Predicts phoneme durations using stacked convolutional layers.
-
-    Uses global additive conditioning: the speaker embedding is projected to filter_channels
-    and added after LayerNorm at every layer, vs. the original which concatenated it into the input.
-    """
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=64):
-        super().__init__()
-        self.in_channels = in_channels
-        self.filter_channels = filter_channels
-        self.p_dropout = p_dropout
-        self.spk_emb_dim = spk_emb_dim
-
-        self.drop = torch.nn.Dropout(p_dropout)
-        self.conv_layers = torch.nn.ModuleList()
-        self.norm_layers = torch.nn.ModuleList()
-
-        # Added projection to enable Global Conditioning
-        self.spk_proj = torch.nn.Linear(spk_emb_dim, filter_channels)
-
-        # Changed in_channels + spk_emb_dim -> in_channels
-        self.conv_layers.append(
-            torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
-        )
-        self.norm_layers.append(LayerNorm(filter_channels))
-
-        for _ in range(n_layers - 1):
-            self.conv_layers.append(
-                torch.nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
-            )
-            self.norm_layers.append(LayerNorm(filter_channels))
-
-        self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
-
-    def forward(self, x, x_mask, spk_emb):
-        g = self.spk_proj(spk_emb).unsqueeze(-1)  # (B, C, 1)
-        for conv, norm in zip(self.conv_layers, self.norm_layers):
-            x = conv(x * x_mask)
-            x = torch.relu(x)
-            x = norm(x)
-            x = x + g  # Inject spk_emb after LayerNorm, otherwise LayerNorm normalizes it away
-            x = self.drop(x)
-        x = self.proj(x * x_mask)
-        return x * x_mask
-
-
-class ConvDurationPredictor3(nn.Module):
+class DurationPredictor(nn.Module):
     """Predicts phoneme durations using stacked convolutional layers.
 
     Uses FiLM conditioning: the speaker embedding is projected to scale (gamma) and shift (beta)
-    and applied after LayerNorm at every layer, vs. ConvDurationPredictor2 which only adds a shift.
+    and applied after LayerNorm at every layer.
     """
     def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=64):
         super().__init__()
@@ -456,35 +369,14 @@ class TextEncoder(nn.Module):
         #     torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
         # )
 
-        dp_type = getattr(duration_predictor_params, 'type', 'conv1')
-        dp_n_layers = getattr(duration_predictor_params, 'n_layers', 2)
-        if dp_type == 'conv3':
-            self.proj_w = ConvDurationPredictor3(
-                self.n_channels,
-                duration_predictor_params.filter_channels_dp,
-                duration_predictor_params.kernel_size,
-                duration_predictor_params.p_dropout,
-                n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim,
-            )
-        elif dp_type == 'conv2':
-            self.proj_w = ConvDurationPredictor2(
-                self.n_channels,
-                duration_predictor_params.filter_channels_dp,
-                duration_predictor_params.kernel_size,
-                duration_predictor_params.p_dropout,
-                n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim,
-            )
-        else:
-            self.proj_w = ConvDurationPredictor1(
-                self.n_channels,
-                duration_predictor_params.filter_channels_dp,
-                duration_predictor_params.kernel_size,
-                duration_predictor_params.p_dropout,
-                n_layers=dp_n_layers,
-                spk_emb_dim=self.spk_emb_dim,
-            )
+        self.proj_w = DurationPredictor(
+            self.n_channels,
+            duration_predictor_params.filter_channels_dp,
+            duration_predictor_params.kernel_size,
+            duration_predictor_params.p_dropout,
+            n_layers=duration_predictor_params.n_layers,
+            spk_emb_dim=self.spk_emb_dim,
+        )
 
     def forward(self, x, x_lengths, speaker_embedding=None):
         """Run forward pass to the transformer based encoder and duration predictor

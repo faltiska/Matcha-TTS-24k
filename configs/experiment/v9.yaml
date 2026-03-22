@@ -2,7 +2,8 @@
 # Documents all changes from v6 to v7 architecture.
 # V9: Improved phonemizer to keep annotation symbol grouped with the phoneme they annotate,
 # and assigning durations only to voiced phonemes, not annotation symbols. Each symbol gets its own distinct id.
-# Larger text encoder to match the larger number of phonemes IDs produced by grouping.
+# Changed text encoder size to match the larger number of phonemes IDs produced by grouping.
+# The change is not beneficial.
 
 run_name: v9
 
@@ -31,7 +32,6 @@ model:
       prenet: true
     
     duration_predictor_params:
-      type: conv3
       filter_channels_dp: 192
       kernel_size: 5
       n_layers: 4

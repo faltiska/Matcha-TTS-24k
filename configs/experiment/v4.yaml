@@ -18,7 +18,6 @@ model:
       n_heads: 4
       p_dropout: 0.05
     duration_predictor_params:
-      type: conv1
       filter_channels_dp: 256
       kernel_size: 3
       p_dropout: 0.1
