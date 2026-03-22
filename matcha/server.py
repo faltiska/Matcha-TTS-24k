@@ -22,7 +22,7 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v6/checkpoint_epoch=889.ckpt"
+CHECKPOINT_PATH = "logs/train/v10/runs/2026-03-21_18-56-59/checkpoints/checkpoint_epoch=034.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     vocoder = load_vocoder("vocos")
     print("[🍵] Compiling the model...")
     model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
+    model.encoder.encoder = torch.compile(model.encoder.encoder, mode="reduce-overhead", dynamic=True)
     for _ in range(3):
         pipeline(model, vocoder, "Warming up.", "en-us")
     print("[🍵] Model loaded.")

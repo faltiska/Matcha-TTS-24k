@@ -19,14 +19,13 @@ class LayerNorm(nn.Module):
         self.beta = torch.nn.Parameter(torch.zeros(channels))
 
     def forward(self, x):
-        n_dims = len(x.shape)
         mean = torch.mean(x, 1, keepdim=True)
         variance = torch.mean((x - mean) ** 2, 1, keepdim=True)
 
         x = (x - mean) * torch.rsqrt(variance + self.eps)
 
-        shape = [1, -1] + [1] * (n_dims - 2)
-        x = x * self.gamma.view(*shape) + self.beta.view(*shape)
+        # Assumes x is a 3D tensor (batch, channels, time).
+        x = x * self.gamma.view(1, -1, 1) + self.beta.view(1, -1, 1)
         return x
 
 
@@ -229,31 +228,13 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.register_buffer('cos_cached', idx_theta2.cos()[:, None, None, :], persistent=False)
         self.register_buffer('sin_cached', idx_theta2.sin()[:, None, None, :], persistent=False)
 
-    def _build_cache(self, x: torch.Tensor):
-        r"""
-        Cache $\cos$ and $\sin$ values
-        """
-        # Return if cache is already built
-        if self.cos_cached is not None and x.shape[0] <= self.cos_cached.shape[0]:
-            return
-
-        # Get sequence length
-        seq_len = x.shape[0]
-
-        # $\Theta = {\theta_i = 10000^{-\frac{2(i-1)}{d}}, i \in [1, 2, ..., \frac{d}{2}]}$
-        theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2).float() / self.d)).to(x.device)
-
-        # Create position indexes `[0, 1, ..., seq_len - 1]`
-        seq_idx = torch.arange(seq_len, device=x.device).float().to(x.device)
-
-        # Calculate the product of position index and $\theta_i$
+    def _extend_cache(self, seq_len: int, device: torch.device):
+        """Rebuild cos/sin cache on the given device."""
+        self.max_seq_len = seq_len
+        theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2, device=device).float() / self.d))
+        seq_idx = torch.arange(seq_len, device=device).float()
         idx_theta = torch.einsum("n,d->nd", seq_idx, theta)
-
-        # Concatenate so that for row $m$ we have
-        # $[m \theta_0, m \theta_1, ..., m \theta_{\frac{d}{2}}, m \theta_0, m \theta_1, ..., m \theta_{\frac{d}{2}}]$
         idx_theta2 = torch.cat([idx_theta, idx_theta], dim=1)
-
-        # Cache them
         self.cos_cached = idx_theta2.cos()[:, None, None, :]
         self.sin_cached = idx_theta2.sin()[:, None, None, :]
 
@@ -271,7 +252,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         # Cache $\cos$ and $\sin$ values
         x = rearrange(x, "b h t d -> t b h d")
 
-        self._build_cache(x)
+        if x.shape[0] > self.max_seq_len:
+            self._extend_cache(x.shape[0], x.device)
 
         # Split the features, we can choose to apply rotary embeddings only to a partial set of features.
         x_rope, x_pass = x[..., : self.d], x[..., self.d :]
@@ -337,7 +319,6 @@ class MultiHeadAttention(nn.Module):
         return x
 
     def attention(self, query, key, value, mask=None):
-        b, d, t_s, t_t = (*key.size(), query.size(2))
         query = rearrange(query, "b (h c) t-> b h t c", h=self.n_heads)
         key = rearrange(key, "b (h c) t-> b h t c", h=self.n_heads)
         value = rearrange(value, "b (h c) t-> b h t c", h=self.n_heads)
@@ -348,14 +329,13 @@ class MultiHeadAttention(nn.Module):
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.k_channels)
 
         if self.proximal_bias:
-            assert t_s == t_t, "Proximal bias is only available for self-attention."
-            scores = scores + self._attention_bias_proximal(t_s, scores.device, scores.dtype)
+            scores = scores + self._attention_bias_proximal(scores.shape[-1], scores.device, scores.dtype)
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e4)
         p_attn = torch.nn.functional.softmax(scores, dim=-1)
         p_attn = self.drop(p_attn)
         output = torch.matmul(p_attn, value)
-        output = output.transpose(2, 3).contiguous().view(b, d, t_t)
+        output = rearrange(output, "b h t c -> b (h c) t")
         return output, p_attn
 
     @staticmethod
@@ -538,7 +518,7 @@ class TextEncoder(nn.Module):
         """
         x = self.emb(x) * math.sqrt(self.n_channels)
         x = torch.transpose(x, 1, -1)
-        x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+        x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.shape[2]), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
         x = torch.cat([x, speaker_embedding.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
