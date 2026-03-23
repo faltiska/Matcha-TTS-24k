@@ -28,6 +28,7 @@ def main():
     total = len(entries)
     symbol_set = set(symbols)
     unknown_symbols = set()
+    max_ipa_len = 0
 
     print(f"[test_corpus_ipa] Input: {input_path}")
     print(f"[test_corpus_ipa] Found {total} entries...")
@@ -40,6 +41,7 @@ def main():
         language=parts[2]
         text = parts[3]
         ipa = multilingual_phonemizer(text, language)
+        max_ipa_len = max(max_ipa_len, len(ipa))
 
         for symbol in ipa.split(_separator):
             if symbol not in symbol_set and symbol not in unknown_symbols:
@@ -49,6 +51,7 @@ def main():
         print(f"\r[test_corpus_ipa] {i}/{total} done.", end="", flush=True)
 
     print()
+    print(f"[test_corpus_ipa] Max IPA sequence length: {max_ipa_len}")
     if unknown_symbols:
         print(f"[test_corpus_ipa] WARNING: Found {len(unknown_symbols)} unknown symbols not in symbols.py:")
         print(f"[test_corpus_ipa] {sorted(unknown_symbols)}")
