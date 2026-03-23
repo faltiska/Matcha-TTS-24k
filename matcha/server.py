@@ -42,7 +42,6 @@ async def lifespan(app: FastAPI):
     vocoder = load_vocoder("vocos")
     print("[🍵] Compiling the model...")
     model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
-    model.encoder.encoder = torch.compile(model.encoder.encoder, mode="reduce-overhead", dynamic=True)
     for _ in range(3):
         pipeline(model, vocoder, "Warming up.", "en-us")
     print("[🍵] Model loaded.")
