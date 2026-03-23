@@ -1,5 +1,3 @@
-""" from https://github.com/jaywalnut310/glow-tts """
-
 import math
 
 import torch
@@ -102,7 +100,7 @@ class DurationPredictor(nn.Module):
             x = conv(x * x_mask)
             x = torch.relu(x)
             x = norm(x)
-            # Both Sonet 4.6 Extended and Gemini Thinking flagged this as being out of order.
+            # Both Sonnet 4.6 Extended and Gemini Thinking flagged this as being out of order.
             # I tested with the "right order" and found that the duration predictor is learning slower/less
             # This is the code written by Amazon Q / Sonnet 4.6 
             x = (x * gamma) + beta
@@ -115,23 +113,23 @@ class RotaryPositionalEmbeddings(nn.Module):
     """
     ## RoPE module
 
-    Rotary encoding transforms pairs of features by rotating in the 2D plane.
-    That is, it organizes the $d$ features as $\frac{d}{2}$ pairs.
-    Each pair can be considered a coordinate in a 2D plane, and the encoding will rotate it
-    by an angle depending on the position of the token.
+    For each phoneme, treats consecutive pairs of values in its embedding as 2D vectors
+    and rotates them by an angle proportional to the phoneme's position.
+    This makes attention dot products sensitive to the relative distance between phonemes
+    rather than their absolute positions.
     """
 
     def __init__(self, d: int, base: int = 10_000):
-        r"""
-        * `d` is the number of features $d$
-        * `base` is the constant used for calculating $\Theta$
+        """
+        * `d` is the number of embedding values to apply RoPE to (half the per-head embedding size)
+        * `base` is the constant used for calculating Theta
         """
         super().__init__()
 
         self.base = base
         self.d = int(d)
 
-        # Pre-allocate cache buffers to avoid repeated model recompilation
+        # Pre-allocate and fill cos/sin caches
         self.max_seq_len = 1024
         theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2).float() / self.d))
         seq_idx = torch.arange(self.max_seq_len).float()
@@ -141,8 +139,10 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.register_buffer('cos_cached', idx_theta2.cos()[:, None, None, :], persistent=False)
         self.register_buffer('sin_cached', idx_theta2.sin()[:, None, None, :], persistent=False)
 
-    def _extend_cache(self, seq_len: int, device: torch.device):
-        """Rebuild cos/sin cache on the given device."""
+    def _ensure_cache(self, seq_len: int, device: torch.device):
+        """Rebuild cos/sin cache on the given device if current cache too small."""
+        if seq_len <= self.max_seq_len:
+            return
         self.max_seq_len = seq_len
         theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2, device=device).float() / self.d))
         seq_idx = torch.arange(seq_len, device=device).float()
@@ -152,27 +152,22 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.sin_cached = idx_theta2.sin()[:, None, None, :]
 
     def _neg_half(self, x: torch.Tensor):
-        # $\frac{d}{2}$
+        # Rearranges x so the second half of the values comes first, negated:
+        # [-x[d/2:], x[:d/2]]
         d_2 = self.d // 2
-
-        # Calculate $[-x^{(\frac{d}{2} + 1)}, -x^{(\frac{d}{2} + 2)}, ..., -x^{(d)}, x^{(1)}, x^{(2)}, ..., x^{(\frac{d}{2})}]$
         return torch.cat([-x[:, :, :, d_2:], x[:, :, :, :d_2]], dim=-1)
 
     def forward(self, x: torch.Tensor):
         """
-        * `x` is the Tensor at the head of a key or a query with shape `[seq_len, batch_size, n_heads, d]`
+        * `x` is the Tensor at the head of a key or a query with shape `[batch_size, n_heads, seq_len, d]`
         """
-        # Cache $\cos$ and $\sin$ values
         x = rearrange(x, "b h t d -> t b h d")
 
-        if x.shape[0] > self.max_seq_len:
-            self._extend_cache(x.shape[0], x.device)
+        self._ensure_cache(x.shape[0], x.device)
 
-        # Split the features, we can choose to apply rotary embeddings only to a partial set of features.
+        # Split the embedding values: RoPE is applied only to the first d values, the rest are passed through unchanged.
         x_rope, x_pass = x[..., : self.d], x[..., self.d :]
 
-        # Calculate
-        # $[-x^{(\frac{d}{2} + 1)}, -x^{(\frac{d}{2} + 2)}, ..., -x^{(d)}, x^{(1)}, x^{(2)}, ..., x^{(\frac{d}{2})}]$
         neg_half_x = self._neg_half(x_rope)
 
         x_rope = (x_rope * self.cos_cached[: x.shape[0]]) + (neg_half_x * self.sin_cached[: x.shape[0]])
@@ -186,7 +181,6 @@ class MultiHeadAttention(nn.Module):
         channels,
         out_channels,
         n_heads,
-        heads_share=True,
         p_dropout=0.0,
         proximal_init=False,
     ):
@@ -318,6 +312,40 @@ class Encoder(nn.Module):
         return x
 
 
+class MelGen(nn.Module):
+    """
+    A smarter mel generator based on SiLU, LayerNorm and FiLM. 
+    Note tested yet. 
+    Use it with:
+    self.proj_m = MelGen(
+        in_channels=self.n_channels + spk_emb_dim,
+        n_channels=self.n_channels,
+        n_feats=self.n_feats,
+        spk_emb_dim=self.spk_emb_dim,
+    )
+    [...]
+    x = x[:, :-self.spk_emb_dim, :] # strip the speaker embedding off, first
+    mu = self.proj_m(x, x_mask, speaker_embedding)
+    """
+    def __init__(self, in_channels, n_channels, n_feats, spk_emb_dim):
+        super().__init__()
+        self.spk_emb_dim = spk_emb_dim
+        self.conv1 = nn.Conv1d(in_channels, n_channels * 2, 1)
+        self.norm = LayerNorm(n_channels)
+        self.conv2 = nn.Conv1d(n_channels, n_feats, 1)
+        self.spk_proj = nn.Linear(spk_emb_dim, n_channels * 2)
+
+    def forward(self, x, x_mask, spk_emb):
+        x = self.conv1(x * x_mask)
+        x, gate = x.chunk(2, dim=1)
+        x = x * torch.nn.functional.silu(gate)
+        x = self.norm(x)
+        gamma, beta = self.spk_proj(spk_emb).chunk(2, dim=-1) # FiLM
+        x = x * gamma.unsqueeze(-1) + beta.unsqueeze(-1)
+        x = self.conv2(x * x_mask)
+        return x * x_mask
+    
+
 class TextEncoder(nn.Module):
     def __init__(
         self,
@@ -356,14 +384,15 @@ class TextEncoder(nn.Module):
             encoder_params.p_dropout,
         )
 
-        self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
+        # Original mel generator
+        # self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
 
-        # I could try with a smarter mel generator 
-        # self.proj_m = torch.nn.Sequential(
-        #     torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),
-        #     torch.nn.ReLU(),
-        #     torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
-        # )
+        # A smarter mel generator 
+        self.proj_m = torch.nn.Sequential(
+            torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
+        )
 
         self.proj_w = DurationPredictor(
             self.n_channels,
@@ -374,21 +403,22 @@ class TextEncoder(nn.Module):
             spk_emb_dim=self.spk_emb_dim,
         )
 
-    def forward(self, x, x_lengths, speaker_embedding=None):
+    def forward(self, x, x_lengths, speaker_embedding):
         """Run forward pass to the transformer based encoder and duration predictor
 
         Args:
-            x (torch.Tensor): text input
+            x (torch.Tensor): text input, a sequence of phoneme IDs, interleaved with separators,  
+                as returned by multilingual_phonemizer()
                 shape: (batch_size, max_text_length)
             x_lengths (torch.Tensor): text input lengths
                 shape: (batch_size,)
-            speaker_embedding (torch.Tensor, optional): speaker embedding
+            speaker_embedding (torch.Tensor): speaker embedding
                 shape: (batch_size, spk_emb_dim)
 
         Returns:
-            mu (torch.Tensor): average output of the encoder
+            mu (torch.Tensor): A sequence with the mel frames predicted by the encoder, one per phoneme.
                 shape: (batch_size, n_feats, max_text_length)
-            logw (torch.Tensor): log duration predicted by the duration predictor
+            logw (torch.Tensor): Log of phoneme durations predicted by the duration predictor.
                 shape: (batch_size, 1, max_text_length)
             x_mask (torch.Tensor): mask for the text input
                 shape: (batch_size, 1, max_text_length)
