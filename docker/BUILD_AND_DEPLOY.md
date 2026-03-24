@@ -47,23 +47,24 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.03.18-1
+export TAG=26.03.24-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
-# Update Dockerfile, copy checkpoint into docker/, build image
+# Copy checkpoint into docker/, build image
 cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
 
 docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
 
-docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/$IMAGE_NAME:$TAG
+# Run it and do a quick test with Postman
+docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
 
 # Log into container
 docker exec -it matcha /bin/bash
 
 # Cleanup
 docker container remove matcha
-docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/evie/$IMAGE_NAME:$TAG
+docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
 ```
 
 ## Cleanup docker caches
