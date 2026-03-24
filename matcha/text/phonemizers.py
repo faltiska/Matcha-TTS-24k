@@ -113,10 +113,8 @@ def split_ipa(phonemes):
     5. Punctuation should not be part of a group.
 
     6. Two consecutive annotations should not be part of a group.
-
-    7. Affricate tie characters keep the two phonemes they bridge as one symbol.
-       An affricate is a single sound that begins as a stop and releases as a fricative,
-       like the "ch" in "church" ("t͡ʃ") or the "j" in "judge" ("d͡ʒ").
+    
+    We do not use the tie characters, and we do not group affricate or diphthongs, as they're two separate sounds.
     """
     phonemes = unicodedata.normalize('NFD', phonemes)
     result = []
@@ -126,7 +124,6 @@ def split_ipa(phonemes):
         
         is_combining = unicodedata.combining(char) > 0
         is_modifier = cat in ('Lm', 'Sk')
-        is_tie = char in ('͜', '͡')
         is_pre_annotation = char in pre_annotations
         is_post_annotation = char in post_annotations
         is_backward_sticky = (is_combining or is_modifier or is_post_annotation) and not is_pre_annotation
@@ -150,7 +147,7 @@ def split_ipa(phonemes):
         else:
             result.append(char)
             
-        if is_tie or is_pre_annotation:
+        if is_pre_annotation:
             force_combine_next = True
             
     return result

@@ -10,7 +10,7 @@ from matcha.text.phonemizers import split_ipa
 class TestPreAnnotations:
     def test_stress_marker_attaches_to_next_symbol(self):
         # "ˈa" must be one group, not "bˈ" + "a"
-        assert split_ipa("bˈat") == ["b", "ˈa", "t"]
+        assert split_ipa("ˈaˌɪ") == ["ˈa", "ˌɪ"]
 
     def test_secondary_stress_attaches_to_next_symbol(self):
         assert split_ipa("bˌat") == ["b", "ˌa", "t"]
@@ -18,18 +18,16 @@ class TestPreAnnotations:
     def test_stress_at_start_of_string(self):
         assert split_ipa("ˈaʊt") == ["ˈa", "ʊ", "t"]
 
-    def test_multiple_stress_markers(self):
-        # "pronunciation" has both primary and secondary stress
-        assert split_ipa("ˌbæd ˈɡʊd") == ["ˌb", "æ", "d", " ", "ˈɡ", "ʊ", "d"]
+    def test_multiple_pre_annotations(self):
+        assert split_ipa("ˈˈaˌɪ") == ["ˈ", "ˈa", "ˌɪ"]
 
+    def test_pre_after_post(self):
+        assert split_ipa("pʰˈɪn") == ["pʰ", "ˈɪ", "n"]
 
 class TestPrePostAnnotations:
     def test_stress_and_length_mark(self):
         # "ˈɑː" is pre + base + post — one group
         assert split_ipa("ˈɑːt") == ["ˈɑː", "t"]
-
-    def test_stress_and_aspiration(self):
-        assert split_ipa("ˈpʰɪn") == ["ˈpʰ", "ɪ", "n"]
 
 
 class TestPostAnnotations:
@@ -38,7 +36,7 @@ class TestPostAnnotations:
 
     def test_length_mark_attaches_to_previous(self):
         # German "Bahn" → "baːn"
-        assert split_ipa("baːn") == ["b", "aː", "n"]
+        assert split_ipa("baːaːn") == ["b", "aː", "aː", "n"]
 
     def test_palatalization_attaches_to_previous(self):
         assert split_ipa("tʲa") == ["tʲ", "a"]
@@ -50,6 +48,8 @@ class TestPostAnnotations:
         # Undertie (U+203F) is backward-sticky via post_annotations, not via Unicode category
         assert split_ipa("a‿b") == ["a‿", "b"]
 
+    def test_multiple_post_annotations(self):
+        assert split_ipa("aɑːːɪ") == ["a", "ɑː", "ː", "ɪ"]
 
 class TestCombiningCodepoints:
     def test_nasal_tilde_stays_with_base(self):
@@ -66,30 +66,6 @@ class TestCombiningCodepoints:
         assert split_ipa("ˈɑ̃") == ["ˈɑ̃"]
 
 
-class TestTieCharacters:
-    def test_double_articulation_tie_stays_together(self):
-        # Tie bar (U+0361) connects two consonants
-        result = split_ipa("t͡ʃ")
-        assert len(result) == 1
-        assert result[0] == "t͡ʃ"
-
-    def test_voiced_affricate_stays_together(self):
-        # "judge" affricate
-        result = split_ipa("d͡ʒ")
-        assert len(result) == 1
-        assert result[0] == "d͡ʒ"
-
-    def test_double_vertical_line_is_not_a_tie(self):
-        # U+2016 DOUBLE VERTICAL LINE contains "DOUBLE" in its Unicode name but is not a tie bar.
-        # The character after it must start a new group, not be merged into the previous one.
-        result = split_ipa("a‖b")
-        assert result == ["a", "‖", "b"]
-
-    def test_tie_followed_by_pre_annotation(self):
-        # ˈ should start a new group, not get swallowed into the affricate
-        result = split_ipa("t͡ˈʃ")
-        assert result == ["t͡", "ˈʃ"], f"Got: {result}"
-    
 class TestRomanianEspeakBugs:
     def test_double_palatalization_splits_into_two_groups(self):
         # eSpeak Romanian bug: emits "nʲʲ" instead of "nʲ"
