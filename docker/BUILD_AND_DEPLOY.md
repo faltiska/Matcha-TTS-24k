@@ -161,7 +161,7 @@ Both in EC2 VPC, with their own security group allowing:
 ### Initial Deployment
 
 ```bash
-export TAG=26.03.18-1
+export TAG=26.03.24-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -177,16 +177,16 @@ docker service create \
   --env CHECKPOINT_PATH=/app/models/checkpoint.ckpt \
   --env MAX_TEXT_LENGTH=500 \
   --generic-resource "NVIDIA-GPU=0" \
-  --update-delay 20s \
+  --update-delay 120s \
   --update-parallelism 1 \
-  --update-order start-first \
+  --update-order stop-first \
   $REGISTRY/$IMAGE_NAME:$TAG
 ```
 
 ### Rolling Updates (Zero Downtime)
 
 ```bash
-export TAG=26.03.18-1
+export TAG=26.03.17-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -195,7 +195,7 @@ aws ecr get-login-password --region eu-west-1 | docker login --username AWS --pa
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Update service (rolling update with 20s delay)
-docker service update --update-delay 30s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+docker service update --update-delay 120s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
 
 # Remove stopped containers
 docker container prune
