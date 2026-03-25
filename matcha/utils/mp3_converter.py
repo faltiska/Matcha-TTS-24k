@@ -71,4 +71,5 @@ def encode_mp3(
     finally:
         _lame.lame_close(gfp)
 
-    return bytes(mp3_buf[:n + n2])
+    id3v2_header = b"ID3\x03\x00\x00\x00\x00\x00\x00"
+    return id3v2_header + bytes(mp3_buf[:n + n2])
