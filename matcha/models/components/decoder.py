@@ -232,7 +232,7 @@ class Decoder(nn.Module):
         self.up_blocks = nn.ModuleList([])
 
         output_channel = in_channels
-        for i in range(len(channels)):  # pylint: disable=consider-using-enumerate
+        for i in range(len(channels)):
             input_channel = output_channel
             output_channel = channels[i]
             is_last = i == len(channels) - 1

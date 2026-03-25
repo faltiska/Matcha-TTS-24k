@@ -114,6 +114,5 @@ class CFM(BASECFM):
             cfm_params=cfm_params,
         )
 
-        # Just change the architecture of the estimator here
         self.estimator = Decoder(in_channels=in_channels, out_channels=out_channel, **decoder_params)
 
