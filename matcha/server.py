@@ -22,7 +22,7 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v10/runs/2026-03-21_18-56-59/checkpoints/checkpoint_epoch=034.ckpt"
+CHECKPOINT_PATH = "logs/train/v11/checkpoint_epoch=229-best-mcd.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -109,9 +109,13 @@ async def speak(request: InferenceRequest):
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
 
+    headers = {
+        "Content-Disposition": "attachment; filename=speech.mp3",
+        "Cache-Control": "no-cache",
+    }
     if request.response_format == "mp3":
-        return Response(content=convert_to_mp3(waveform), media_type="audio/mpeg")
-    return Response(content=convert_to_opus_ogg(waveform), media_type="audio/ogg")
+        return Response(content=convert_to_mp3(waveform), media_type="audio/mpeg", headers=headers)
+    return Response(content=convert_to_opus_ogg(waveform), media_type="audio/ogg", headers=headers)
 
 
 @app.get("/health")
