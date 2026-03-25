@@ -117,9 +117,8 @@ class BaseLightningClass(LightningModule, ABC):
             f"sub_loss/train_diff": diff_loss,
             f"sub_loss/train_dur": dur_loss,
             f"sub_loss/train_prior": prior_loss,
-            "step": self.global_step,
         }
-        self.log_dict(metrics, on_step=True, on_epoch=True, logger=True, batch_size=bs)
+        self.log_dict(metrics, on_step=False, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss
 
@@ -138,9 +137,9 @@ class BaseLightningClass(LightningModule, ABC):
 
         return total_loss
 
-    def on_before_optimizer_step(self, optimizer):
+    def on_train_epoch_end(self):
         norms = grad_norm(self, norm_type=2)
-        self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
+        self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=False, on_epoch=True, logger=True)
 
         # This helps me check if the weight decay value from Adam / AdamW is too large.
         # If param_norm stays flat or slightly increases: weight decay is just fine.
@@ -150,4 +149,4 @@ class BaseLightningClass(LightningModule, ABC):
         # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
         per_param_norms = torch.stack([p.detach().norm() for p in self.parameters()])
         total_param_norm = torch.linalg.vector_norm(per_param_norms)
-        self.log("grad_norm/param_norm", total_param_norm, on_step=True, on_epoch=False, logger=True)
+        self.log("grad_norm/param_norm", total_param_norm, on_step=False, on_epoch=True, logger=True)
