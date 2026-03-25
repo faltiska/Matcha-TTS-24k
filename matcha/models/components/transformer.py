@@ -215,6 +215,11 @@ class BasicTransformerBlock(nn.Module):
         self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
         self.ff = FeedForward(dim, dropout=dropout, final_dropout=final_dropout)
 
+        # This is the largest component I can compile for training.
+        # Even so, it has a big impact, raising the number of iterations per second from 1.6 to 2.4
+        # During inference, the entire Decoder is compiled.
+        self.ff = torch.compile(self.ff)
+
         # let chunk size default to None
         self._chunk_size = None
         self._chunk_dim = 0
