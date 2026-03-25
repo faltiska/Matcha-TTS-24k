@@ -1,4 +1,7 @@
-# Don't log losses per step anymore, I never look at those.
+# Try confirmer blocks for Decoder:
+down_block_type="transformer",
+mid_block_type="transformer",
+up_block_type="transformer",
 
 # Use FiLM within the Encoder blocks instead of concatenation
 As done in ConvDurationPredictor3
