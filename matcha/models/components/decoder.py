@@ -33,7 +33,9 @@ class Block1D(torch.nn.Module):
     def __init__(self, dim, dim_out, groups=8):
         super().__init__()
         self.block = torch.nn.Sequential(
-            torch.nn.Conv1d(dim, dim_out, 3, padding=1),
+            # According to https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+            # I should add bias=False to optimize performance
+            torch.nn.Conv1d(dim, dim_out, 3, padding=1), 
             torch.nn.GroupNorm(groups, dim_out),
             nn.Mish(),
         )
@@ -208,7 +210,6 @@ class Decoder(nn.Module):
         n_blocks=1,
         num_mid_blocks=2,
         num_heads=4,
-        act_fn="snakebeta",
         down_block_type="transformer",
         mid_block_type="transformer",
         up_block_type="transformer",
@@ -244,7 +245,6 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
-                        act_fn,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -268,7 +268,6 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
-                        act_fn,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -295,7 +294,6 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
-                        act_fn,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -315,7 +313,7 @@ class Decoder(nn.Module):
         # nn.init.normal_(self.final_proj.weight)
 
     @staticmethod
-    def get_block(block_type, dim, attention_head_dim, num_heads, dropout, act_fn):
+    def get_block(block_type, dim, attention_head_dim, num_heads, dropout):
         if block_type == "conformer":
             block = ConformerWrapper(
                 dim=dim,
@@ -334,7 +332,6 @@ class Decoder(nn.Module):
                 num_attention_heads=num_heads,
                 attention_head_dim=attention_head_dim,
                 dropout=dropout,
-                activation_fn=act_fn,
             )
         else:
             raise ValueError(f"Unknown block type {block_type}")

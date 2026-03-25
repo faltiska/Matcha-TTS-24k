@@ -3,11 +3,8 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn as nn
 from diffusers.models.attention import (
-    GEGLU,
-    GELU,
     AdaLayerNorm,
     AdaLayerNormZero,
-    ApproximateGELU,
 )
 from diffusers.models.attention_processor import Attention
 from diffusers.models.lora import LoRACompatibleLinear
@@ -89,7 +86,6 @@ class FeedForward(nn.Module):
         dim_out (`int`, *optional*): The number of channels in the output. If not given, defaults to `dim`.
         mult (`int`, *optional*, defaults to 4): The multiplier to use for the hidden dimension.
         dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
         final_dropout (`bool` *optional*, defaults to False): Apply a final dropout.
     """
 
@@ -99,23 +95,13 @@ class FeedForward(nn.Module):
         dim_out: Optional[int] = None,
         mult: int = 4,
         dropout: float = 0.0,
-        activation_fn: str = "snakebeta",
         final_dropout: bool = False,
     ):
         super().__init__()
         inner_dim = int(dim * mult)
         dim_out = dim_out if dim_out is not None else dim
 
-        if activation_fn == "gelu":
-            act_fn = GELU(dim, inner_dim)
-        elif activation_fn == "gelu-approximate":
-            act_fn = GELU(dim, inner_dim, approximate="tanh")
-        elif activation_fn == "geglu":
-            act_fn = GEGLU(dim, inner_dim)
-        elif activation_fn == "geglu-approximate":
-            act_fn = ApproximateGELU(dim, inner_dim)
-        elif activation_fn == "snakebeta":
-            act_fn = SnakeBeta(dim, inner_dim)
+        act_fn = SnakeBeta(dim, inner_dim)
 
         self.net = nn.ModuleList([])
         # project in
@@ -149,7 +135,6 @@ class BasicTransformerBlock(nn.Module):
             Whether to use only cross-attention layers. In this case two cross attention layers are used.
         double_self_attention (`bool`, *optional*):
             Whether to use two self-attention layers. In this case no cross attention layers are used.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
         num_embeds_ada_norm (:
             obj: `int`, *optional*): The number of diffusion steps used during training. See `Transformer2DModel`.
         attention_bias (:
@@ -163,7 +148,6 @@ class BasicTransformerBlock(nn.Module):
         attention_head_dim: int,
         dropout=0.0,
         cross_attention_dim: Optional[int] = None,
-        activation_fn: str = "geglu",
         num_embeds_ada_norm: Optional[int] = None,
         attention_bias: bool = False,
         only_cross_attention: bool = False,
@@ -229,7 +213,7 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Feed-forward
         self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-        self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+        self.ff = FeedForward(dim, dropout=dropout, final_dropout=final_dropout)
 
         # let chunk size default to None
         self._chunk_size = None

@@ -21,6 +21,3 @@ num_mid_blocks: 2
 
 # Changed from 2
 num_heads: 5
-
-# Snake β activation (implemented in matcha/models/components/transformer.py)
-act_fn: snakebeta
