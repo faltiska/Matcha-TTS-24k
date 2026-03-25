@@ -167,14 +167,18 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    phonemes = phonemizer.phonemize([text])[0].rstrip()
+    # There's always a bit of silence at the start, so I am adding a space for it.
+    # I don't need a space at the end, because there is always punctuation at the end of the sentence.
+    phonemes = " " + phonemizer.phonemize([text])[0].rstrip()
     
     # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
-    # the sound of the new one and at the end, where the phoneme morphs into the the next one.   
+    # the sound of the new one and at the end, where the phoneme morphs into the next one.   
     # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
     # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
     # model the transitions too: phoneme - transition - phoneme - transition ...
-    phonemes = _separator.join(split_ipa(phonemes))
+    # phonemes = split_ipa(phonemes)
+    
+    phonemes = _separator.join(phonemes)
 
     return phonemes 
 
