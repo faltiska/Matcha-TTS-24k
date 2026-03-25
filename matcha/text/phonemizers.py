@@ -53,11 +53,11 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 
 def cleanup_text(text):
     text = re.sub('[\"„“”«»¡¿]', '', text)
-    text = re.sub(r'\s*[,<>()[\]{}—–…]\s*', ',', text)
-    text = re.sub(r'\s+([.?!,;:])', r'\1', text)
-    text = re.sub(r'^,\s*', '', text)
-    text = re.sub(r',\s*,', ',', text)
-    text = re.sub(r',\s*([.?!])', r'\1', text)
+    text = re.sub(r'\s*[,<>()[\]{}—–…]\s*', ', ', text)
+    text = re.sub(r'\s+([.?!,;:])', r'\1', text) # no spaces before punctuation
+    text = re.sub(r'^,\s*', '', text) # no leading comma
+    text = re.sub(r',\s*,', ',', text) # no multiple commas
+    text = re.sub(r',\s*([.?!])', r'\1', text) # no comma before sentence punctuation 
 
     text = text.strip()
     if not text.endswith(('.', '?', '!')):
