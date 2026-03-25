@@ -22,7 +22,7 @@ _punctuation = ';:,.!?¡¿_—…-\'"«»“”()[]/ '
 vowels = "aeiouɑɐɒæəɘɚɛɜɝɞɨɪɔøɵɤʉʊyɶœɯʏʌᵻ"
 consonants = "bβcçdðfɡɢɣhɦɧħɥjɟʝkʎlɭʟɬɫɮmɱnɳɲŋɴpɸqrɹɺɾɽɻʀʁsʂʃtʈθvʋⱱwʍxχzʐʒʑʔʕʢʡʙɕɖʜɰ"
 pre_annotations = "ˈˌ"
-post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚"
+post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚" # last four characters are all combining diacritics that are invisible on their own. 
 all_annotations = pre_annotations + post_annotations
 
 ipa_symbols = vowels + consonants + pre_annotations + post_annotations
