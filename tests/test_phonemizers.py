@@ -8,7 +8,6 @@ Three test classes:
 
 Run with:
   pytest tests/test_phonemizers.py
-  pytest tests/test_phonemizers.py -k TestCleanupText   # fast, no deps
 """
 import pytest
 from matcha.text.phonemizers import cleanup_text, normalize_text, multilingual_phonemizer
@@ -156,7 +155,8 @@ class TestMultilingualPhonemizer:
     """Integration tests: require NeMo + eSpeak."""
 
     def _p(self, text, lang):
-        return multilingual_phonemizer(text, lang)
+        phonemes, _ = multilingual_phonemizer(text, lang)
+        return phonemes
 
     def test_en_plain(self):
         assert self._p("I live for live broadcasts.", "en-us") == " |a|ɪ| |l|ˈɪ|v| |f|ɔː|ɹ| |l|ˈa|ɪ|v| |b|ɹ|ˈɔː|d|k|æ|s|t|s|."
@@ -313,18 +313,48 @@ class TestPhonemizerOutputSymbols:
 
     def test_only_prosodic_punctuation_survives_to_output(self):
         from matcha.text.symbols import _punctuation
-        result = multilingual_phonemizer(_punctuation, "en-us")
+        result, _ = multilingual_phonemizer(_punctuation, "en-us")
         surviving = set(result) & set(_punctuation)
         assert surviving == set(' ;:,.!?'), f"Unexpected surviving punctuation: {surviving}"
+
+class TestPhonemeIds:
+    """Tests for the ID sequence returned by multilingual_phonemizer."""
+
+    def test_no_none_ids(self):
+        _, ids = multilingual_phonemizer("Oare?", "ro")
+        assert all(id is not None for id in ids)
+
+    def test_no_trailing_separator(self):
+        separator_id = 0  # | is the first symbol
+        _, ids = multilingual_phonemizer("Oare?", "ro")
+        assert ids[-1] != separator_id
+
+    def test_alternating_token_separator_pattern(self):
+        separator_id = 0
+        _, ids = multilingual_phonemizer("Oare?", "ro")
+        for i, id in enumerate(ids):
+            is_separator_position = i % 2 == 1
+            if is_separator_position:
+                assert id == separator_id
+            else:
+                assert id != separator_id
+
+    def test_ids_consistent_with_phoneme_string(self):
+        from matcha.text.symbols import symbol_to_id
+        phonemes, ids = multilingual_phonemizer("Oare?", "ro")
+        tokens = phonemes.split("|")
+        expected_ids = [id for token in tokens for id in (symbol_to_id[token], 0)][:-1]
+        assert ids == expected_ids
+
 
 class TestValidateGroup:
     """Tests for the validate_group safety check in split_ipa."""
 
     def test_unknown_group_is_split(self):
-        from matcha.text.phonemizers import split_ipa
+        from matcha.text.phonemizers import group_phonemes
         from matcha.text.symbols import symbol_to_id
         # ˈb is not in symbols, because stress cannot precede a plain consonant, so we expect split_ipa to 
         # to split the group and keep individual phonemes.
-        tokens = split_ipa("ˈb")
+        tokens = group_phonemes("ˈb")
         assert tokens == ["ˈ", "b"]
         assert symbol_to_id.get("ˈb") is None

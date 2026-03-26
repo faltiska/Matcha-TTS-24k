@@ -91,7 +91,7 @@ def validate_group(group):
     return known_group
 
 
-def split_ipa(phonemes):
+def group_phonemes(phonemes):
     """
     This method creates phonemes groups that contain phonemes that only make sense together:
 
@@ -152,6 +152,30 @@ def split_ipa(phonemes):
             
     return result
 
+def to_grouped_phoneme_ids(phonemes: list):
+    """Converts a string of IPA phonemes to a sequence of IDs corresponding to the symbol groups in
+    the given list of phoneme groups.
+    Args:
+      phonemes: string to convert to a sequence
+    Returns:
+      List of integers corresponding to the symbols in the text
+    """
+    separator_id = symbol_to_id[_separator]
+    ids = []
+    for symbol in phonemes:
+        ids.append(symbol_to_id.get(symbol))
+        ids.append(separator_id)
+    return ids[:-1]  # remove trailing separator
+
+def to_individual_phoneme_ids(phonemes: str):
+    """Converts a string of IPA phonemes to a sequence of IDs corresponding to the individual symbols
+    in the given text.
+    Args:
+      phonemes: string to convert to a sequence
+    Returns:
+      List of integers corresponding to the symbols in the text
+    """
+    return [symbol_to_id.get(symbol) for symbol in phonemes]
 
 def multilingual_phonemizer(text, language):
     phonemizer = phonemizers.get(language)
@@ -176,9 +200,21 @@ def multilingual_phonemizer(text, language):
     # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
     # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
     # model the transitions too: phoneme - transition - phoneme - transition ...
-    # phonemes = split_ipa(phonemes)
+
+    # The original logic was adding separators in between any 2 phonemes, regardless of their meaning.  
+    # phonemes = _separator.join(phonemes)
+    # phoneme_ids = to_individual_phoneme_ids(phonemes)
     
+    # My first improvement idea tries to keep together phonemes that only make sense as a group, and assign
+    # a new symbol ID to the entire group.
+    # phonemes = group_phonemes(phonemes)
+    # phoneme_ids = to_grouped_phoneme_ids(phonemes)
+    # phonemes = _separator.join(phonemes)
+    
+    # My second improvement idea groups phonemes too, but returns individual symbol IDs for each char, not for groups. 
+    # We would have a smaller number of symbols, same as with the original logic.  
+    phonemes = group_phonemes(phonemes)
     phonemes = _separator.join(phonemes)
-
-    return phonemes 
-
+    phoneme_ids = to_individual_phoneme_ids(phonemes)
+    
+    return phonemes, phoneme_ids 

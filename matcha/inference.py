@@ -7,7 +7,7 @@ from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import to_phoneme_ids, symbols, _separator
+from matcha.text.symbols import symbols
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 import av
 import numpy as np
@@ -16,16 +16,16 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.06},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.02},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.02},
-    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.01},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.04},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.07},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.00},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.05},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.03},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.01},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.0},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.0},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.0},
+    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.0},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.0},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.0},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 0.9},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.0},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.0},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.0},
     {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1},
 ]
 
@@ -176,13 +176,12 @@ def load_matcha(model_name, checkpoint_path):
 
 
 def process_text(text: str, language: str):
-    phonemes = multilingual_phonemizer(text, language)
-    phoneme_ids = to_phoneme_ids(phonemes)
+    phonemes, phoneme_ids = multilingual_phonemizer(text, language)
     x = torch.tensor(phoneme_ids, dtype=torch.long, device=DEVICE)[None]
     x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
     print(f"Input text:      <{text}>")
     print(f"Phonetised text: <{phonemes}>")
-    return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": phonemes}
+    return {"x_orig": text, "x": x, "x_lengths": x_lengths, "x_phones": phonemes, "x_phone_ids": phoneme_ids}
 
 
 def load_vocoder(vocoder_name):
@@ -210,11 +209,7 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
         )
     if not debug:
         return trim_trailing_silence(to_waveform(output["mel"], vocoder))
-    x_phones = []
-    for symbol in text_processed["x_phones"].split(_separator):
-        x_phones.append(symbol)
-        x_phones.append(_separator)
-    x_phones = x_phones[:-1]
+    x_phones = [symbols[id] for id in text_processed["x_phone_ids"]]
     all_durations = output["phoneme_durations"].squeeze(0).tolist()
     all_raw_durations = output["raw_phoneme_durations"].squeeze(0).tolist()
     phoneme_dur_pairs = list(zip(x_phones, all_raw_durations, all_durations))

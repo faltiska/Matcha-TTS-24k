@@ -91,7 +91,7 @@ def cli():
 
     model = load_matcha(args.model, args.checkpoint_path)
     model.decoder.solver = args.solver
-    
+
     vocoder = load_vocoder(args.vocoder)
 
     print_config(args)

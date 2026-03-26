@@ -40,10 +40,10 @@ def main():
 
         language=parts[2]
         text = parts[3]
-        ipa = multilingual_phonemizer(text, language)
-        max_ipa_len = max(max_ipa_len, len(ipa))
+        _, symbol_ids = multilingual_phonemizer(text, language)
+        max_ipa_len = max(max_ipa_len, len(symbol_ids))
 
-        for symbol in ipa.split(_separator):
+        for symbol in symbol_ids:
             if symbol not in symbol_set and symbol not in unknown_symbols:
                 unknown_symbols.add(symbol)
                 print(f"\n[test_corpus_ipa] Unknown symbol {repr(symbol)} in: {repr(text)}")

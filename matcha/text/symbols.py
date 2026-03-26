@@ -4,7 +4,7 @@ import unicodedata
 Defines the set of symbols used in text input to the model.
 """
 
-# Token used for separating voiced phonemes (see to_phoneme_ids()) 
+# Token used for separating phonemes or phoneme groups 
 _separator = "|"
 
 # Punctuation marks that may appear in phonemizer output.
@@ -42,18 +42,3 @@ symbols = [_separator] + list(_punctuation) + list(ipa_symbols) + pre_annotated 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 
 SPACE_ID = symbols.index(" ")
-
-
-def to_phoneme_ids(phonemes):
-    """Converts a string of IPA phonemes to a sequence of IDs corresponding to the symbols in the text.
-    Args:
-      phonemes: string to convert to a sequence
-    Returns:
-      List of integers corresponding to the symbols in the text
-    """
-    separator_id = symbol_to_id[_separator]
-    ids = []
-    for symbol in phonemes.split(_separator):
-        ids.append(symbol_to_id.get(symbol))
-        ids.append(separator_id)
-    return ids[:-1]  # remove trailing separator

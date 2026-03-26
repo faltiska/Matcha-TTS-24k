@@ -18,7 +18,6 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import Sampler
 
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import to_phoneme_ids
 from matcha.mel.extractors import get_mel_extractor
 from matcha.utils.model import fix_len_compatibility, normalize
 from math import ceil
@@ -427,8 +426,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         language = csv_row[2]
         text = csv_row[3]
 
-        phonemes = multilingual_phonemizer(text, language)
-        phoneme_ids = to_phoneme_ids(phonemes)
+        phonemes, phoneme_ids = multilingual_phonemizer(text, language)
         phoneme_ids = torch.IntTensor(phoneme_ids)
         
         mel = self.get_mel(rel_base_path)
