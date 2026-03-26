@@ -150,4 +150,4 @@ class BaseLightningClass(LightningModule, ABC):
         # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
         per_param_norms = torch.stack([p.detach().norm() for p in self.parameters()])
         total_param_norm = torch.linalg.vector_norm(per_param_norms)
-        self.log("grad_norm/param_norm", total_param_norm, on_step=False, on_epoch=True, logger=True)
+        self.log("grad_norm/param_norm", total_param_norm, on_step=False, on_epoch=True, logger=True, batch_size=1)
