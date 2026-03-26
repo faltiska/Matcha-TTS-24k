@@ -19,7 +19,6 @@ encoder_params:
   
   # Increased from 3. It controls receptive field in FFN layers.
   # Each position sees itself + 2 neighbors on each side for better local phonetic context
-  # kernel_size is hardcoded to 5 in prenet, so this value only controls the kernel for the FFN layers 
   kernel_size: 5
   
   # Not a lot of overfitting, no need for a larger value; 
