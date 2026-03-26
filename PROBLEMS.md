@@ -45,3 +45,24 @@ one to the other without any speaker conditioning. The optimal path for that doe
 The encoder mel is almost identical to the ground truth. I have converted it to audio, it sounds like the ground truth, except a 
 bit more metallic and a with some rare cracks and pops. The CFM just has to add finer detail to it.
 It learns faster now.
+
+10. Separators inserted in between annotation symbols and the annotated phonemes
+They are required between voiced phonemes, for a simple reason. In between 2 phoneme sounds, there is always a short
+period when a phoneme morphs into the next. That does not sound like the previous phoneme or the next.
+By inserting a separator, we allow the model to assign that transitional sound to something.
+But some symbols produced by eSpeak are just annotations, like the stress marker that means "put an emphasis on the next 
+vowel", or the duration annotation that means "elongate the previous vowel", like in this example: "ˈɔː". 
+We do not need separators between those.
+Because of how mel bins work, there is a minimum mel duration for any symbol. In my case, the minimum is 11ms. 
+That separator between a stress symbol and its vowel will be at least 11ms long.
+I added a method that groups annotations with their phonemes. 
+Rules are extremely complex, I have a feeling this hasn't been done before. 
+
+11. Kernel size too small to see past the separators
+Look at the phonetic representation for this text (the pipe is the separator described above).
+    Input text:      <You started talking about cause and pause, didn't you?>
+    Phonetised text: < |j|uː| |s|t|ˈɑː|ɹ|ɾ|ᵻ|d| |t|ˈɔː|k|ɪ|ŋ| |ɐ|b|ˌa|ʊ|t| |k|ˈɔː|z| |æ|n|d| |p|ˈɔː|z|,| |d|ˈɪ|d|n|t| |j|uː|?>
+If the kernel is 3 (1 symbol on each side) or even 5 (2 symbols on each side), the model will not see the question mark 
+after the "u" and will not learn to raise the pitch for interrogative sentences.
+I mean, it will, because at the next layer down in the encoder FFN each mixed phoneme will be mixed even more, but with a
+a larger kernel the signal will be very strong even at the input.
