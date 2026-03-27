@@ -1,0 +1,55 @@
+# @package _global_
+# I think v12 is the best one soe far, but I reduced the model, back to v6 values, and I think a larger model would be 
+# able to obtain a bit more quality. V13 is an attempt to make the model slightly larger than v12.
+
+run_name: v12
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: null
+
+model:
+  spk_emb_dim: 96
+
+  encoder:
+    encoder_params:
+      # 224 + 96 = 320
+      # 320 / 5 = 64, divisible by 8
+      n_channels: 224
+      # 336 * 4 = 1280
+      filter_channels: 1344
+      n_heads: 5
+      n_layers: 5
+      kernel_size: 9
+      p_dropout: 0.05
+      prenet: true
+    
+    duration_predictor_params:
+      filter_channels_dp: 128
+      kernel_size: 7
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    channels: [360, 360]
+    attention_head_dim: 72
+    num_heads: 5
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-2
+    
+    # Enable after early training stabilizes (grad norm < gradient_clip_val).
+    # When you enable it, set gradient clipping to null below.
+    # fused: true
+
+trainer:
+   gradient_clip_val: 4

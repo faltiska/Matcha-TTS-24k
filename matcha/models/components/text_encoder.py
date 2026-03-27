@@ -27,7 +27,7 @@ class LayerNorm(nn.Module):
         return x
 
 
-class ConvReluNorm(nn.Module):
+class ConvSiluNorm(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, kernel_size, n_layers, p_dropout):
         super().__init__()
         self.in_channels = in_channels
@@ -39,14 +39,16 @@ class ConvReluNorm(nn.Module):
 
         self.conv_layers = torch.nn.ModuleList()
         self.norm_layers = torch.nn.ModuleList()
+        self.silu_drop = torch.nn.ModuleList()
         self.conv_layers.append(torch.nn.Conv1d(in_channels, hidden_channels, kernel_size, padding=kernel_size // 2))
         self.norm_layers.append(LayerNorm(hidden_channels))
-        self.relu_drop = torch.nn.Sequential(torch.nn.ReLU(), torch.nn.Dropout(p_dropout))
+        self.silu_drop.append(torch.nn.Sequential(torch.nn.SiLU(), torch.nn.Dropout(p_dropout)))
         for _ in range(n_layers - 1):
             self.conv_layers.append(
                 torch.nn.Conv1d(hidden_channels, hidden_channels, kernel_size, padding=kernel_size // 2)
             )
             self.norm_layers.append(LayerNorm(hidden_channels))
+            self.silu_drop.append(torch.nn.Sequential(torch.nn.SiLU(), torch.nn.Dropout(p_dropout)))
         self.proj = torch.nn.Conv1d(hidden_channels, out_channels, 1)
         torch.nn.init.xavier_uniform_(self.proj.weight)
 
@@ -55,10 +57,9 @@ class ConvReluNorm(nn.Module):
         for i in range(self.n_layers):
             x = self.conv_layers[i](x * x_mask)
             x = self.norm_layers[i](x)
-            x = self.relu_drop(x)
+            x = self.silu_drop[i](x)
         x = x_org + self.proj(x)
         return x * x_mask
-
 
 class DurationPredictor(nn.Module):
     """Predicts phoneme durations using stacked convolutional layers.
@@ -312,40 +313,6 @@ class Encoder(nn.Module):
         return x
 
 
-class MelGen(nn.Module):
-    """
-    A smarter mel generator based on SiLU, LayerNorm and FiLM. 
-    Note tested yet. 
-    Use it with:
-    self.proj_m = MelGen(
-        in_channels=self.n_channels + spk_emb_dim,
-        n_channels=self.n_channels,
-        n_feats=self.n_feats,
-        spk_emb_dim=self.spk_emb_dim,
-    )
-    [...]
-    x = x[:, :-self.spk_emb_dim, :] # strip the speaker embedding off, first
-    mu = self.proj_m(x, x_mask, speaker_embedding)
-    """
-    def __init__(self, in_channels, n_channels, n_feats, spk_emb_dim):
-        super().__init__()
-        self.spk_emb_dim = spk_emb_dim
-        self.conv1 = nn.Conv1d(in_channels, n_channels * 2, 1)
-        self.norm = LayerNorm(n_channels)
-        self.conv2 = nn.Conv1d(n_channels, n_feats, 1)
-        self.spk_proj = nn.Linear(spk_emb_dim, n_channels * 2)
-
-    def forward(self, x, x_mask, spk_emb):
-        x = self.conv1(x * x_mask)
-        x, gate = x.chunk(2, dim=1)
-        x = x * torch.nn.functional.silu(gate)
-        x = self.norm(x)
-        gamma, beta = self.spk_proj(spk_emb).chunk(2, dim=-1) # FiLM
-        x = x * gamma.unsqueeze(-1) + beta.unsqueeze(-1)
-        x = self.conv2(x * x_mask)
-        return x * x_mask
-    
-
 class TextEncoder(nn.Module):
     def __init__(
         self,
@@ -364,11 +331,11 @@ class TextEncoder(nn.Module):
         torch.nn.init.normal_(self.emb.weight, 0.0, self.n_channels ** -0.5)
 
         if encoder_params.prenet:
-            self.prenet = ConvReluNorm(
+            self.prenet = ConvSiluNorm(
                 self.n_channels,
                 self.n_channels,
                 self.n_channels,
-                kernel_size=encoder_params.kernel_size,
+                kernel_size=encoder_params.prenet_kernel_size,
                 n_layers=6,
                 p_dropout=encoder_params.p_dropout,
             )
@@ -384,15 +351,12 @@ class TextEncoder(nn.Module):
             encoder_params.p_dropout,
         )
 
-        # Original mel generator
-        # self.proj_m = torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_feats, 1)
-
-        # A smarter mel generator 
         self.proj_m = torch.nn.Sequential(
             torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),
-            torch.nn.ReLU(),
+            torch.nn.SiLU(),
             torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
         )
+        torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
             self.n_channels,
@@ -433,9 +397,8 @@ class TextEncoder(nn.Module):
         mu = self.proj_m(x) * x_mask
 
         # Because speaker_embedding was concatenated into x, so we have to strip it before
-        # passing it to DurationPredictor, which gets the embedding as a separate param.
+        # passing it to the Duration Predictor, which needs it as an explicit param.
         x = x[:, :-self.spk_emb_dim, :]
-
         logw = self.proj_w(x.detach(), x_mask, speaker_embedding.detach())
 
         return mu, logw, x_mask

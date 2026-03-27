@@ -1,0 +1,63 @@
+# @package _global_
+# Reverted to encoder size from V8 since a larger model like in V9 or V10 did not make a difference.
+# The code was using split_ipa and was removing spaces after commas, assigning symbol IDFs to groups.
+# Total number of symbols grew to 3-4000 :( 
+# I tested at epoch 140 or so, and found big problems like skipped phonemes and generally un intelligible speech.
+
+run_name: v11
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: logs/train/v11/checkpoint_epoch=214.ckpt
+
+model:
+  spk_emb_dim: 96
+
+  encoder:
+    encoder_params:
+      # 288 + 96 = 384
+      # 384 / 6 = 64, divisible by 8
+      n_channels: 288
+      # 384 * 4 
+      filter_channels: 1536
+      # I had lower values in v6 and I saw less overfit (9% now, 5% in v6) 
+      # n_channels: 192
+      # filter_channels: 1152
+      
+      
+      # Both Claude and Gemini recommend 6 heads with a head dim of 64 instead of 8 x 48 
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      p_dropout: 0.05
+      prenet: true
+    
+    duration_predictor_params:
+      # I had this as 128 in v6, and v6 had very good results; plus, I had dropout set to 10%
+      # The overfit in v11 is larger than I ever saw, almost 40% now, vs 15% in v6
+      # I should probably go back to 128 / 0.1 
+      filter_channels_dp: 192
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    # it would be slightly better with 384 = 64 * 64 but there is a clear impact on performance
+    channels: [336, 336]
+    attention_head_dim: 56
+    num_heads: 6
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+#    lr: 1e-4
+#    weight_decay: 1e-2
+    
+    lr: 5e-5
+    weight_decay: 1e-3

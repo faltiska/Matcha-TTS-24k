@@ -1,0 +1,66 @@
+# @package _global_
+# Went back to V6 model size, to test with  a symbol ID per phoneme not per group.
+# Then I came up with a new phonemization idea, where I do group phonemes, insert separators only between groups,
+# and then still treat each symbol individually, so I don't have to have a huge numbers of symbol IDs.
+# I think this makes speech a bit sharper, but I am not sure, could be wishful thinking. 
+# The model is able to speak each symbol differently depending on position, I realize now.
+# Also, I decided not to remove the spaces after commas.
+# Finally, I realized I need a larger kernel, so that the model "sees" the last phoneme and the question mark together.
+# Bella can read "... didn't you?" with a raising pitch!
+# Finally, I made some changes to the encoder, where I replaced ReLU with SiLU. Not much of a difference  in losses
+# but I have this feeling that the model is more expressive.
+
+run_name: v12
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: null
+
+model:
+  spk_emb_dim: 96
+
+  encoder:
+    encoder_params:
+      # 192 + 96 = 288
+      # 288 / 6 = 48, divisible by 8
+      n_channels: 192
+      # 288 * 4 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 7
+      p_dropout: 0.05
+      prenet: true
+      prenet_kernel_size: 5
+    
+    duration_predictor_params:
+      filter_channels_dp: 128
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    # 384 = 6 * 64
+    # 360 = 5 * 72 
+    channels: [336, 336]
+    attention_head_dim: 56
+    num_heads: 6
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-2
+    
+    # Enable after early training stabilizes (grad norm < gradient_clip_val).
+    # When you enable it, set gradient clipping to null below.
+    # fused: true
+
+trainer:
+   gradient_clip_val: 4
