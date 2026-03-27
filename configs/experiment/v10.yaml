@@ -1,15 +1,16 @@
 # @package _global_
 # Documents all changes from v6 to v7 architecture.
 # Compared to V9: larger dropout and weight decay to fight overfitting.
-# Compared to V8, having tested with:
+# Compared to V8, I tested with:
 # - fewer channels, more layers (V9)
 # - more channels, more layers (v10)
-# it is clear that having more both more channels and more layers is the very important. 
+# and I cannot get the same loss drop as before the symbol grouping change.
+# Smaller decoder, sice it does not affect quality much, but improves speed significantly
 
 run_name: v10
 
 defaults:
-  - override /data: corpus-small-24k
+  - override /data: corpus-24k
 
 data:
   max_frames_per_batch: 30000
@@ -22,11 +23,12 @@ model:
   encoder:
     encoder_params:
       # 288 + 96 = 384
-      # 384 / 8 = 48, divisible by 8
+      # 384 / 6 = 64, divisible by 8
       n_channels: 288
       # 384 * 4 
       filter_channels: 1536
-      n_heads: 8
+      # Both Claude and Gemini recommend 6 heads with a head dim of 64 instead of 8 x 48 
+      n_heads: 6
       n_layers: 6
       kernel_size: 5
       p_dropout: 0.05
