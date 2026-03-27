@@ -329,32 +329,8 @@ class TestPhonemeIds:
         _, ids = multilingual_phonemizer("Oare?", "ro")
         assert ids[-1] != separator_id
 
-    def test_alternating_token_separator_pattern(self):
-        separator_id = 0
-        _, ids = multilingual_phonemizer("Oare?", "ro")
-        for i, id in enumerate(ids):
-            is_separator_position = i % 2 == 1
-            if is_separator_position:
-                assert id == separator_id
-            else:
-                assert id != separator_id
-
-    def test_ids_consistent_with_phoneme_string(self):
+    def test_ids_match_joined_phonemes(self):
         from matcha.text.symbols import symbol_to_id
         phonemes, ids = multilingual_phonemizer("Oare?", "ro")
-        tokens = phonemes.split("|")
-        expected_ids = [id for token in tokens for id in (symbol_to_id[token], 0)][:-1]
+        expected_ids = [symbol_to_id.get(ch) for ch in phonemes]
         assert ids == expected_ids
-
-
-class TestValidateGroup:
-    """Tests for the validate_group safety check in split_ipa."""
-
-    def test_unknown_group_is_split(self):
-        from matcha.text.phonemizers import group_phonemes
-        from matcha.text.symbols import symbol_to_id
-        # ˈb is not in symbols, because stress cannot precede a plain consonant, so we expect split_ipa to 
-        # to split the group and keep individual phonemes.
-        tokens = group_phonemes("ˈb")
-        assert tokens == ["ˈ", "b"]
-        assert symbol_to_id.get("ˈb") is None

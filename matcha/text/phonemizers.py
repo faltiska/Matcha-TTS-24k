@@ -78,18 +78,6 @@ def normalize_text(lang_code, text):
     return text
 
 
-def validate_group(group):
-    """
-    Checks whether combined_group is a known symbol.
-    If not, the last character should start a new group instead of being appended.
-    This is a safety net for phoneme combinations that split_ipa's grouping rules
-    would combine, but that are not present in the symbols vocabulary.
-    """
-    known_group = group in symbol_to_id
-    if not known_group:
-        logger.warning(f"Unknown phoneme group '{group}' — will keep individual characters.")
-    return known_group
-
 
 def group_phonemes(phonemes):
     """
@@ -139,10 +127,7 @@ def group_phonemes(phonemes):
         elif (is_backward_sticky or force_combine_next) and result and not is_pre_annotation:
             group = result[-1] + char
             group = unicodedata.normalize('NFC', group)
-            if validate_group(group):
-                result[-1] = group
-            else:
-                result.append(char)
+            result[-1] = group
             force_combine_next = False            
         else:
             result.append(char)
@@ -152,22 +137,7 @@ def group_phonemes(phonemes):
             
     return result
 
-def to_grouped_phoneme_ids(phonemes: list):
-    """Converts a string of IPA phonemes to a sequence of IDs corresponding to the symbol groups in
-    the given list of phoneme groups.
-    Args:
-      phonemes: string to convert to a sequence
-    Returns:
-      List of integers corresponding to the symbols in the text
-    """
-    separator_id = symbol_to_id[_separator]
-    ids = []
-    for symbol in phonemes:
-        ids.append(symbol_to_id.get(symbol))
-        ids.append(separator_id)
-    return ids[:-1]  # remove trailing separator
-
-def to_individual_phoneme_ids(phonemes: str):
+def to_phoneme_ids(phonemes: str):
     """Converts a string of IPA phonemes to a sequence of IDs corresponding to the individual symbols
     in the given text.
     Args:
@@ -203,18 +173,11 @@ def multilingual_phonemizer(text, language):
 
     # The original logic was adding separators in between any 2 phonemes, regardless of their meaning.  
     # phonemes = _separator.join(phonemes)
-    # phoneme_ids = to_individual_phoneme_ids(phonemes)
+    # phoneme_ids = to_phoneme_ids(phonemes)
     
-    # My first improvement idea tries to keep together phonemes that only make sense as a group, and assign
-    # a new symbol ID to the entire group.
-    # phonemes = group_phonemes(phonemes)
-    # phoneme_ids = to_grouped_phoneme_ids(phonemes)
-    # phonemes = _separator.join(phonemes)
-    
-    # My second improvement idea groups phonemes too, but returns individual symbol IDs for each char, not for groups. 
-    # We would have a smaller number of symbols, same as with the original logic.  
+    # My idea is to group annotations with their annotated phonemes, so that we don't insert separators between them.
     phonemes = group_phonemes(phonemes)
     phonemes = _separator.join(phonemes)
-    phoneme_ids = to_individual_phoneme_ids(phonemes)
+    phoneme_ids = to_phoneme_ids(phonemes)
     
     return phonemes, phoneme_ids 
