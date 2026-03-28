@@ -2,7 +2,6 @@ import io
 import time
 import torch
 import torch.nn as nn
-import torch.nn.functional as functional
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
@@ -16,16 +15,16 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.0},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.0},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.0},
-    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.0},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.0},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.0},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 0.9},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.0},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.0},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.0},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "default_scale": 1.13},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "default_scale": 1.06},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "default_scale": 1.05},
+    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "default_scale": 1.06},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "default_scale": 1.08},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "default_scale": 1.09},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "default_scale": 1.03},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "default_scale": 1.10},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "default_scale": 1.04},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "default_scale": 1.05},
     {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "default_scale": 1},
 ]
 
@@ -116,20 +115,14 @@ class MatchaTTSInfer(nn.Module):
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         # Rounding up each phoneme duration, was causing the generated speech to be consistently too slow.
-        # But generate_path can handle fractional durations so I can pass w as is.
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
         raw_phoneme_durations = phoneme_durations.clone()
 
-        # Round phoneme positions to avoid collisions (2 phonemes starting on the same position).
-        # E.g. durations [1.5, 0.5, 1.5] -> cumsum [1.5, 2.0, 3.5] -> round [2, 2, 4].
-        # Enforce strictly monotonic integer positions, then derive integer durations from them.
-        phoneme_positions = torch.cumsum(phoneme_durations.squeeze(1), 1).round()
-        num_phonemes = phoneme_positions.size(1) + 1
-        indices = torch.arange(1, num_phonemes, device=phoneme_durations.device)
-        phoneme_positions = torch.maximum(phoneme_positions, indices.unsqueeze(0))
-        phoneme_durations = phoneme_positions - functional.pad(phoneme_positions, (1, 0))[:, :-1]
-        
-        y_lengths = torch.clamp_min(phoneme_positions[:, -1].long(), 1)
+        # Round each phoneme duration to the nearest integer. Clamp to minimum 1 to avoid silent phonemes.
+        # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
+        phoneme_durations = phoneme_durations.squeeze(1).round().clamp(min=1)
+
+        y_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
         y_max_length = y_lengths.max()
         y_max_length_ = fix_len_compatibility(y_max_length)
 
