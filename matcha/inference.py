@@ -115,11 +115,10 @@ class MatchaTTSInfer(nn.Module):
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         # Rounding up each phoneme duration, was causing the generated speech to be consistently too slow.
+        # Now we round each phoneme duration to the nearest integer. Clamp to minimum 1 to avoid silent phonemes.
+        # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
         phoneme_durations = torch.exp(logw) * x_mask * length_scale
         raw_phoneme_durations = phoneme_durations.clone()
-
-        # Round each phoneme duration to the nearest integer. Clamp to minimum 1 to avoid silent phonemes.
-        # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
         phoneme_durations = phoneme_durations.squeeze(1).round().clamp(min=1)
 
         y_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)

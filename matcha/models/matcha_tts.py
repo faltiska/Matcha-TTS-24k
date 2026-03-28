@@ -136,7 +136,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # Also, the values are too small, 0.05 the after first epoch tending to 0.0001
             # Such small gradients are not allowing the model to learn, so I am not squaring them up anymore.
             # This had a positive effect on duration estimation too, which started showing much smaller losses.  
-            # Before this change, I could not get duration loss below 0.15, not even 400K steps.
+            # Before this change, I could not get duration loss below 0.15, not even after 400K steps.
             prior_loss = torch.sum(torch.abs(y - mu_y) * y_mask)
             prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
         else:

@@ -139,8 +139,8 @@ class BaseLightningClass(LightningModule, ABC):
 
     def on_before_optimizer_step(self, optimizer):
         # This is rather slow, so enable it only if you must see the grad norm chart.
-        norms = grad_norm(self, norm_type=2)
-        self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
+        # norms = grad_norm(self, norm_type=2)
+        # self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
 
         # This helps me check if the weight decay value from Adam / AdamW is too large.
         # If param_norm stays flat or slightly increases: weight decay is just fine.
