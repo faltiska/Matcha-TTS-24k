@@ -110,10 +110,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         logw_ = torch.log(1e-8 + mas_durations.unsqueeze(1)) * x_mask
 
         # logw - log-scaled durations from the Duration Predictor
-        # logw_ - log-scaled durations calculated the Monotonic Alignment Search algorithm. 
+        # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm. 
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
-        # Align encoded text with mel-spectrogram and get mu_y segment
+        # Original code was: 
         # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         # mu_y = mu_y.transpose(1, 2)
         # but that can be simplified as:
