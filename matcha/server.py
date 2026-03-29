@@ -22,7 +22,7 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v11/checkpoint_epoch=229-best-mcd.ckpt"
+CHECKPOINT_PATH = "logs/train/v12/runs/2026-03-27_21-07-50/checkpoints/checkpoint_epoch=144.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -100,11 +100,11 @@ async def speak(request: InferenceRequest):
 
     t = time.perf_counter()
     if voice_mix is not None:
-        default_scale = sum(VOICES[spk_id]["default_scale"] * weight for spk_id, weight in voice_mix)
+        scale_correction = sum(VOICES[spk_id]["scale_correction"] * weight for spk_id, weight in voice_mix)
     else:
-        default_scale = VOICES[speaker]["default_scale"]
-    length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, default_scale / request.speed))
-    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, length_scale)
+        scale_correction = VOICES[speaker]["scale_correction"]
+    length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, 1.0 / request.speed))
+    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, scale_correction, length_scale)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

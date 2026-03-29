@@ -22,9 +22,23 @@ speaker_009 MCD:  4.29 dB      4.82 dB   4.62 dB  4.51 dB  4.42 dB  4.39 dB  4.3
 ------------------------------------------------------------------------------------------------------------------------
 Average MCD:      4.01 dB      4.63 dB   4.45 dB  4.28 dB  4.15 dB  4.09 dB  4.06 dB  4.02 dB  3.94 dB  3.94 dB  3.91 dB
 
-All measurements were taken with the recommended scaling applied.
-"""
+                  v8/134   v8/339       v11/229      v12/44   v12/64   v12/89   v12/124  v12/144
+speaker_000 MCD:  4.90 dB  4.64 dB      4.79 dB      6.06 dB  5.67 dB  5.35 dB  5.10 dB  5.10 dB
+speaker_001 MCD:  3.53 dB  3.20 dB      3.47 dB      4.74 dB  4.26 dB  3.92 dB  3.78 dB  3.64 dB
+speaker_002 MCD:  3.77 dB  3.49 dB      3.71 dB      4.65 dB  4.33 dB  4.16 dB  4.00 dB  3.88 dB
+speaker_003 MCD:  3.02 dB  2.68 dB      3.29 dB      4.13 dB  3.96 dB  3.67 dB  3.49 dB  3.49 dB
+speaker_004 MCD:  5.09 dB  4.67 dB      4.87 dB      6.05 dB  5.74 dB  5.41 dB  5.19 dB  5.12 dB
+speaker_005 MCD:  3.86 dB  3.72 dB      3.86 dB      4.69 dB  4.39 dB  4.20 dB  4.04 dB  3.94 dB
+speaker_006 MCD:  4.03 dB  3.81 dB      3.82 dB      4.72 dB  4.38 dB  4.24 dB  4.17 dB  4.12 dB
+speaker_007 MCD:  5.04 dB  4.74 dB      5.05 dB      6.16 dB  5.82 dB  5.46 dB  5.23 dB  5.26 dB
+speaker_008 MCD:  5.10 dB  4.78 dB      5.01 dB      6.28 dB  5.82 dB  5.43 dB  5.24 dB  5.10 dB
+speaker_009 MCD:  4.54 dB  4.37 dB      4.49 dB      5.71 dB  5.17 dB  4.91 dB  4.77 dB  4.67 dB
+---------------------------------------------------------------------  -------  -------  -------
+Average MCD:      4.29 dB  4.01 dB      4.24 dB      5.32 dB  4.95 dB  4.68 dB  4.50 dB  4.43 dB
 
+All measurements until V8 were taken with the recommended scaling applied.
+Measurements after V8 were taken without any scaling (scaling was 1.0).
+"""
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pyworld")
@@ -129,7 +143,7 @@ def main():
         mcd_scores = []
         duration_ratios = []
         for text, gt_wav_path in samples:
-            waveform = pipeline(model, vocoder, text, language, spk_id, None, args.steps, voice["default_scale"])
+            waveform = pipeline(model, vocoder, text, language, spk_id, None, args.steps, voice["scale_correction"])
             mcd, duration_ratio = compute_mcd(waveform, gt_wav_path, mcd_toolbox, sample_rate)
             mcd_scores.append(mcd)
             duration_ratios.append(duration_ratio)
@@ -138,9 +152,9 @@ def main():
     print()
     for voice_id, (avg_mcd, avg_ratio) in speaker_mcd_scores.items():
         voice = next(v for v in VOICES if v["id"] == voice_id)
-        suggested_scale = voice["default_scale"] * avg_ratio
+        suggested_correction = voice["scale_correction"] + (avg_ratio - 1.0)
         label = f"speaker_{int(voice_id):03d}"
-        print(f"{label:<40} MCD: {avg_mcd:5.2f} dB   duration ratio: {avg_ratio:.2f}   suggested scale: {suggested_scale:.2f}")
+        print(f"{label:<40} MCD: {avg_mcd:5.2f} dB   duration ratio: {avg_ratio:.2f}   suggested correction: {suggested_correction:.2f}")
     print("-" * 70)
     all_mcds = [mcd for mcd, _ in speaker_mcd_scores.values()]
     if all_mcds:

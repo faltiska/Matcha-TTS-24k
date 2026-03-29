@@ -108,14 +108,15 @@ def speak(args, model, vocoder, text, speaker=0):
     t = time.perf_counter()
     voice = next((v for v in VOICES if v["id"] == str(speaker)), VOICES[0])
     language = voice["lang"]
+    scale_correction = voice["scale_correction"]
     if args.length_scale is not None:
         length_scale = args.length_scale
     else:
-        length_scale = voice["default_scale"]
+        length_scale = 1.0
 
     if args.debug:
         decoder_wav, encoder_wav, phoneme_dur_pairs = pipeline(
-            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, length_scale, debug=True
+            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, scale_correction, length_scale, debug=True
         )
         elapsed = time.perf_counter() - t
         audio_duration = decoder_wav.shape[-1] / SAMPLE_RATE
@@ -137,7 +138,7 @@ def speak(args, model, vocoder, text, speaker=0):
         dur_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
     else:
-        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, length_scale)
+        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, scale_correction, length_scale)
         elapsed = time.perf_counter() - t
         audio_duration = waveform.shape[-1] / SAMPLE_RATE
         print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

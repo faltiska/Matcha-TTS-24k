@@ -29,11 +29,25 @@
 #  speaker_009     4.81 dB   4.81 dB   4.48 dB   4.28 dB   4.35 dB   4.33 dB   4.46 dB   4.32 dB   4.35 dB     
 #  -------------------------------------------------------------------------------------------------------
 #  Average         4.88 dB   4.80 dB   4.59 dB   4.51 dB   4.44 dB   4.37 dB   4.39 dB   4.33 dB   4.29 dB
+#  
+#  Model/Epoch     v8/134    v8/234    v8/339        v11/134   v11/144   v11/229
+#  speaker_000     5.26 dB   5.26 dB   5.18 dB       5.27 dB   5.17 dB   5.21 dB     
+#  speaker_001     3.84 dB   3.88 dB   3.57 dB       4.11 dB   3.96 dB   3.70 dB     
+#  speaker_002     4.22 dB   3.97 dB   3.89 dB       4.38 dB   4.13 dB   4.17 dB     
+#  speaker_003     3.07 dB   2.87 dB   2.76 dB       3.77 dB   3.56 dB   3.42 dB     
+#  speaker_004     6.03 dB   6.04 dB   5.63 dB       5.83 dB   5.91 dB   5.77 dB     
+#  speaker_005     4.12 dB   4.00 dB   3.92 dB       4.35 dB   4.05 dB   3.93 dB     
+#  speaker_006     4.09 dB   3.78 dB   3.76 dB       3.83 dB   3.90 dB   3.68 dB     
+#  speaker_007     5.83 dB   5.74 dB   5.67 dB       6.47 dB   5.87 dB   5.75 dB     
+#  speaker_008     6.32 dB   5.58 dB   5.66 dB       5.75 dB   5.62 dB   5.61 dB     
+#  speaker_009     4.59 dB   4.54 dB   4.23 dB       4.82 dB   4.64 dB   4.31 dB     
+#  -----------------------------------------------------------------------------
+#  Average         4.74 dB   4.56 dB   4.43 dB       4.86 dB   4.68 dB   4.56 dB
 
 CHECKPOINTS=(
-     "logs/train/v7/runs/2026-03-16_09-06-33/checkpoints/checkpoint_epoch=054.ckpt"
+     "logs/train/v11/checkpoint_epoch=229-best-mcd.ckpt"
  )
-   
+ 
 for CHECKPOINT_PATH in "${CHECKPOINTS[@]}"; do
     CKPT_NAME=$(basename "$CHECKPOINT_PATH" .ckpt)
     
