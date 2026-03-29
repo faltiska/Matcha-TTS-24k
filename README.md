@@ -1,11 +1,9 @@
 ## Environment preparation
 
-```
+```bash
 uv venv .venv --python 3.13
 source .venv/bin/activate
 uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --upgrade
-  or use the 2.9.1 version, it was slightly faster than 0.10.0
-uv pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 torchcodec==0.9.1 --index-url https://download.pytorch.org/whl/cu130 --upgrade
 uv pip install -r requirements.txt --upgrade
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
@@ -94,7 +92,9 @@ watch -n 1 nvidia-smi
 
 Profile your trainer with:
 ```
-python -m matcha.train +trainer.profiler="simple"
+python -m matcha.train +trainer.profiler="simple" trainer.max_epochs=1 callbacks.tqdm_progress_bar.refresh_rate=0 2>&1 | tee logs/profiler.txt
+python -m matcha.train +trainer.profiler="advanced" trainer.max_epochs=1 callbacks.tqdm_progress_bar.refresh_rate=0 2>&1 | tee logs/profiler.txt
+python -m matcha.train +trainer.profiler="pytorch" trainer.max_epochs=1 callbacks.tqdm_progress_bar.refresh_rate=0 2>&1 | tee logs/profiler.txt
 ```
 This will generate a profile report at the end of training, so maybe set it to run for just a small number of epochs.
 
