@@ -1,3 +1,10 @@
+# Project location
+This project is stored in a WSL filesystem.
+We are in IntelliJ in Windows, so use wsl file system paths to locate project files.
+I can execute linux commands in the IntelliJ terminal so if you need any cli executed, 
+give me a linux command and I will run it for you, but give me the commands one at a time.
+
+
 # Coding Standards
 1. Write self-explanatory code, as clear as for a person that never saw the code to be able to understand it.
 2. Follow Extreme Programming principles.
