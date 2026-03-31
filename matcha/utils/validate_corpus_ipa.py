@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import symbols, _separator
+from matcha.text.symbols import symbols
 
 
 def parse_filelist(filelist_path: Path, split_char: str = "|"):

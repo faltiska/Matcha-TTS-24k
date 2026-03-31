@@ -426,7 +426,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         language = csv_row[2]
         text = csv_row[3]
 
-        phonemes, phoneme_ids = multilingual_phonemizer(text, language)
+        _, phoneme_ids = multilingual_phonemizer(text, language)
         phoneme_ids = torch.IntTensor(phoneme_ids)
         
         mel = self.get_mel(rel_base_path)
@@ -436,7 +436,6 @@ class TextMelDataset(torch.utils.data.Dataset):
             "y": mel,
             "spk": spk,
             "filepath": rel_base_path,
-            "x_text": phonemes,
         }
 
         return sample
@@ -491,7 +490,7 @@ class TextMelBatchCollate:
 
         y_lengths, x_lengths = [], []
         spks = []
-        filepaths, x_texts = [], []
+        filepaths = []
         for i, item in enumerate(batch):
             y_, x_ = item["y"], item["x"]
             y_lengths.append(y_.shape[-1])
@@ -500,7 +499,6 @@ class TextMelBatchCollate:
             x[i, : x_.shape[-1]] = x_
             spks.append(item["spk"])
             filepaths.append(item["filepath"])
-            x_texts.append(item["x_text"])
 
         y_lengths = torch.tensor(y_lengths, dtype=torch.long)
         x_lengths = torch.tensor(x_lengths, dtype=torch.long)
@@ -513,7 +511,6 @@ class TextMelBatchCollate:
             "y_lengths": y_lengths,
             "spks": spks,
             "filepaths": filepaths,
-            "x_texts": x_texts,
         }
 
 

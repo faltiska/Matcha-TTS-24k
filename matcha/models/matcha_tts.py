@@ -3,7 +3,7 @@ import torch
 
 import logging
 from matcha.models.baselightningmodule import BaseLightningClass
-from matcha.text.symbols import symbols
+from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import duration_loss, sequence_mask
@@ -32,8 +32,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.save_hyperparameters(logger=False)
 
-        n_vocab = len(symbols)
-        self.n_vocab = n_vocab
+        self.n_vocab = N_VOCAB
         self.spk_emb_dim = spk_emb_dim
         self.n_feats = n_feats
         self.prior_loss = prior_loss
@@ -46,7 +45,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.encoder = TextEncoder(
             encoder.encoder_params,
             encoder.duration_predictor_params,
-            n_vocab,
+            N_VOCAB,
             spk_emb_dim,
         )
 
@@ -107,7 +106,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
         # valid tokens, preventing attention to padding.
         mas_durations = torch.sum(attn.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
-        logw_ = torch.log(1e-8 + mas_durations.unsqueeze(1)) * x_mask
+        
+        # I am adding a 2 to make the values greater than 1, because MSE is more forgiving with sub-unitary losses
+        # and more punishing with supra-unitary losses.
+        # E.g. 0.6 ** 2 < 0.6, but 1.6 ** 2 > 1.6  
+        # This helps Duration Predictor A LOT. We have to compensate for the +2 before synthesis, see inference.py.  
+        logw_ = torch.log(2 + mas_durations.unsqueeze(1)) * x_mask
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm. 

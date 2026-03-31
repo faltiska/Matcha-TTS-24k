@@ -5,7 +5,7 @@ Defines the set of symbols used in text input to the model.
 """
 
 # Token used for separating phonemes or phoneme groups 
-_separator = "|"
+separator = "|"
 
 # Punctuation marks that may appear in phonemizer output.
 # WARNING: do not reorder or remove — symbol IDs are baked into saved checkpoints.
@@ -21,14 +21,13 @@ _punctuation = ';:,.!?¡¿_—…-\'"«»“”()[]/ '
 
 vowels = "aeiouɑɐɒæəɘɚɛɜɝɞɨɪɔøɵɤʉʊyɶœɯʏʌᵻ"
 consonants = "bβcçdðfɡɢɣhɦɧħɥjɟʝkʎlɭʟɬɫɮmɱnɳɲŋɴpɸqrɹɺɾɽɻʀʁsʂʃtʈθvʋⱱwʍxχzʐʒʑʔʕʢʡʙɕɖʜɰ"
-pre_annotations = "ˈˌ"
-post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚" # last four characters are all combining diacritics that are invisible on their own. 
-all_annotations = pre_annotations + post_annotations
+annotations = "ˈˌːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚" # last four characters are all combining diacritics that are invisible on their own. 
+ipa_symbols = vowels + consonants + annotations
 
-ipa_symbols = vowels + consonants + pre_annotations + post_annotations
-
-symbols = [_separator] + list(_punctuation) + list(ipa_symbols)
+symbols = [separator] + list(_punctuation) + list(ipa_symbols)
 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 
 SPACE_ID = symbols.index(" ")
+
+N_VOCAB = len(symbols)

@@ -5,8 +5,8 @@ import torch.nn as nn
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
-from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import symbols
+from matcha.text.phonemizers import multilingual_phonemizer, phone_id_to_display
+from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 import av
 import numpy as np
@@ -15,17 +15,17 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction": 0.13},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction": 0.11},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction": 0.10},
-    {"id":  "3", "lang": "en-gb", "gender": "female", "name": "Bella",  "scale_correction": 0.08},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction": 0.14},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction": 0.11},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction": 0.03},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction": 0.11},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction": 0.09},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction": 0.08},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction": 0},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.0},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.0},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.0},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.0},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.0},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.0},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.0},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.0},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.0},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.0},
+    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0 },
 ]
 
 HOP_LENGTH = 256
@@ -36,7 +36,7 @@ class MatchaTTSInfer(nn.Module):
     def __init__(self, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
         super().__init__()
         self.speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
-        n_vocab = len(symbols)
+        n_vocab = N_VOCAB
         self.encoder = TextEncoder(encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
@@ -110,7 +110,8 @@ class MatchaTTSInfer(nn.Module):
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
 
-        phoneme_durations = torch.exp(logw) * x_mask
+        # I am doing -2 to compensate for the +2 added during training, see matcha_tts
+        phoneme_durations = (torch.exp(logw) - 2) * x_mask
         phoneme_durations = phoneme_durations.squeeze(1)
         raw_phoneme_durations = phoneme_durations.clone()
 
@@ -183,7 +184,8 @@ def load_matcha(model_name, checkpoint_path):
 
 
 def process_text(text: str, language: str):
-    phonemes, phoneme_ids = multilingual_phonemizer(text, language)
+    separated_phonemes, phoneme_ids = multilingual_phonemizer(text, language)
+    phonemes = "".join(separated_phonemes)
     x = torch.tensor(phoneme_ids, dtype=torch.long, device=DEVICE)[None]
     x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
     print(f"Input text:      <{text}>")
@@ -217,7 +219,7 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
         )
     if not debug:
         return trim_trailing_silence(to_waveform(output["mel"], vocoder))
-    x_phones = [symbols[id] for id in text_processed["x_phone_ids"]]
+    x_phones = [phone_id_to_display(id) for id in text_processed["x_phone_ids"]]
     all_durations = output["phoneme_durations"].squeeze(0).tolist()
     all_raw_durations = output["raw_phoneme_durations"].squeeze(0).tolist()
     phoneme_dur_pairs = list(zip(x_phones, all_raw_durations, all_durations))

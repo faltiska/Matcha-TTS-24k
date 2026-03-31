@@ -140,17 +140,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.register_buffer('cos_cached', idx_theta2.cos()[:, None, None, :], persistent=False)
         self.register_buffer('sin_cached', idx_theta2.sin()[:, None, None, :], persistent=False)
 
-    def _ensure_cache(self, seq_len: int, device: torch.device):
-        """Rebuild cos/sin cache on the given device if current cache too small."""
-        if seq_len <= self.max_seq_len:
-            return
-        self.max_seq_len = seq_len
-        theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2, device=device).float() / self.d))
-        seq_idx = torch.arange(seq_len, device=device).float()
-        idx_theta = torch.einsum("n,d->nd", seq_idx, theta)
-        idx_theta2 = torch.cat([idx_theta, idx_theta], dim=1)
-        self.cos_cached = idx_theta2.cos()[:, None, None, :]
-        self.sin_cached = idx_theta2.sin()[:, None, None, :]
+    def _ensure_cache(self, seq_len: int):
+        assert seq_len <= self.max_seq_len, f"Phonetic representation too long {seq_len}, exceeds RoPE cache size {self.max_seq_len}"
 
     def _neg_half(self, x: torch.Tensor):
         # Rearranges x so the second half of the values comes first, negated:
@@ -164,7 +155,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         """
         x = rearrange(x, "b h t d -> t b h d")
 
-        self._ensure_cache(x.shape[0], x.device)
+        seq_len = x.shape[0]
+        assert seq_len <= self.max_seq_len, f"Phonetic representation too long, exceeds RoPE cache size {self.max_seq_len}"
 
         # Split the embedding values: RoPE is applied only to the first d values, the rest are passed through unchanged.
         x_rope, x_pass = x[..., : self.d], x[..., self.d :]
@@ -350,6 +342,8 @@ class TextEncoder(nn.Module):
             encoder_params.kernel_size,
             encoder_params.p_dropout,
         )
+        # This is the largest encoder component I can compile for training. Even so, it has a big impact.
+        self.encoder = torch.compile(self.encoder)
 
         self.proj_m = torch.nn.Sequential(
             torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),

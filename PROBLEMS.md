@@ -60,9 +60,17 @@ Rules are extremely complex, I have a feeling this hasn't been done before.
 
 11. Kernel size too small to see past the separators
 Look at the phonetic representation for this text (the pipe is the separator described above).
-    Input text:      <You started talking about cause and pause, didn't you?>
-    Phonetised text: < |j|uː| |s|t|ˈɑː|ɹ|ɾ|ᵻ|d| |t|ˈɔː|k|ɪ|ŋ| |ɐ|b|ˌa|ʊ|t| |k|ˈɔː|z| |æ|n|d| |p|ˈɔː|z|,| |d|ˈɪ|d|n|t| |j|uː|?>
+    Input text:      <Didn't you?>
+    Phonetised text: < |d|ˈ|ɪ|d|n|t| |j|u|ː|?>
 If the kernel is 3 (1 symbol on each side) or even 5 (2 symbols on each side), the model will not see the question mark 
 after the "u" and will not learn to raise the pitch for interrogative sentences.
 I mean, it will, because at the next layer down in the encoder FFN each mixed phoneme will be mixed even more, but with a
 a larger kernel the signal will be very strong even at the input.
+
+12. The duration loss was calculated on a log scale, presumably to counter the fact that long phoneme losses would
+have had much more weight than the los from short phonemes. It uses MSE loss and when the estimator predicts 9 frames 
+instead of 8, the loss is 9 ** 2 - 8 ** 2 = 17 but if the model predicted 2 instead of 3, the loss would have been just 5
+making the model much more forgiving with errors on short phonemes.
+But the author did not realize ln(2) = 0.69 and the MSE losses are really forgiving with subunitary numbers.
+The fix was to add a 2 before calculating the logs, since ln(3) > 1. 
+It has a huge effect, duration estimation loss drops like a rock with this change.

@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import _punctuation, _separator, all_annotations, post_annotations, pre_annotations, symbol_to_id
+from matcha.text.symbols import separator, symbols, symbol_to_id
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -78,75 +78,6 @@ def normalize_text(lang_code, text):
     return text
 
 
-
-def group_phonemes(phonemes):
-    """
-    This method creates phonemes groups that contain phonemes that only make sense together:
-
-    1. Pre-annotations like stress markers ("ˈˌ") stay with the phoneme right after them.
-       Example: "əˈbaʊt" → ["ə", "ˈb", "a", "ʊ", "t"]
-
-    2. Post-annotations like diacritics and length marks ("ː,") stay with the phoneme right before them.
-       Example: "baːn" → ["b", "aː", "n"]
-
-    3. Unicode combining codepoints are kept together with the character they modify.
-       These appear after NFD decomposition splits a composed character into its base letter
-       plus a combining codepoint. For example, the nasal vowel "ɑ̃" (French "an") is
-       decomposed into "ɑ" + combining tilde "̃", which must be kept together.
-       Example: "œ̃n ˈɑ̃" → ["œ̃", "n", " ", "ˈɑ̃"]
-
-    4. Modifier letters (Unicode spacing modifier letters not covered by post-annotations)
-       stay with the phoneme they modify, for the same reason as combining codepoints.
-
-    5. Punctuation should not be part of a group.
-
-    6. Two consecutive annotations should not be part of a group.
-    
-    We do not use the tie characters, and we do not group affricate or diphthongs, as they're two separate sounds.
-    """
-    phonemes = unicodedata.normalize('NFD', phonemes)
-    result = []
-    force_combine_next = False
-    for char in phonemes:
-        cat = unicodedata.category(char)
-        
-        is_combining = unicodedata.combining(char) > 0
-        is_modifier = cat in ('Lm', 'Sk')
-        is_pre_annotation = char in pre_annotations
-        is_post_annotation = char in post_annotations
-        is_backward_sticky = (is_combining or is_modifier or is_post_annotation) and not is_pre_annotation
-        last_char_of_group = result[-1][-1] if result else ''
-        last_char_is_annotation = last_char_of_group in all_annotations
-
-        if char in _punctuation:
-            result.append(char)
-            force_combine_next = False
-        elif last_char_is_annotation and (is_pre_annotation or is_post_annotation):
-            result.append(char)
-            force_combine_next = False
-        elif (is_backward_sticky or force_combine_next) and result and not is_pre_annotation:
-            group = result[-1] + char
-            group = unicodedata.normalize('NFC', group)
-            result[-1] = group
-            force_combine_next = False            
-        else:
-            result.append(char)
-            
-        if is_pre_annotation:
-            force_combine_next = True
-            
-    return result
-
-def to_phoneme_ids(phonemes: str):
-    """Converts a string of IPA phonemes to a sequence of IDs corresponding to the individual symbols
-    in the given text.
-    Args:
-      phonemes: string to convert to a sequence
-    Returns:
-      List of integers corresponding to the symbols in the text
-    """
-    return [symbol_to_id.get(symbol) for symbol in phonemes]
-
 def multilingual_phonemizer(text, language):
     phonemizer = phonemizers.get(language)
     if phonemizer is None:
@@ -171,13 +102,11 @@ def multilingual_phonemizer(text, language):
     # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
     # model the transitions too: phoneme - transition - phoneme - transition ...
 
-    # The original logic was adding separators in between any 2 phonemes, regardless of their meaning.  
-    # phonemes = _separator.join(phonemes)
-    # phoneme_ids = to_phoneme_ids(phonemes)
-    
-    # My idea is to group annotations with their annotated phonemes, so that we don't insert separators between them.
-    phonemes = group_phonemes(phonemes)
-    phonemes = _separator.join(phonemes)
-    phoneme_ids = to_phoneme_ids(phonemes)
-    
-    return phonemes, phoneme_ids 
+    phonemes = separator.join(phonemes)
+    ids = [symbol_to_id[phoneme] for phoneme in phonemes]
+
+    return phonemes, ids
+
+
+def phone_id_to_display(phone_id):
+    return symbols[phone_id]
