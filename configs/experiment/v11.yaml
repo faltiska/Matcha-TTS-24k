@@ -1,6 +1,6 @@
 # @package _global_
 # Reverted to encoder size from V8 since a larger model like in V9 or V10 did not make a difference.
-# The code was using split_ipa and was removing spaces after commas, assigning symbol IDFs to groups.
+# The code was using split_ipa and was removing spaces after commas, assigning symbol IDs to groups.
 # Total number of symbols grew to 3-4000 :( 
 # I tested at epoch 140 or so, and found big problems like skipped phonemes and generally un intelligible speech.
 

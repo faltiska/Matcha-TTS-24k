@@ -18,7 +18,7 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: null
+ckpt_path: logs/train/v12/checkpoint_epoch=124.ckpt
 
 model:
   spk_emb_dim: 96
@@ -55,12 +55,7 @@ model:
     use_mu_prior: true
 
   optimizer:
-    lr: 1e-4
-    weight_decay: 1e-2
-    
-    # Enable after early training stabilizes (grad norm < gradient_clip_val).
-    # When you enable it, set gradient clipping to null below.
-    # fused: true
-
-trainer:
-   gradient_clip_val: 4
+    # lr: 1e-4
+    # weight_decay: 7e-3
+    lr: 5e-5
+    weight_decay: 1e-3
