@@ -12,7 +12,7 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: null
+ckpt_path: logs/train/v14/checkpoint_epoch=199.ckpt
 
 model:
   spk_emb_dim: 96
@@ -50,5 +50,7 @@ model:
     use_mu_prior: true
 
   optimizer:
-    lr: 1e-4
-    weight_decay: 1e-2
+#    lr: 1e-4
+#    weight_decay: 1e-2
+    lr: 5e-5
+    weight_decay: 1e-3
