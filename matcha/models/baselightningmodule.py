@@ -32,6 +32,7 @@ class BaseLightningClass(LightningModule, ABC):
     def get_losses(self, batch):
         x, x_lengths = batch["x"], batch["x_lengths"]
         y, y_lengths = batch["y"], batch["y_lengths"]
+        y_fine, y_fine_lengths = batch["y_fine"], batch["y_fine_lengths"]
         spks = batch["spks"]
 
         # self(...) will invoke the __call__ method from the super class, 
@@ -41,6 +42,8 @@ class BaseLightningClass(LightningModule, ABC):
             x_lengths=x_lengths,
             y=y,
             y_lengths=y_lengths,
+            y_fine=y_fine,
+            y_fine_lengths=y_fine_lengths,
             spks=spks,
         )
 

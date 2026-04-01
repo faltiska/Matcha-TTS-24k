@@ -15,16 +15,16 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.08},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.04},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.03},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.04},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.04},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.09},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.00},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.04},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.03},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.02},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.0},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.0},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.0},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.0},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.0},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.0},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.0},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.0},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.0},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.0},
     {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0 },
 ]
 
@@ -128,30 +128,26 @@ class MatchaTTSInfer(nn.Module):
 
         phoneme_durations = phoneme_durations * length_scale
 
-        # Original code was:
-        #  w = torch.exp(logw) * x_mask
-        #  w_ceil = torch.ceil(w) * length_scale
-        #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-        # Rounding up (ceil) each phoneme duration was causing the generated speech to be consistently too slow.
-        # Now we round each phoneme duration to the nearest integer and we clamp to minimum 1 to avoid silent phonemes.
-        # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
+        # Durations are in fine frames (hop=128). Round to nearest integer, clamp to minimum 1.
         phoneme_durations = phoneme_durations.round().clamp(min=1) * x_mask.squeeze(1)
 
-        y_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
+        # Ensure fine length is compatible with the UNet and even for avg_pool1d
+        y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
+        y_fine_max_length = y_fine_lengths.max()
+        y_fine_max_length_ = fix_len_compatibility(y_fine_max_length) * 2
+
+        # Build fine resolution alignment and expand encoder mel vectors
+        y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length_).unsqueeze(1).to(x_mask.dtype)
+        attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
+        attn_fine = generate_path(phoneme_durations, attn_mask_fine.squeeze(1)).unsqueeze(1)
+        mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
+
+        # Downsample fine resolution predicted mel to hop=256 for the decoder
+        mu_y = torch.nn.functional.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        y_max_length_ = y_fine_max_length_ // 2
+        y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
         y_max_length = y_lengths.max()
-        y_max_length_ = fix_len_compatibility(y_max_length)
-
-        # Using obtained durations `w` construct alignment map `attn`
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
-        attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
-        attn = generate_path(phoneme_durations, attn_mask.squeeze(1)).unsqueeze(1)
-
-        # Align encoded text and get mu_y
-        # Original code was 
-        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        # mu_y = mu_y.transpose(1, 2)
-        # but that can be simplified as:
-        mu_y = torch.matmul(mu_x, attn.squeeze(1))
 
         # Generate speech tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps)

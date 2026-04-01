@@ -1,0 +1,52 @@
+# @package _global_
+# Double resolution for MAS and prior loss.
+# Larger kernel size to capture interrogations.
+
+run_name: v15
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: null
+
+model:
+  spk_emb_dim: 96
+  prior_loss: true
+
+  encoder:
+    encoder_params:
+      # 192 + 96 = 288
+      # 288 / 6 = 48, divisible by 8
+      n_channels: 192
+      # 288 * 4 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 9
+      p_dropout: 0.05
+      prenet: true
+      prenet_kernel_size: 7
+    
+    duration_predictor_params:
+      filter_channels_dp: 112
+      kernel_size: 7
+      n_layers: 4
+      p_dropout: 0.05
+
+  decoder:
+    # 384 = 6 * 64
+    # 360 = 5 * 72 
+    channels: [336, 336]
+    attention_head_dim: 56
+    num_heads: 6
+    dropout: 0.05
+
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-2

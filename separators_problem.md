@@ -41,5 +41,8 @@ Model will get slower so maybe a better approach would be to use 16KHz audio wit
 
 2. Double the MAS resolution.
 I could run Encoder, MAS and Duration Predictor with a hop length of 128.
-Just before the Decoder, I would scale down everything so that Decoder would get a conditioning mel
-with a hop of 256 and produce a mel that Vocos will understand. 
+MAS will then align segments with a hop of 128 against the high resolution ground truth mel.
+When I assemble the predicted mel I have to downsample it by a factor of 2, to get standard resolution mel, which I can 
+send to the Encoder, which will still work with a hop length of 256.
+The durations calculated by MAS will have to be divided by 2 before we feed them into the duration predictor.
+Prior loss too will be calculated on the standard resolution mel.

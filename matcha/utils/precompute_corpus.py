@@ -21,7 +21,7 @@ It then saves:
   - metadata.json with the parameters used
 
 Usage:
-  python -m matcha.utils.precompute_corpus -i configs/data/corpus-small.yaml
+  python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-24k.yaml
 """
 
 import argparse
@@ -78,13 +78,15 @@ def compute_and_save_mel(
     sample_rate: int,
     mel_mean: float,
     mel_std: float,
-    mel_extractor,  # <-- Now a function
-) -> Tuple[bool, str, int]:
+    mel_extractor,
+    fine_mel_extractor,
+) -> Tuple[bool, str]:
     """
     Compute and save normalized mel spectrogram using a backend-agnostic extractor.
+    Also saves a half-hop mel as <out_path>.fine.npy if it does not already exist.
 
     Returns:
-        Tuple of (success: bool, error_msg: str, mel_length: int)
+        Tuple of (success: bool, error_msg: str)
     """
     try:
         audio, sr = ta.load(str(wav_path))
@@ -95,17 +97,27 @@ def compute_and_save_mel(
         return False, f"Sample rate mismatch for {wav_path} (found {sr}, expected {sample_rate})", 0
 
     try:
-        mel = mel_extractor(audio).squeeze().cpu()
-        mel = normalize(mel, mel_mean, mel_std).cpu()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        arr = mel.numpy().astype(np.float32)
-        if np.isnan(arr).any() or np.isinf(arr).any():
-            raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in mel for {out_path}")
-        np.save(out_path, arr)
-        mel_length = arr.shape[-1]
-        return True, "", mel_length
+        if not out_path.exists():
+            mel = mel_extractor(audio).squeeze().cpu()
+            mel = normalize(mel, mel_mean, mel_std).cpu()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            arr = mel.numpy().astype(np.float32)
+            if np.isnan(arr).any() or np.isinf(arr).any():
+                raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in mel for {out_path}")
+            np.save(out_path, arr)
+            mel_length = arr.shape[-1]
+        fine_out_path = out_path.with_suffix(".fine.npy")
+        if not fine_out_path.exists():
+            fine_mel = fine_mel_extractor(audio).squeeze().cpu()
+            fine_mel = normalize(fine_mel, mel_mean, mel_std).cpu()
+            fine_arr = fine_mel.numpy().astype(np.float32)
+            if np.isnan(fine_arr).any() or np.isinf(fine_arr).any():
+                raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in fine mel for {out_path}")
+            np.save(fine_out_path, fine_arr)
+
+        return True, ""
     except Exception as e:  # pylint: disable=broad-except
-        return False, f"Processing failed for {wav_path}: {e}", 0
+        return False, f"Processing failed for {wav_path}: {e}"
 
 
 def main():
@@ -179,6 +191,16 @@ def main():
         f_min=f_min,
         f_max=f_max,
     )
+    fine_mel_extractor = get_mel_extractor(
+        mel_backend,
+        sample_rate=sample_rate,
+        n_fft=n_fft,
+        hop_length=hop_length // 2,
+        win_length=win_length,
+        n_mels=n_mels,
+        f_min=f_min,
+        f_max=f_max,
+    )
     print(f"[precompute_corpus] Using mel_backend: {mel_backend} "
           f"with params: sample_rate={sample_rate}, n_fft={n_fft}, hop_length={hop_length}, "
           f"win_length={win_length}, n_mels={n_mels}, f_min={f_min}, f_max={f_max}")
@@ -209,17 +231,19 @@ def main():
     for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
         # rel_base is like "1/abc"
         out_path = mel_dir / (rel_base + ".npy")
-        if out_path.exists():
+        fine_out_path = out_path.with_suffix(".fine.npy")
+        if out_path.exists() and fine_out_path.exists():
             existing += 1
             print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
             continue
-        success, msg, mel_length = compute_and_save_mel(
+        success, msg = compute_and_save_mel(
             wav_path=wav_path,
             out_path=out_path,
             sample_rate=sample_rate,
             mel_mean=mel_mean,
             mel_std=mel_std,
-            mel_extractor=mel_extractor,  # Pass backend-agnostic extractor
+            mel_extractor=mel_extractor,
+            fine_mel_extractor=fine_mel_extractor,
         )
         if success:
             processed += 1

@@ -429,11 +429,12 @@ class TextMelDataset(torch.utils.data.Dataset):
         _, phoneme_ids = multilingual_phonemizer(text, language)
         phoneme_ids = torch.IntTensor(phoneme_ids)
         
-        mel = self.get_mel(rel_base_path)
+        mel, mel_fine = self.get_mel(rel_base_path)
 
         sample = {
             "x": phoneme_ids,
             "y": mel,
+            "y_fine": mel_fine,
             "spk": spk,
             "filepath": rel_base_path,
         }
@@ -445,21 +446,13 @@ class TextMelDataset(torch.utils.data.Dataset):
         # Try loading cached, already-normalized mel
         if self.mel_dir is not None:
             mel_path = Path(self.mel_dir) / (rel_base_path + ".npy")
-            if mel_path.exists():
-                arr = np.load(mel_path).astype(np.float32)
-                mel = torch.from_numpy(arr).float()
-                return mel
+            fine_mel_path = Path(self.mel_dir) / (rel_base_path + ".fine.npy")
+            if mel_path.exists() and fine_mel_path.exists():
+                mel = torch.from_numpy(np.load(mel_path).astype(np.float32))
+                mel_fine = torch.from_numpy(np.load(fine_mel_path).astype(np.float32))
+                return mel, mel_fine
 
-        # Compute mel from wav file if not cached
-        wav_path = self.filelist_dir / "wav" / (rel_base_path + ".wav")
-        if not wav_path.exists():
-            raise FileNotFoundError(f"WAV file not found: {wav_path}")
-
-        audio, sr = ta.load(wav_path)
-        assert sr == self.sample_rate
-        mel = self.mel_extractor(audio).squeeze()
-        mel = normalize(mel, self.data_parameters["mel_mean"], self.data_parameters["mel_std"])
-        return mel
+        raise FileNotFoundError(f"Precomputed mel not found for {rel_base_path}. Run precompute_corpus first.")
 
     def __getitem__(self, index):
         datapoint = self.get_datapoint(self.filepaths_and_text[index])
@@ -480,27 +473,31 @@ class TextMelBatchCollate:
 
     def __call__(self, batch):
         B = len(batch)
-        y_max_length = max([item["y"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
-        y_max_length = fix_len_compatibility(y_max_length)
+        y_max_length = fix_len_compatibility(max([item["y"].shape[-1] for item in batch]))  # pylint: disable=consider-using-generator
+        y_fine_max_length = y_max_length * 2
         x_max_length = max([item["x"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
         n_feats = batch[0]["y"].shape[-2]
 
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
+        y_fine = torch.zeros((B, n_feats, y_fine_max_length), dtype=torch.float32)
         x = torch.zeros((B, x_max_length), dtype=torch.long)
 
-        y_lengths, x_lengths = [], []
+        y_lengths, y_fine_lengths, x_lengths = [], [], []
         spks = []
         filepaths = []
         for i, item in enumerate(batch):
-            y_, x_ = item["y"], item["x"]
+            y_, y_fine_, x_ = item["y"], item["y_fine"], item["x"]
             y_lengths.append(y_.shape[-1])
+            y_fine_lengths.append(y_fine_.shape[-1])
             x_lengths.append(x_.shape[-1])
             y[i, :, : y_.shape[-1]] = y_
+            y_fine[i, :, : y_fine_.shape[-1]] = y_fine_
             x[i, : x_.shape[-1]] = x_
             spks.append(item["spk"])
             filepaths.append(item["filepath"])
 
         y_lengths = torch.tensor(y_lengths, dtype=torch.long)
+        y_fine_lengths = torch.tensor(y_fine_lengths, dtype=torch.long)
         x_lengths = torch.tensor(x_lengths, dtype=torch.long)
         spks = torch.tensor(spks, dtype=torch.long) if self.n_spks > 1 else None
 
@@ -509,6 +506,8 @@ class TextMelBatchCollate:
             "x_lengths": x_lengths,
             "y": y,
             "y_lengths": y_lengths,
+            "y_fine": y_fine,
+            "y_fine_lengths": y_fine_lengths,
             "spks": spks,
             "filepaths": filepaths,
         }

@@ -58,7 +58,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.update_data_statistics(data_statistics)
 
-    def forward(self, x, x_lengths, y, y_lengths, spks):
+    def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks):
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -70,9 +70,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size, max_text_length)
             x_lengths (torch.Tensor): lengths of texts in batch.
                 shape: (batch_size,)
-            y (torch.Tensor): batch of corresponding mel-spectrograms.
+            y (torch.Tensor): batch of corresponding mel-spectrograms at hop=256.
                 shape: (batch_size, n_feats, max_mel_length)
-            y_lengths (torch.Tensor): lengths of mel-spectrograms in batch.
+            y_lengths (torch.Tensor): lengths of mel-spectrograms at hop=256.
+                shape: (batch_size,)
+            y_fine (torch.Tensor): batch of corresponding mel-spectrograms at hop=128.
+                shape: (batch_size, n_feats, max_mel_length * 2)
+            y_fine_lengths (torch.Tensor): lengths of mel-spectrograms at hop=128.
                 shape: (batch_size,)
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
@@ -81,31 +85,24 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
-        y_max_length = y.shape[-1]
+        y_fine_max_length = y_fine.shape[-1]
 
-        y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
-        attn_mask = x_mask.unsqueeze(-1) * y_mask.unsqueeze(2)
+        y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
+        attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
 
-        # Use MAS to find most likely alignment `attn` between text and mel-spectrogram
+        # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
         with torch.no_grad():
             # This computes the distance between every text token and ground truth mel frame 
             # using a  Gaussian log-likelihood formula 
             factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-            y_square = torch.matmul(factor.transpose(1, 2), y ** 2)
-            # Original code was:
-            #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
-            # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
-            # I've replaced it with just -mu_x
-            y_mu_double = torch.matmul(-mu_x.transpose(1, 2), y)
+            y_fine_square = torch.matmul(factor.transpose(1, 2), y_fine ** 2)
+            y_fine_mu_double = torch.matmul(-mu_x.transpose(1, 2), y_fine)
             mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
-            log_prior = y_square - y_mu_double + mu_square + self.mas_const
+            log_prior = y_fine_square - y_fine_mu_double + mu_square + self.mas_const
 
-            attn = maximum_path_gpu(log_prior, attn_mask.squeeze(1).to(torch.int32), log_prior.dtype)
+            attn_fine = maximum_path_gpu(log_prior, attn_mask_fine.squeeze(1).to(torch.int32), log_prior.dtype)
 
-        # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
-        # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
-        # valid tokens, preventing attention to padding.
-        mas_durations = torch.sum(attn.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
+        mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
         
         # I am adding a 2 to make the values greater than 1, because MSE is more forgiving with sub-unitary losses
         # and more punishing with supra-unitary losses.
@@ -117,33 +114,23 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm. 
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
-        # Original code was: 
-        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        # mu_y = mu_y.transpose(1, 2)
-        # but that can be simplified as:
-        mu_y = torch.matmul(mu_x, attn.squeeze(1))
-
-        # Detach mu_y to prevent diffusion gradients from flowing back to the encoder. We do not want 
-        # the Encoder to learn to produce mels that make the Decoder's job easier. We want the Encoder to learn 
-        # how to produce mels that match the ground truth.
-        # Diffusion still learns from the diff_loss, it is not affected by this detach.
-        detached_mu_y = mu_y.detach()
-
-        # Compute loss of the decoder
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y)
+        # Expand encoder mel vectors into a fine resolution predicted mel using the fine alignment
+        mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
         if self.prior_loss:
-            # Original code was: 
-            #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
-            # but I could remove the constants without affecting the meaning of the loss.
-            #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # Also, the values are too small, 0.05 the after first epoch tending to 0.0001
-            # Such small gradients are not allowing the model to learn, so I am not squaring them up anymore.
-            # This had a positive effect on duration estimation too, which started showing much smaller losses.  
-            # Before this change, I could not get duration loss below 0.15, not even after 400K steps.
-            prior_loss = torch.sum(torch.abs(y - mu_y) * y_mask)
-            prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
+            prior_loss = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
+            prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
         else:
             prior_loss = 0
+
+        # Downsample fine resolution predicted mel to standard resolution for the decoder
+        mu_y_coarse = torch.nn.functional.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        detached_mu_y_coarse = mu_y_coarse.detach()
+
+        y_max_length = y.shape[-1]
+        y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
+
+        # Compute loss of the decoder
+        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
 
         return diff_loss, dur_loss, prior_loss
