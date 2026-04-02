@@ -473,9 +473,10 @@ class TextMelBatchCollate:
 
     def __call__(self, batch):
         B = len(batch)
-        y_max_length = fix_len_compatibility(max([item["y"].shape[-1] for item in batch]))  # pylint: disable=consider-using-generator
+        y_max_length = max([item["y"].shape[-1] for item in batch])
+        y_max_length = fix_len_compatibility(y_max_length)
         y_fine_max_length = y_max_length * 2
-        x_max_length = max([item["x"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
+        x_max_length = max([item["x"].shape[-1] for item in batch])
         n_feats = batch[0]["y"].shape[-2]
 
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)

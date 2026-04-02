@@ -25,14 +25,15 @@ model:
       filter_channels: 1152
       n_heads: 6
       n_layers: 4
-      kernel_size: 9
+      kernel_size: 7
       p_dropout: 0.05
       prenet: true
-      prenet_kernel_size: 7
-    
+      # should not go over 5, it causes prior to shoot up at around 50K steps
+      prenet_kernel_size: 5 
+      
     duration_predictor_params:
       filter_channels_dp: 112
-      kernel_size: 7
+      kernel_size: 5
       n_layers: 4
       p_dropout: 0.05
 

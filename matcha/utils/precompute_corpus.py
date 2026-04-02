@@ -82,8 +82,8 @@ def compute_and_save_mel(
     fine_mel_extractor,
 ) -> Tuple[bool, str]:
     """
-    Compute and save normalized mel spectrogram using a backend-agnostic extractor.
-    Also saves a half-hop mel as <out_path>.fine.npy if it does not already exist.
+    Compute and save 2 normalized mel spectrograms using a backend-agnostic extractor.
+    On at the hop_length defined in config, one at half that length, for operations that require a higher resolution. 
 
     Returns:
         Tuple of (success: bool, error_msg: str)

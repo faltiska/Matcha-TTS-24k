@@ -128,28 +128,37 @@ class MatchaTTSInfer(nn.Module):
 
         phoneme_durations = phoneme_durations * length_scale
 
-        # Durations are in fine frames (hop=128). Round to nearest integer, clamp to minimum 1.
-        phoneme_durations = phoneme_durations.round().clamp(min=1) * x_mask.squeeze(1)
+        # Original code was:
+        #  w = torch.exp(logw) * x_mask
+        #  w_ceil = torch.ceil(w) * length_scale
+        #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
+        # Rounding up (ceil) each phoneme duration was causing the generated speech to be consistently too slow.
+        # Now we round each phoneme duration to the nearest integer and we clamp to minimum 1 to avoid silent phonemes.
+        # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
+        phoneme_durations = phoneme_durations.round() * x_mask.squeeze(1)
 
-        # Ensure fine length is compatible with the UNet and even for avg_pool1d
+        # Ensure fine length is compatible with the UNet and even number, for avg_pool1d
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
         y_fine_max_length = y_fine_lengths.max()
         y_fine_max_length_ = fix_len_compatibility(y_fine_max_length) * 2
 
-        # Build fine resolution alignment and expand encoder mel vectors
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
         attn_fine = generate_path(phoneme_durations, attn_mask_fine.squeeze(1)).unsqueeze(1)
+
+        # Original code was 
+        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        # mu_y = mu_y.transpose(1, 2)
+        # but that can be simplified as:
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
-        # Downsample fine resolution predicted mel to hop=256 for the decoder
+        # Downsample fine resolution predicted mel to standard resolution for the decoder
         mu_y = torch.nn.functional.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
         y_max_length = y_lengths.max()
         y_mask = sequence_mask(y_lengths, y_max_length_).unsqueeze(1).to(x_mask.dtype)
 
-        # Generate speech tracing the probability flow
         decoder_outputs = self.decoder(mu_y, y_mask, n_timesteps)
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 

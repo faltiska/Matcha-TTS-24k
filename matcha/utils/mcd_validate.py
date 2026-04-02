@@ -36,6 +36,19 @@ speaker_009 MCD:  5.55 dB  5.31 dB  4.80 dB  4.72 dB  4.66 dB        5.62 dB  5.
 -------------------------------------------------------------        ----------------------------------------------------        
 Average MCD:      5.28 dB  4.97 dB  4.55 dB  4.48 dB  4.34 dB        5.27 dB  4.91 dB  4.63 dB  4.38 dB  4.20 dB  4.14 dB
 
+                  v15/044  v15/064  v15/109  v15/134  v15/184  
+speaker_000 MCD:  6.08 dB  5.62 dB        
+speaker_001 MCD:  4.71 dB  4.33 dB        
+speaker_002 MCD:  4.74 dB  4.48 dB        
+speaker_003 MCD:  3.68 dB  3.54 dB        
+speaker_004 MCD:  6.36 dB  6.14 dB        
+speaker_005 MCD:  4.62 dB  4.37 dB        
+speaker_006 MCD:  4.62 dB  4.39 dB        
+speaker_007 MCD:  6.06 dB  5.73 dB        
+speaker_008 MCD:  6.23 dB  5.80 dB        
+speaker_009 MCD:  5.64 dB  5.26 dB        
+----------------------------------        
+Average MCD:      5.27 dB  4.97 dB
 
 All measurements until V8 were taken with the recommended scaling applied.
 Measurements after V8 were taken without any scale corrections.
