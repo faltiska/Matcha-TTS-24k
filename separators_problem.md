@@ -39,10 +39,13 @@ The model is not inherently borken, just too blunt.
 Lower hop length from 256 to 192 will shorten frame length from 10.6ms to 8ms.
 Model will get slower so maybe a better approach would be to use 16KHz audio with a hop of 128.
 
-2. Double the MAS resolution.
+2. Double Resolution for MAS
 I could run Encoder, MAS and Duration Predictor with a hop length of 128.
 MAS will then align segments with a hop of 128 against the high resolution ground truth mel.
-When I assemble the predicted mel I have to downsample it by a factor of 2, to get standard resolution mel, which I can 
-send to the Encoder, which will still work with a hop length of 256.
-The durations calculated by MAS will have to be divided by 2 before we feed them into the duration predictor.
-Prior loss too will be calculated on the standard resolution mel.
+MAS will be able to find positions that are multiples of 5.33ms.
+Duration Predictor will learn to generate those fine-grained positions.
+I will assemble the fine resolution mel by repeating each predicted mel frame a number of time as computed by MAS at the fine resolution. 
+Prior Loss will be calculated on the fine resolution mel.
+To send it to the Decoder, though, I will have to downsample it by a factor of 2, to get standard resolution mel. 
+This way the Encoder will still work with a hop length of 256.
+The Vocoder too, at inference time will still run on mels with a hop of 256. 

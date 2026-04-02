@@ -1,6 +1,6 @@
 import math
 import torch
-
+import torch.nn.functional as F
 import logging
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
@@ -142,7 +142,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             prior_loss = 0
 
         # Downsample fine resolution predicted mel to standard resolution for the decoder
-        mu_y_coarse = torch.nn.functional.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        mu_y_coarse = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
 
         # Detach mu_y to prevent Decoder gradients from flowing back to the Encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. 

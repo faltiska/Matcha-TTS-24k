@@ -2,6 +2,7 @@ import io
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
@@ -137,7 +138,7 @@ class MatchaTTSInfer(nn.Module):
         # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
         phoneme_durations = phoneme_durations.round() * x_mask.squeeze(1)
 
-        # Ensure fine length is compatible with the UNet and even number, for avg_pool1d
+        # Ensure fine length is compatible with the UNet and even number
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
         y_fine_max_length = y_fine_lengths.max()
         y_fine_max_length_ = fix_len_compatibility(y_fine_max_length) * 2
@@ -153,7 +154,7 @@ class MatchaTTSInfer(nn.Module):
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
         # Downsample fine resolution predicted mel to standard resolution for the decoder
-        mu_y = torch.nn.functional.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
         y_max_length = y_lengths.max()
