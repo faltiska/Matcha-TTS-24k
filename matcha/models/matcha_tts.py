@@ -90,21 +90,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
 
-        # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
-        with torch.no_grad():
-            # This computes the distance between every text token and ground truth mel frame 
-            # using a  Gaussian log-likelihood formula 
-            factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-            y_fine_square = torch.matmul(factor.transpose(1, 2), y_fine ** 2)
-            # Original code was:
-            #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
-            # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
-            # I've replaced it with just -mu_x
-            y_fine_mu_double = torch.matmul(-mu_x.transpose(1, 2), y_fine)
-            mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
-            log_prior = y_fine_square - y_fine_mu_double + mu_square + self.mas_const
-
-            attn_fine = maximum_path_gpu(log_prior, attn_mask_fine.squeeze(1).to(torch.int32), log_prior.dtype)
+        attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
 
         # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
         # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
@@ -132,9 +118,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # Also, the values are too small, 0.05 the after first epoch tending to 0.0001
+            # Also, the values were too small, 0.05 the after first epoch tending to 0.0001
             # Such small gradients are not allowing the model to learn, so I am not squaring them up anymore.
-            # This had a positive effect on duration estimation too, which started showing much smaller losses.  
             # Before this change, I could not get duration loss below 0.15, not even after 400K steps.
             prior_loss = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
             prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
@@ -150,6 +135,27 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         detached_mu_y_coarse = mu_y_coarse.detach()
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
-        diff_loss, _ = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
+        diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
 
-        return diff_loss, dur_loss, prior_loss
+        return diff_loss, dur_loss, prior_loss, mas_duration_mean, mas_duration_std, mas_duration_max
+
+    def find_alignment(self, attn_mask_fine, mu_x, y_fine):
+        # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
+        with torch.no_grad():
+            with torch.autocast(device_type="cuda", enabled=False):
+                mu_x = mu_x.float()
+                y_fine = y_fine.float()
+                # This computes the distance between every text token and ground truth mel frame 
+                # using a  Gaussian log-likelihood formula 
+                factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
+                y_fine_square = torch.matmul(factor.transpose(1, 2), y_fine ** 2)
+                # Original code was:
+                #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
+                # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
+                # I've replaced it with just -mu_x
+                y_fine_mu_double = torch.matmul(-mu_x.transpose(1, 2), y_fine)
+                mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
+                log_prior = y_fine_square - y_fine_mu_double + mu_square + self.mas_const
+
+                attn_fine = maximum_path_gpu(log_prior, attn_mask_fine.squeeze(1).to(torch.int32), log_prior.dtype)
+        return attn_fine

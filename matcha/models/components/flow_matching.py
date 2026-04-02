@@ -104,7 +104,7 @@ class BASECFM(torch.nn.Module, ABC):
         # on the actual speech frames and the padding does not contribute to the loss:
         loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
         
-        return loss, y
+        return loss
 
 
 class CFM(BASECFM):
