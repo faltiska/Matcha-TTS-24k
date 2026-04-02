@@ -16,16 +16,16 @@ from matcha.utils.mp3_converter import encode_mp3
 SAMPLE_RATE = 24000
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.0},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.0},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.0},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.0},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.0},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.0},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.0},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.0},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.0},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.0},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.12},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.05},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.05},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.00},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.09},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.06},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.02},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.07},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.04},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.02},
     {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0 },
 ]
 
@@ -147,11 +147,13 @@ class MatchaTTSInfer(nn.Module):
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
         attn_fine = generate_path(phoneme_durations, attn_mask_fine.squeeze(1)).unsqueeze(1)
 
-        # Original code was 
-        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        # mu_y = mu_y.transpose(1, 2)
-        # but that can be simplified as:
-        mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
+        # Matmul in bf16 causes some precision problems in training, so I thought I would use fp32 here too
+        with torch.autocast(device_type="cuda", enabled=False):
+            # Original code was 
+            # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+            # mu_y = mu_y.transpose(1, 2)
+            # but that can be simplified as:
+            mu_y_fine = torch.matmul(mu_x.float(), attn_fine.float().squeeze(1))
 
         # Downsample fine resolution predicted mel to standard resolution for the decoder
         mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
