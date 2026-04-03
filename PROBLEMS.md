@@ -74,3 +74,7 @@ making the model much more forgiving with errors on short phonemes.
 But the author did not realize ln(2) = 0.69 and the MSE losses are really forgiving with subunitary numbers.
 The fix was to add a 2 before calculating the logs, since ln(3) > 1. 
 It has a huge effect, duration estimation loss drops like a rock with this change.
+
+13. Matmul in bf16 was introducing instability around MAS alignment.
+I may have introduced this myself, original repo was using fp16.
+I am still using bf16 now, but I cast tensors to fp32 for matmul, and it fixed the problem.

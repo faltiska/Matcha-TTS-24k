@@ -10,7 +10,7 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: null
+ckpt_path: logs/train/v15/runs/2026-04-02_08-59-09/checkpoints/checkpoint_epoch=099.ckpt
 
 model:
   spk_emb_dim: 96

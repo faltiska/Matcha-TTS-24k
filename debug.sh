@@ -1,1 +1,5 @@
-python -m matcha.cli --vocoder vocos --checkpoint_path "${1}" --text "OK, I hear you. Can we go now?" --spk "6" --debug
+python -m matcha.cli \
+--checkpoint_path logs/train/v15/runs/2026-04-02_08-59-09/checkpoints/checkpoint_epoch=099.ckpt \
+--text "My left hand reaches for her wrist. What are you doing?" \
+--spk "3" \
+--debug
