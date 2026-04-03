@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
-from matcha.text.phonemizers import multilingual_phonemizer, phone_id_to_display
+from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
 import av
@@ -227,7 +227,7 @@ def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timest
         )
     if not debug:
         return trim_trailing_silence(to_waveform(output["mel"], vocoder))
-    x_phones = [phone_id_to_display(id) for id in text_processed["x_phone_ids"]]
+    x_phones = text_processed["x_phones"]
     all_durations = output["phoneme_durations"].squeeze(0).tolist()
     all_raw_durations = output["raw_phoneme_durations"].squeeze(0).tolist()
     phoneme_dur_pairs = list(zip(x_phones, all_raw_durations, all_durations))

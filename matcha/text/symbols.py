@@ -21,8 +21,9 @@ _punctuation = ';:,.!?¡¿_—…-\'"«»“”()[]/ '
 
 vowels = "aeiouɑɐɒæəɘɚɛɜɝɞɨɪɔøɵɤʉʊyɶœɯʏʌᵻ"
 consonants = "bβcçdðfɡɢɣhɦɧħɥjɟʝkʎlɭʟɬɫɮmɱnɳɲŋɴpɸqrɹɺɾɽɻʀʁsʂʃtʈθvʋⱱwʍxχzʐʒʑʔʕʢʡʙɕɖʜɰ"
-annotations = "ˈˌːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚" # last four characters are all combining diacritics that are invisible on their own. 
-ipa_symbols = vowels + consonants + annotations
+pre_annotations = "ˈˌ"
+post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ̩̯̃̚" # last four characters are all combining diacritics that are invisible on their own.
+ipa_symbols = vowels + consonants + pre_annotations + post_annotations
 
 symbols = [separator] + list(_punctuation) + list(ipa_symbols)
 

@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import separator, symbols, symbol_to_id
+from matcha.text.symbols import separator, pre_annotations, post_annotations, symbol_to_id
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -103,10 +103,9 @@ def multilingual_phonemizer(text, language):
     # model the transitions too: phoneme - transition - phoneme - transition ...
 
     phonemes = separator.join(phonemes)
+    phonemes = re.sub(rf'([{re.escape(pre_annotations)}])\|', r'\1', phonemes)
+    phonemes = re.sub(rf'\|([{re.escape(post_annotations)}])', r'\1', phonemes)
+    
     ids = [symbol_to_id[phoneme] for phoneme in phonemes]
 
     return phonemes, ids
-
-
-def phone_id_to_display(phone_id):
-    return symbols[phone_id]
