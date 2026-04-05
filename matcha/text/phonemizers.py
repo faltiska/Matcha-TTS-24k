@@ -103,8 +103,10 @@ def multilingual_phonemizer(text, language):
     # model the transitions too: phoneme - transition - phoneme - transition ...
 
     phonemes = separator.join(phonemes)
-    phonemes = re.sub(rf'([{re.escape(pre_annotations)}])\|', r'\1', phonemes)
-    phonemes = re.sub(rf'\|([{re.escape(post_annotations)}])', r'\1', phonemes)
+
+    # remove separators from between annotations and the phonemes they annotate.
+    # phonemes = re.sub(rf'([{re.escape(pre_annotations)}])\|', r'\1', phonemes)
+    # phonemes = re.sub(rf'\|([{re.escape(post_annotations)}])', r'\1', phonemes)
     
     ids = [symbol_to_id[phoneme] for phoneme in phonemes]
 
