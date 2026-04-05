@@ -21,7 +21,7 @@ It then saves:
   - metadata.json with the parameters used
 
 Usage:
-  python -m matcha.utils.precompute_corpus -i configs/data/corpus-small-24k.yaml
+  python -m matcha.utils.precompute_mels -i configs/data/corpus-24k.yaml
 """
 
 import argparse
@@ -103,7 +103,7 @@ def compute_and_save_mel(
             out_path.parent.mkdir(parents=True, exist_ok=True)
             arr = mel.numpy().astype(np.float32)
             if np.isnan(arr).any() or np.isinf(arr).any():
-                raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in mel for {out_path}")
+                raise RuntimeError(f"[precompute_mels] ERROR: NaN/Inf detected in mel for {out_path}")
             np.save(out_path, arr)
             mel_length = arr.shape[-1]
         fine_out_path = out_path.with_suffix(".fine.npy")
@@ -112,7 +112,7 @@ def compute_and_save_mel(
             fine_mel = normalize(fine_mel, mel_mean, mel_std).cpu()
             fine_arr = fine_mel.numpy().astype(np.float32)
             if np.isnan(fine_arr).any() or np.isinf(fine_arr).any():
-                raise RuntimeError(f"[precompute_corpus] ERROR: NaN/Inf detected in fine mel for {out_path}")
+                raise RuntimeError(f"[precompute_mels] ERROR: NaN/Inf detected in fine mel for {out_path}")
             np.save(fine_out_path, fine_arr)
 
         return True, ""
@@ -201,7 +201,7 @@ def main():
         f_min=f_min,
         f_max=f_max,
     )
-    print(f"[precompute_corpus] Using mel_backend: {mel_backend} "
+    print(f"[precompute_mels] Using mel_backend: {mel_backend} "
           f"with params: sample_rate={sample_rate}, n_fft={n_fft}, hop_length={hop_length}, "
           f"win_length={win_length}, n_mels={n_mels}, f_min={f_min}, f_max={f_max}")
 
@@ -224,9 +224,9 @@ def main():
     failed = []
 
     mel_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[precompute_corpus] Config: {cfg_path}")
-    print(f"[precompute_corpus] Output: {mel_dir}")
-    print(f"[precompute_corpus] Files: {total} (train+validate)")
+    print(f"[precompute_mels] Config: {cfg_path}")
+    print(f"[precompute_mels] Output: {mel_dir}")
+    print(f"[precompute_mels] Files: {total} (train+validate)")
 
     for i, (rel_base, wav_path) in enumerate(rel_and_abs_wavs, start=1):
         # rel_base is like "1/abc"
@@ -234,7 +234,7 @@ def main():
         fine_out_path = out_path.with_suffix(".fine.npy")
         if out_path.exists() and fine_out_path.exists():
             existing += 1
-            print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
+            print(f"\r[precompute_mels] {i}/{total} done.", end="", flush=True)
             continue
         success, msg = compute_and_save_mel(
             wav_path=wav_path,
@@ -247,9 +247,9 @@ def main():
         )
         if success:
             processed += 1
-            print(f"\r[precompute_corpus] {i}/{total} done.", end="", flush=True)
+            print(f"\r[precompute_mels] {i}/{total} done.", end="", flush=True)
         else:
-            print(f"[precompute_corpus] ERROR: {msg}")
+            print(f"[precompute_mels] ERROR: {msg}")
             failed.append((str(wav_path), msg))
 
     # Write metadata for traceability
@@ -287,7 +287,7 @@ def main():
             for wav_path, msg in failed:
                 f.write(f"{wav_path}\t{msg}\n")
 
-    print(f"\n[precompute_corpus] Finished. processed={processed}, existing={existing}, failed={len(failed)}.\nMetadata at {mel_dir/'metadata.json'}")
+    print(f"\n[precompute_mels] Finished. processed={processed}, existing={existing}, failed={len(failed)}.\nMetadata at {mel_dir/'metadata.json'}")
 
 
 if __name__ == "__main__":
