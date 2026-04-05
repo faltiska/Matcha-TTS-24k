@@ -5,7 +5,7 @@ For each recording in the CSV, loads the precomputed mel, runs ASE and RSE to pr
 the speaker embeddings. Averages predictions across all recordings and writes the new
 speaker's embeddings into an expanded copy of the Matcha checkpoint.
 
-Mel files are expected at <csv_dir>/mels/<rel_base>.npy, as produced by precompute_corpus.py.
+Mel files are expected at <csv_dir>/mels/<rel_base>.npy, as produced by precompute_mels.py.
 
 Usage:
     python -m matcha.add_speaker \
