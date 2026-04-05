@@ -75,7 +75,7 @@ class DynamicBatchSampler(Sampler):
     def _get_lengths(self):
         """
         Get mel frame count for each sample, from the mel files.
-        Use precompute_corpus to generate the mels before training.
+        Use precompute_mels to generate the mels before training.
         """
         lengths = []
         for i in range(len(self.dataset)):
@@ -452,7 +452,7 @@ class TextMelDataset(torch.utils.data.Dataset):
                 mel_fine = torch.from_numpy(np.load(fine_mel_path).astype(np.float32))
                 return mel, mel_fine
 
-        raise FileNotFoundError(f"Precomputed mel not found for {rel_base_path}. Run precompute_corpus first.")
+        raise FileNotFoundError(f"Precomputed mel not found for {rel_base_path}. Run precompute_mels first.")
 
     def __getitem__(self, index):
         datapoint = self.get_datapoint(self.filepaths_and_text[index])
