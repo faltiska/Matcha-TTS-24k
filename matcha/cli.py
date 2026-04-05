@@ -10,7 +10,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HOP_LENGTH, ODE_SOLVER, VOICES
+from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HIGH_RES_HOP_LENGTH, ODE_SOLVER, VOICES
 
 VOCODERS = { "vocos" }
 
@@ -128,7 +128,7 @@ def speak(args, model, vocoder, text, speaker=0):
         dur_path = Path(args.output_folder) / f"{base_name}_durations.txt"
         # Columns: phoneme | raw duration (frames) | enforced duration (frames) | start time (seconds)
         # Raw duration is the duration predictor output before the monotonic enforcement in synthesise().
-        frame_seconds = HOP_LENGTH / SAMPLE_RATE
+        frame_seconds = HIGH_RES_HOP_LENGTH / SAMPLE_RATE
         lines = []
         cumulative_frames = 0
         for symbol, raw, dur in phoneme_dur_pairs:

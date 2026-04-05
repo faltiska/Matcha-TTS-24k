@@ -3,6 +3,7 @@ import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio.functional as AF
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
@@ -13,23 +14,23 @@ import av
 import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
 
-SAMPLE_RATE = 24000
-
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0.0},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0.0},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0.0},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0.0},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0.0},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0.0},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0.0},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0.0},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0.0},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0.0},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0 },
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0},
+    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0},
 ]
 
-HOP_LENGTH = 256
+SAMPLE_RATE = 24000
+STD_RES_HOP_LENGTH = 256
+HIGH_RES_HOP_LENGTH = 256
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
@@ -134,9 +135,9 @@ class MatchaTTSInfer(nn.Module):
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         # Rounding up (ceil) each phoneme duration was causing the generated speech to be consistently too slow.
-        # Now we round each phoneme duration to the nearest integer and we clamp to minimum 1 to avoid silent phonemes.
+        # Now we round each phoneme duration to the nearest integer, and we clamp to minimum 1 to avoid silent phonemes.
         # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
-        phoneme_durations = phoneme_durations.round() * x_mask.squeeze(1)
+        phoneme_durations = phoneme_durations.round().clamp(min=1) * x_mask.squeeze(1)
 
         # Ensure fine length is compatible with the UNet and even number
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
@@ -155,8 +156,8 @@ class MatchaTTSInfer(nn.Module):
             # but that can be simplified as:
             mu_y_fine = torch.matmul(mu_x.float(), attn_fine.float().squeeze(1))
 
-        # Downsample fine resolution predicted mel to standard resolution for the decoder
-        mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        mu_y = self.downsample(mu_y_fine)
+
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
         y_max_length = y_lengths.max()
@@ -175,6 +176,19 @@ class MatchaTTSInfer(nn.Module):
             }
         else:
             return { "mel":  mel }
+
+    def downsample(self, mu_y_fine):
+        # Downsample fine resolution predicted mel to standard resolution for the decoder
+        # mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+
+        # Alternate method 2: convert from log space to lin space before pool1d.
+        # Averaging in the log domain is mathematically equivalent to a geometric mean. 
+        # In acoustic terms, this would disproportionately weight quiet frames. 
+        # By using exp first, you perform an arithmetic mean of the magnitudes, which correctly preserves the local energy.
+        mu_y = torch.exp(mu_y_fine)
+        mu_y = AF.resample(mu_y, orig_freq=2, new_freq=1, resampling_method='sinc_interp_kaiser')
+        mu_y = torch.log(torch.clamp(mu_y, min=1e-9))
+        return mu_y
 
 
 def load_matcha(model_name, checkpoint_path):
