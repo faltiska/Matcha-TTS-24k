@@ -48,7 +48,7 @@ python -m matcha.utils.measure_silence -i configs/data/corpus-24k.yaml
 If you see significant variation in trailing silence between speakers (e.g., some speakers with ~300ms and others with ~900ms), you should normalize it.
 Backup your wav files first, then add silence to reach a consistent target duration:
 ```
-python -m matcha.utils.add_silence -i configs/data/corpus-24k.yaml --target_silence 0.8
+python -m matcha.utils.normalize_silence -i configs/data/corpus-24k.yaml --target_silence 0.8
 ```
 The script measures current silence at -60dB threshold and adds only what's needed to reach the target.
 After running, verify the normalization by measuring again - all speakers should now have the same trailing silence duration.
@@ -67,7 +67,7 @@ Take the values and put them in the yaml file.
 Precompute mel spectrogram cache to speed up training. 
 This avoids recomputing mels every epoch and reduces data-loading overhead.
 ```
-python -m matcha.utils.precompute_corpus -i configs/data/corpus-24k.yaml
+python -m matcha.utils.precompute_mels -i configs/data/corpus-24k.yaml
 ```
 
 You can test the precomputed mel files using the vocoder wrapper scripts:
