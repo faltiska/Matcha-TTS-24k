@@ -151,3 +151,85 @@ Today, we use AI models trained on those human ratings to "predict" the score.
 
 ## Code changes I can consider in the future (not now!)
 Use a LR scheduler
+
+
+# Better encoder:
+1. I want to modify the encoder to separate the energy / pitch / prosody from duration prediction.
+Right now, it works as follows:
+Take a phonetic representation of the text, with separators in between each phoneme, let's call it X. 
+X has annotation symbols too, like stress marekers and duration modifiers along with voiced phonemes. 
+Separators are indiscriminatelly added between each 2 symbols, annotations or voiced.
+X is represent it as symbol IDs, there is a symbol IDs embedding table. Then:
+```
+x = prenet(x)
+x = torch.cat([x, speaker_embedding)
+x = encoder(x, x_mask)
+mu = proj_m(x) * x_mask
+logw = proj_w(x.detach())
+```
+
+Prenet is a simple net with a kernel of 5, and 6 layers of conv + SiLU + norm.
+Encoder is a transformer with attention, norm, FFN, norm.
+Proj_m, the mel generator is on layer of Conv + SiLU + Conv.
+Proj_w is 4 layers of conv + norm.
+The Encoder result is used in 2 ways: proj_m generates a mel frame for each phoneme, proj_w predicts a duration for each.
+It has a few drawbacks:
+1. Annotations are present in the input for the mel generator and the duration predictor. They get assigned a duration and a mel frame, which is unfounded. They are there, so the model is modeling them...
+2. Separators interject annotations and their annotated phonemes, and between last vowel and sentence terminators, like ? or !. The signal to raise the pitch accordingly is sometimes too diluted, model does not learn to read interrogations well enough.
+
+The mel generator needs separators, no matter what.
+There are transitional sounds between voiced phonemes, and the model needs a placeholder to assign them.
+But the duration predictor does not need them.  Also, thy hurt pitch / energy as explained. I would rather compute this on a phonetic representation without separators.
+But both proj_m and proj_w work on the output of the Encoder at the moment.
+
+I could keep the existing full pipeline for the mel path (X with separators and annotations → prenet → encoder → proj_m). 
+For the duration/prosody path, I could build a parallel sequence X_clean, same phonemes and annotations, no separators,
+and pass it through a shared prenet + a separate duration encoder, then feed that into proj_w.
+I can probably use the same Encoder with less params: 
+```
+dur_encoder = Encoder(
+    encoder_params.n_channels + spk_emb_dim,
+    encoder_params.filter_channels,
+    encoder_params.n_heads,
+    n_layers=2,           # shallower
+    kernel_size=3,        # narrower receptive field is fine for duration
+    p_dropout=encoder_params.p_dropout,
+)
+```
+Which addresses problem 1.
+For problem 2, I could add a single cross-attention layer after the mel encoder, where x (full sequence) attends to 
+x_clean_encoded (duration encoder output):
+```
+x = prenet(x)
+x = torch.cat([x, spk_emb], dim=-1)
+x = encoder(x, x_mask)
+x_clean = dur_encoder(x_clean, x_clean_mask)
+
+x_cross = prosody_cross_attn(x, x_clean_encoded, x_clean_encoded, x_clean_mask)
+x = self.norm_prosody(x + x_cross)
+
+mu = self.proj_m(x) * x_mask
+```
+
+Cross-attention is just regular attention, but Q comes from one sequence and K, V from another.
+```
+Q = x_full   · Wq      # what the mel sequence is asking for
+K = x_clean  · Wk      # what the clean sequence offers as keys
+V = x_clean  · Wv      # what the clean sequence offers as values
+attn_weights = softmax(Q · K^T / sqrt(d))
+output = attn_weights · V
+```
+
+Each position in `x_full` (including separators) learns to ask "what pitch/energy context is relevant to me?" and retrieves 
+it from `x_clean`. The separator positions will attend to nearby phonemes in the clean sequence — exactly what you want.
+
+In code, using the `MultiHeadAttention` you already have:
+```
+self.prosody_cross_attn = MultiHeadAttention(hidden_channels, hidden_channels, n_heads, p_dropout=p_dropout)
+self.norm_prosody = LayerNorm(hidden_channels)
+cross_mask = x_mask.unsqueeze(2) * x_clean_mask.unsqueeze(-1)
+y = self.prosody_cross_attn(x, x_clean_encoded, cross_mask)
+x = self.norm_prosody(x + y)
+```
+
+The mask shape is the only thing that changes vs self-attention — rows are `T_full`, columns are `T_clean`.

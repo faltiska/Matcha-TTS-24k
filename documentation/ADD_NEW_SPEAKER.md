@@ -57,7 +57,7 @@ def configure_optimizers(self) -> Any:
 4. Precompute mel spectrograms for the new speaker's data:
 
 ```bash
-python -m matcha.utils.precompute_corpus -i configs/data/your-corpus.yaml
+python -m matcha.utils.precompute_mels -i configs/data/your-corpus.yaml
 ```
 
 ### Step 3: Load Model and Set New Speaker Mode

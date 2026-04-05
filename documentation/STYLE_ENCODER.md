@@ -93,7 +93,7 @@ python -m matcha.train_style_encoder \
 
 Prepare a CSV and precompute mels as you would for training (see README):
 ```bash
-python -m matcha.utils.precompute_corpus -i configs/data/extra-speakers-24k.yaml
+python -m matcha.utils.precompute_mels -i configs/data/extra-speakers-24k.yaml
 ```
 
 ### 2. Run add_speaker
