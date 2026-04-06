@@ -2,11 +2,9 @@ import io
 import time
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torchaudio.functional as AF
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import denormalize, fix_len_compatibility, generate_path, sequence_mask
+from matcha.utils.model import denormalize, downsample, fix_len_compatibility, generate_path, sequence_mask
 from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
@@ -135,9 +133,9 @@ class MatchaTTSInfer(nn.Module):
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         # Rounding up (ceil) each phoneme duration was causing the generated speech to be consistently too slow.
-        # Now we round each phoneme duration to the nearest integer, and we clamp to minimum 1 to avoid silent phonemes.
+        # Now we round each phoneme duration to the nearest integer.
         # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
-        phoneme_durations = phoneme_durations.round().clamp(min=1) * x_mask.squeeze(1)
+        phoneme_durations = phoneme_durations.round().clamp(min=2) * x_mask.squeeze(1)
 
         # Ensure fine length is compatible with the UNet and even number
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
@@ -156,7 +154,7 @@ class MatchaTTSInfer(nn.Module):
             # but that can be simplified as:
             mu_y_fine = torch.matmul(mu_x.float(), attn_fine.float().squeeze(1))
 
-        mu_y = self.downsample(mu_y_fine)
+        mu_y = downsample(mu_y_fine)
 
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
@@ -167,28 +165,17 @@ class MatchaTTSInfer(nn.Module):
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         mel = denormalize(decoder_outputs, self.mel_mean, self.mel_std)
-        if debug:
-            return {
-                "mel": mel,
-                "encoder_mel": denormalize(mu_y[:, :, :y_max_length], self.mel_mean, self.mel_std),
-                "phoneme_durations": phoneme_durations,
-                "raw_phoneme_durations": raw_phoneme_durations,
-            }
-        else:
+
+        if not debug:
             return { "mel":  mel }
 
-    def downsample(self, mu_y_fine):
-        # Downsample fine resolution predicted mel to standard resolution for the decoder
-        # mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
-
-        # Alternate method 2: convert from log space to lin space before pool1d.
-        # Averaging in the log domain is mathematically equivalent to a geometric mean. 
-        # In acoustic terms, this would disproportionately weight quiet frames. 
-        # By using exp first, you perform an arithmetic mean of the magnitudes, which correctly preserves the local energy.
-        mu_y = torch.exp(mu_y_fine)
-        mu_y = AF.resample(mu_y, orig_freq=2, new_freq=1, resampling_method='sinc_interp_kaiser')
-        mu_y = torch.log(torch.clamp(mu_y, min=1e-9))
-        return mu_y
+        encoder_mel = denormalize(mu_y[:, :, :y_max_length], self.mel_mean, self.mel_std)
+        return {
+            "mel": mel,
+            "encoder_mel": encoder_mel,
+            "phoneme_durations": phoneme_durations,
+            "raw_phoneme_durations": raw_phoneme_durations,
+        }
 
 
 def load_matcha(model_name, checkpoint_path):

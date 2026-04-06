@@ -1,12 +1,11 @@
 import math
 import torch
-import torch.nn.functional as F
 import logging
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import duration_loss, sequence_mask
+from matcha.utils.model import duration_loss, sequence_mask, downsample
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
 log = logging.getLogger(__name__)
@@ -135,8 +134,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        # Downsample fine resolution predicted mel to standard resolution for the decoder
-        mu_y_coarse = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+        mu_y_coarse = downsample(mu_y_fine)
 
         # Detach mu_y to prevent Decoder gradients from flowing back to the Encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. 

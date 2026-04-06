@@ -1,7 +1,7 @@
 """ from https://github.com/jaywalnut310/glow-tts """
 
-import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 def sequence_mask(length, max_length):
@@ -45,45 +45,24 @@ def duration_loss(logw, logw_, lengths):
     return loss
 
 
-def normalize(data, mu, std):
-    if not isinstance(mu, (float, int)):
-        if isinstance(mu, list):
-            mu = torch.tensor(mu, dtype=data.dtype, device=data.device)
-        elif isinstance(mu, torch.Tensor):
-            mu = mu.to(data.device)
-        elif isinstance(mu, np.ndarray):
-            mu = torch.from_numpy(mu).to(data.device)
-        mu = mu.unsqueeze(-1)
-
-    if not isinstance(std, (float, int)):
-        if isinstance(std, list):
-            std = torch.tensor(std, dtype=data.dtype, device=data.device)
-        elif isinstance(std, torch.Tensor):
-            std = std.to(data.device)
-        elif isinstance(std, np.ndarray):
-            std = torch.from_numpy(std).to(data.device)
-        std = std.unsqueeze(-1)
-
-    return (data - mu) / std
+def normalize(data, mean, std):
+    """
+    Mean and Std are corpus-wide statistics, that should be precalculated before training.
+    Using this normalization method allows us to invert it at inference time without knowing the original data.
+    All other normalization methods would depend on audio properties (min, max, norm).
+    """
+    return (data - mean) / std
 
 
-def denormalize(data, mu, std):
-    if not isinstance(mu, float):
-        if isinstance(mu, list):
-            mu = torch.tensor(mu, dtype=data.dtype, device=data.device)
-        elif isinstance(mu, torch.Tensor):
-            mu = mu.to(data.device)
-        elif isinstance(mu, np.ndarray):
-            mu = torch.from_numpy(mu).to(data.device)
-        mu = mu.unsqueeze(-1)
+def denormalize(data, mean, std):
+    """Inverse of normalize()"""
+    return data * std + mean
 
-    if not isinstance(std, float):
-        if isinstance(std, list):
-            std = torch.tensor(std, dtype=data.dtype, device=data.device)
-        elif isinstance(std, torch.Tensor):
-            std = std.to(data.device)
-        elif isinstance(std, np.ndarray):
-            std = torch.from_numpy(std).to(data.device)
-        std = std.unsqueeze(-1)
 
-    return data * std + mu
+def downsample(mu_y_fine):
+    """
+    Halves the time resolution of a mel spectrogram by averaging pairs of adjacent frames.
+    If the original had a hop length of 128, the result will have a hop of 256.
+    """
+    mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+    return mu_y
