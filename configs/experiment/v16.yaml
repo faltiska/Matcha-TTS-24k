@@ -1,8 +1,10 @@
 # @package _global_
 # Double resolution for MAS and prior loss.
-# Don't add separators between annotations and the phonemes they annotate
+# Separators between all symbols.
+# Larger Decoder 360 = 5 * 72.
+# Smaller Duration Predictor, it still showed overfitting. 
 
-run_name: v15
+run_name: v16
 
 defaults:
   - override /data: corpus-24k
@@ -10,7 +12,7 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: logs/train/v15/runs/2026-04-03_10-24-21/checkpoints/checkpoint_epoch=044.ckpt
+ckpt_path: logs/train/v16/runs/2026-04-06_11-18-45/checkpoints/checkpoint_epoch=349.ckpt
 
 model:
   spk_emb_dim: 96
@@ -28,21 +30,22 @@ model:
       kernel_size: 7
       p_dropout: 0.05
       prenet: true
-      # should not go over 5, it causes prior to shoot up at around 50K steps
+      # should not go over 5, it causes prior loss does not drop well
       prenet_kernel_size: 5 
       
     duration_predictor_params:
-      filter_channels_dp: 112
+      filter_channels_dp: 96
       kernel_size: 5
       n_layers: 4
       p_dropout: 0.05
 
   decoder:
     # 384 = 6 * 64
-    # 360 = 5 * 72 
-    channels: [336, 336]
-    attention_head_dim: 56
-    num_heads: 6
+    # 360 = 5 * 72
+    # 336 = 6 * 56
+    channels: [360, 360]
+    attention_head_dim: 72
+    num_heads: 5
     dropout: 0.05
 
   cfm:
