@@ -45,15 +45,15 @@ I could run Encoder, MAS and Duration Predictor with a hop length of 128.
 MAS will then align segments with a hop of 128 against the high resolution ground truth mel.
 MAS will be able to find positions that are multiples of 5.33ms.
 Duration Predictor will learn to generate those fine-grained positions.
-I will assemble the fine resolution mel by repeating each predicted mel frame a number of time as computed by MAS at the fine resolution. 
 Prior Loss will be calculated on the fine resolution mel.
-To send it to the Decoder, though, I will have to downsample it by a factor of 2, to get standard resolution mel. 
+To send it to the Decoder, though, I will have to downsample it by a factor of 2, to get standard resolution mel.
+   (I am doing that using conv1d with a kernel of 2 and a stride of 2)
 This way the Encoder will still work with a hop length of 256.
 The Vocoder too, at inference time will still run on mels with a hop of 256. 
 
 # Results
 
-I implemented Solution 2. Speech sounds a bit sharper indeed.
+I implemented Solution 2, speech sounds a bit sharper indeed.
 
 It does not fix all the problems. I still have 3 problems:
 Problem 1: skipped consonants (rare)
@@ -63,10 +63,10 @@ Problem 3: mispronunciation on short utterances (very frequent)
 I think the weak link in this model is MAS and the duration predictor.
 
 The predictor sometimes allocates too few frames to consonants.  
-I am clamping to 2 high res frames at inference, but it does not fix Problem 1 entirely. 
-If I clamp to 1 frame, speech sounds even sharper, but problem eis more frequent. 
-If I clamp to 3 high res frames, it elongates some words unnaturally. 
+I am clamping to 2 high-res frames at inference, but it does not fix Problem 1 entirely. 
+If I clamp to 1 frame, speech sounds even sharper, but problem is more frequent. 
+If I clamp to 3 high-res frames, it elongates some words unnaturally. 
 
 Also, Problem 2 is probably because of wrong alignments. Not sure.
 
-I don't know what causes Problem 3. 
+I don't know what causes Problem 3.
