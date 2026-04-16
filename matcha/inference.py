@@ -28,7 +28,7 @@ VOICES = [
 
 SAMPLE_RATE = 24000
 STD_RES_HOP_LENGTH = 256
-HIGH_RES_HOP_LENGTH = 256
+HIGH_RES_HOP_LENGTH = 128
 ODE_SOLVER = "midpoint"
 DEVICE = torch.device("cuda")
 
@@ -133,9 +133,9 @@ class MatchaTTSInfer(nn.Module):
         #  w_ceil = torch.ceil(w) * length_scale
         #  y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         # Rounding up (ceil) each phoneme duration was causing the generated speech to be consistently too slow.
-        # Now we round each phoneme duration to the nearest integer.
+        # Now we round each phoneme duration to the nearest integer, and clamp to enforce a minimum of 1.
         # E.g. durations [3.66, 1.17, 0.49] -> [4, 1, 1]
-        phoneme_durations = phoneme_durations.round().clamp(min=2) * x_mask.squeeze(1)
+        phoneme_durations = phoneme_durations.round().clamp(min=1) * x_mask.squeeze(1)
 
         # Ensure fine length is compatible with the UNet and even number
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)

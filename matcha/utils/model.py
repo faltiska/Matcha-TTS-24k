@@ -65,4 +65,8 @@ def downsample(mu_y_fine):
     If the original had a hop length of 128, the result will have a hop of 256.
     """
     mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+
+    # This does more averaging, and it could fix the harshness in speaker 4:
+    # mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
+
     return mu_y
