@@ -292,7 +292,13 @@ class Encoder(nn.Module):
             self.norm_layers_2.append(LayerNorm(hidden_channels))
 
     def forward(self, x, x_mask):
-        attn_mask = x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)
+        # Original code was not doing .bool()
+        # scaled_dot_product_attention interprets the mask differently depending on its dtype:
+        # bool tensor: False positions get -inf added before softmax, so they become zero after softmax — they are fully excluded from attention
+        # float tensor: values are added directly as a bias to the attention logits. 
+        # The mask ha 1.0 for valid and 0.0 for padding, originally, so padding positions were getting a get +0.0 bias, which has no effect.
+        # That allowed padding to participate in attention.
+        attn_mask = (x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)).bool()
         for i in range(self.n_layers):
             x = x * x_mask
             y = self.attn_layers[i](x, x, attn_mask)
