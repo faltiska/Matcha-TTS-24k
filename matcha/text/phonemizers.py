@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import separator, pre_annotations, post_annotations, symbol_to_id
+from matcha.text.symbols import symbol_to_id, voiced_phoneme_ids, PRE_ID, POST_ID
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -102,12 +102,21 @@ def multilingual_phonemizer(text, language):
     # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
     # model the transitions too: phoneme - transition - phoneme - transition ...
 
-    phonemes = separator.join(phonemes)
-
+    # phonemes = separator.join(phonemes)
     # remove separators from between annotations and the phonemes they annotate.
     # phonemes = re.sub(rf'([{re.escape(pre_annotations)}])\|', r'\1', phonemes)
     # phonemes = re.sub(rf'\|([{re.escape(post_annotations)}])', r'\1', phonemes)
-    
-    ids = [symbol_to_id[phoneme] for phoneme in phonemes]
 
-    return phonemes, ids
+    ids = []
+    debug_phonemes = []
+    for phoneme in phonemes:
+        phoneme_id = symbol_to_id[phoneme]
+        is_voiced_phoneme = phoneme_id in voiced_phoneme_ids
+        if is_voiced_phoneme:
+            ids.extend([PRE_ID + phoneme_id, phoneme_id, POST_ID + phoneme_id])
+            debug_phonemes.extend(['‹', phoneme, '›'])
+        else:
+            ids.append(phoneme_id)
+            debug_phonemes.append(phoneme)
+
+    return ''.join(debug_phonemes), ids
