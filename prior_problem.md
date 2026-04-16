@@ -87,58 +87,27 @@ Same applies to smooth_l1:
    prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
 ```
 
-# Relevant training code:
-```python
-    def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks):
-        speaker_embedding = self.speaker_embeddings(spks)
+# The fix:
+I just got to epoch 64 with no problems yet. Here are the changes I made since the last attempt:
 
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
-        y_fine_max_length = y_fine.shape[-1]
+- Lowered weight decay from 1e-2 to 1e-3 
+I trained with 1e-2 successfully in the past. Now the param norm grows rapidly.
 
-        y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
-        attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
+- Changed prior loss formula from smooth_L1 with a beta of 0.07 to Huber with a Delta of 0.1
+Because Huber multiplies by Delta, the loss is now 10x smaller than previous attempt.
+Because Delta is 0.1 instead of 0.07, MSE loss kicks in much sooner than in the previous attempt.
 
-        with torch.autocast(device_type="cuda", enabled=False):
-            mu_x = mu_x.float()
-            y_fine = y_fine.float() 
-            attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
+- Removed n_feats from the prior normalization formula denominator.
+This makes the loss 100 times larger than previous attempt.
+The 10x smaller from Huber and 100x larger from removing n_feasts, loss is now 10 times larger than previous attempt. 
 
-        mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
-        
-        # I am adding a 2 to make the log-space values greater than 1, because MSE is more forgiving with sub-unitary
-        # losses, and more punishing with supra-unitary losses.
-        # E.g. 0.6 ** 2 < 0.6, but 1.6 ** 2 > 1.6  
-        # This helps Duration Predictor A LOT. We have to compensate for the +2 before synthesis, see inference.py.  
-        logw_ = torch.log(2 + mas_durations.unsqueeze(1)) * x_mask
+Here's my understanding of how this fixed the problem:
+The new tokenization scheme made, the number of symbols per sequence 1.5x larger.
+The sum of y_fine_mask in the denominator proportional to sequence length. When it grows, the loss gets *smaller*.
+The loss is calculated by summing up the error between predicted and ground truth mels on *each mel bine* of *each mel frame* of each sample in the batch. 
+At first, the error is large, resulting in a strong signal to drive the loss down. 
+By epoch 50, *the error gets smaller and smaller*, as the model learns, but the *denominator stays large*.
 
-        dur_loss = duration_loss(logw, logw_, x_lengths)
+_When the loss gets very small, the rather large weight decay eats up the weight updates._
 
-        mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
-
-        if self.prior_loss:
-            prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=0.07, reduction='sum')
-            prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
-        else:
-            prior_loss = 0
-
-        mu_y_coarse = downsample(mu_y_fine)
-
-        detached_mu_y_coarse = mu_y_coarse.detach()
-        y_max_length = y.shape[-1]
-        y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
-        diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
-
-        return diff_loss, dur_loss, prior_loss
-
-    def find_alignment(self, attn_mask_fine, mu_x, y_fine):
-        with torch.no_grad():
-            factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-            y_fine_square = torch.matmul(factor.transpose(1, 2), y_fine ** 2)
-            y_fine_mu_double = torch.matmul(-mu_x.transpose(1, 2), y_fine)
-            mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
-            log_prior = y_fine_square - y_fine_mu_double + mu_square + self.mas_const
-
-            attn_fine = maximum_path_gpu(log_prior, attn_mask_fine.squeeze(1).to(torch.int32), log_prior.dtype)
-
-        return attn_fine
-```
+Bottom line is, I think the combination of larger weights and smaller decay fixed it.

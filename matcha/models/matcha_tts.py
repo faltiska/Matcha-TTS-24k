@@ -1,5 +1,6 @@
 import math
 import torch
+import torch.nn.functional as F
 import logging
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
@@ -105,8 +106,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # valid tokens, preventing attention to padding.
         mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
         
-        # I am adding a 2 to make the values greater than 1, because MSE is more forgiving with sub-unitary losses
-        # and more punishing with supra-unitary losses.
+        # I am adding a 2 to make the log-space values greater than 1, because MSE is more forgiving with sub-unitary
+        # losses, and more punishing with supra-unitary losses.
         # E.g. 0.6 ** 2 < 0.6, but 1.6 ** 2 > 1.6  
         # This helps Duration Predictor A LOT. We have to compensate for the +2 before synthesis, see inference.py.  
         logw_ = torch.log(2 + mas_durations.unsqueeze(1)) * x_mask
@@ -116,9 +117,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         dur_loss = duration_loss(logw, logw_, x_lengths)
 
         # Original code was: 
-        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-        # mu_y = mu_y.transpose(1, 2)
+        #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        #   mu_y = mu_y.transpose(1, 2)
         # but that can be simplified as:
+        #   mu_y = torch.matmul(mu_x, attn.squeeze(1))
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
         if self.prior_loss:
@@ -126,11 +128,22 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # Also, the values were too small, 0.05 the after first epoch tending to 0.0001
-            # Such small gradients are not allowing the model to learn, so I am not squaring them up anymore.
-            # Before this change, I could not get duration loss below 0.15, not even after 400K steps.
-            prior_loss = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
-            prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
+            # I trained successfully with a normalized L1 loss:
+            #   prior_loss = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
+            #   prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
+            # Since I introduced the super-resolution trick and the new tokenization mechanism with (pre,p,post)
+            # the loss get so small so quickly, I should stop dividing by n_feats; also, the AdamW weight should 
+            # be smaller than 1e-2, or the decay will erase the Decoder model by epoch 50.   
+            # I also tested with and I see slightly better results with smooth_l1 or huber:  
+            #   prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=0.1, reduction='sum')
+            #   prior_loss = prior_loss / torch.sum(y_fine_mask)
+            # Huber loss will be smaller, as it multiplies by the delta:
+            prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=0.1, reduction='sum')
+            prior_loss = prior_loss / torch.sum(y_fine_mask)
+
+            l1_prior = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
+            l1_prior = l1_prior / (torch.sum(y_fine_mask) * self.n_feats)
+            self.log("sub_loss/l1_prior_epoch", l1_prior, on_step=False, on_epoch=True, batch_size=y.shape[0])
         else:
             prior_loss = 0
 
