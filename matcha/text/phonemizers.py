@@ -101,11 +101,25 @@ def multilingual_phonemizer(text, language):
     # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
     # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
     # model the transitions too: phoneme - transition - phoneme - transition ...
-
-    # phonemes = separator.join(phonemes)
-    # remove separators from between annotations and the phonemes they annotate.
-    # phonemes = re.sub(rf'([{re.escape(pre_annotations)}])\|', r'\1', phonemes)
-    # phonemes = re.sub(rf'\|([{re.escape(post_annotations)}])', r'\1', phonemes)
+    # The original code was adding te same separator everywhere, but that means the model had to assign different 
+    # acoustic representations and different durations to the separator based on context. It's not great.
+    # Also, it added separators everywhere, in between an annotation and a punctuation, or between punctuation symbols.
+    # The transition sound is different based on surrounding phonemes so the right way to model this would be to
+    # create new symbols one for each distinct sequence of phonemes. Since there are about 100 voiced phonemes, 
+    # I would need 10K new symbols. A more realistic method would to add 2 new symbols for each voiced phoneme, which 
+    # would increase the diction ary size only by 200. 
+    # I could then replace each voiced phoneme P by a tuple of (Pre, P, Post), for example:
+    # (pre_æ, æ, post_æ), (pre_ð, ð, post_ð), (pre_ə, ə, post_ə), ...
+    # With this tokenization scheme, the model achieves the best quality I was able to get, except for one problem.
+    # Each phoneme will be at least 3 frames long, so 3 frames must be as short as a short consonant can be in real life.
+    # That is 5-15ms for stop consonants. It is true that listeners need the transitional sounds around that stop 
+    # consonant to understand it, otherwise it passes by unnoticed so the length of the phoneme plus transitional sound
+    # could be as long as 30-40ms. 
+    # Still., I found that the 10ms frame length (required by Vocos at 24KHz with a hop of 256) is too long to support 
+    # this tokenization scheme. But a 5ms frame length proved, in practice, to be perfect.
+    # The problem was that each pair of voiced phonemes was separated by 2 symbols in my new scheme:
+    #   pre1, p1, post1, pre2, p2, post2
+    # and 20ms for transitional sounds is too long. And because transitions to consonants can be shorter than 10ms.
 
     ids = []
     debug_phonemes = []
@@ -114,7 +128,7 @@ def multilingual_phonemizer(text, language):
         is_voiced_phoneme = phoneme_id in voiced_phoneme_ids
         if is_voiced_phoneme:
             ids.extend([PRE_ID + phoneme_id, phoneme_id, POST_ID + phoneme_id])
-            debug_phonemes.extend(['‹', phoneme, '›'])
+            debug_phonemes.extend(['‹', phoneme, '›']) # this is just for display purposes
         else:
             ids.append(phoneme_id)
             debug_phonemes.append(phoneme)
