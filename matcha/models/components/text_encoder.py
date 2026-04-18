@@ -130,8 +130,10 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.base = base
         self.d = int(d)
 
+        # The total phonetic representation, including annotations and separators must be shorter than this.
+        # The server should enforce a max text length that can fit into this. The client app too.  
+        self.max_seq_len = 4096
         # Pre-allocate and fill cos/sin caches
-        self.max_seq_len = 1024
         theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2).float() / self.d))
         seq_idx = torch.arange(self.max_seq_len).float()
         idx_theta = torch.einsum("n,d->nd", seq_idx, theta)
