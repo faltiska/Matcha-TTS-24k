@@ -27,7 +27,36 @@ class BaseLightningClass(LightningModule, ABC):
         self.register_buffer("mel_std", torch.tensor(data_statistics["mel_std"]))
 
     def configure_optimizers(self) -> Any:
-        return self.hparams.optimizer(params=self.parameters())
+        from matcha.models.components.text_encoder import LayerNorm as ConvLayerNorm
+
+        no_decay_modules = (
+            torch.nn.Embedding,
+            torch.nn.LayerNorm,
+            ConvLayerNorm,
+        )
+
+        no_decay_names = set()
+        for module_name, module in self.named_modules():
+            for param_name, param in module.named_parameters(recurse=False):
+                full_name = f"{module_name}.{param_name}" if module_name else param_name
+                if isinstance(module, no_decay_modules) or param_name == "bias":
+                    no_decay_names.add(full_name)
+
+        log.debug("No-decay params: %s", sorted(no_decay_names))
+
+        decay_params, no_decay_params = [], []
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            if name in no_decay_names:
+                no_decay_params.append(param)
+            else:
+                decay_params.append(param)
+
+        return self.hparams.optimizer(params=[
+            {"params": decay_params},
+            {"params": no_decay_params, "weight_decay": 0.0},
+        ])
 
     def get_losses(self, batch):
         x, x_lengths = batch["x"], batch["x_lengths"]
@@ -111,6 +140,7 @@ class BaseLightningClass(LightningModule, ABC):
                 log.error(f"Batch count changed from {old_len} to {new_len} at epoch {self.current_epoch}, this will cause Lightning to stop running validation.")
 
     def training_step(self, batch: Any, batch_idx: int):
+        self.batch_idx = batch_idx
         diff_loss, dur_loss, prior_loss = self.get_losses(batch)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
@@ -141,16 +171,28 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def on_before_optimizer_step(self, optimizer):
-        # This is rather slow, so enable it only if you must see the grad norm chart.
-        # norms = grad_norm(self, norm_type=2)
-        # self.log("grad_norm/grad_2.0_norm_total", norms["grad_2.0_norm_total"], on_step=True, on_epoch=False, logger=True)
+        submodules = {
+            "speaker_embeddings": self.speaker_embeddings,
+            "encoder":            self.encoder,
+            "decoder":            self.decoder,
+            "phoneme_embeddings": self.encoder.emb,
+            "enc_prenet":         self.encoder.prenet,
+            "enc_transformer":    self.encoder.encoder._orig_mod,
+            "enc_proj_m":         self.encoder.proj_m,
+        }
+        for name, module in submodules.items():
+            # Param norm helps me check if the weight decay value from Adam / AdamW is too large.
+            # If param_norm stays flat or slightly increases: weight decay is just fine.
+            # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
+            #
+            # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
+            # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
+            param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
+            self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
 
-        # This helps me check if the weight decay value from Adam / AdamW is too large.
-        # If param_norm stays flat or slightly increases: weight decay is just fine.
-        # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
-        #
-        # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
-        # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
-        per_param_norms = torch.stack([p.detach().norm() for p in self.parameters()])
-        total_param_norm = torch.linalg.vector_norm(per_param_norms)
-        self.log("grad_norm/param_norm", total_param_norm, on_step=False, on_epoch=True, logger=True, batch_size=1)
+            # Grad norm computation is rather slow, so enable it only if you must see the grad norm chart.
+            params_with_grad = [p for p in module.parameters() if p.grad is not None]
+            if params_with_grad:
+                grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])
+                self.log(f"grad_norm/{name}", torch.linalg.vector_norm(grad_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
+
