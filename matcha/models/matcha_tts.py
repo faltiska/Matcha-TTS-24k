@@ -37,7 +37,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.n_feats = n_feats
         self.prior_loss = prior_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
-        self.mas_const = -0.5 * LOG_2_PI * n_feats
 
         if n_spks > 1:
             self.speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -57,6 +56,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         )
 
         self.update_data_statistics(data_statistics)
+        self.batch_idx = 0
+        self.register_buffer("_quantile_probs", torch.tensor([0.25, 0.5, 0.75, 0.9]), persistent=False)
 
     def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks):
         """
@@ -128,22 +129,25 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # I trained successfully with a normalized L1 loss:
-            #   prior_loss = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
-            #   prior_loss = prior_loss / (torch.sum(y_fine_mask) * self.n_feats)
-            # Since I introduced the super-resolution trick and the new tokenization mechanism with (pre,p,post)
-            # the loss get so small so quickly, I should stop dividing by n_feats; also, the AdamW weight should 
-            # be smaller than 1e-2, or the decay will erase the Decoder model by epoch 50.   
-            # I also tested with and I see slightly better results with smooth_l1 or huber:  
-            #   prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=0.1, reduction='sum')
-            #   prior_loss = prior_loss / torch.sum(y_fine_mask)
-            # Huber loss will be smaller, as it multiplies by the delta:
-            prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=0.1, reduction='sum')
+            # The L2 loss was causing instability in early epochs, so I switched to a smooth L1 loss:
+            prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=0.04, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
+            # It punishes errors larger than 0.04 like an L1, but is lenient like an L2 with smaller errors. 
+            # Huber loss will be much smaller in value, as it multiplies by the threshold, so stick to smooth_l1.
 
-            l1_prior = torch.sum(torch.abs(y_fine - mu_y_fine) * y_fine_mask)
-            l1_prior = l1_prior / (torch.sum(y_fine_mask) * self.n_feats)
-            self.log("sub_loss/l1_prior_epoch", l1_prior, on_step=False, on_epoch=True, batch_size=y.shape[0])
+            # This helps pick a good beta value: train for 50 epochs and look at thr p50 distribution. Say it has values
+            # between 0.03 and 0.05. That tells you a beta of 0.04 is probably best. All errors below the threshold are
+            # given an L2 treatment, all values above it an L1.
+            # Also, if the distribution has a heavy right tail (p90 much larger than 3x p50), it's a sign some frames 
+            # are consistently hard to predict.
+            if self.batch_idx == 0 and self.training:
+                with torch.no_grad():
+                    valid_residuals = torch.abs(y_fine - mu_y_fine)[y_fine_mask.expand_as(y_fine).bool()]
+                    q = torch.quantile(valid_residuals, self._quantile_probs)
+                    self.log("debug_prior/residuals_p25", q[0], on_step=False, on_epoch=True, batch_size=y.shape[0])
+                    self.log("debug_prior/residuals_p50", q[1], on_step=False, on_epoch=True, batch_size=y.shape[0])
+                    self.log("debug_prior/residuals_p75", q[2], on_step=False, on_epoch=True, batch_size=y.shape[0])
+                    self.log("debug_prior/residuals_p90", q[3], on_step=False, on_epoch=True, batch_size=y.shape[0])
         else:
             prior_loss = 0
 
@@ -161,19 +165,19 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
+        # It computes the distance between every text token and ground truth mel frame. 
         with torch.no_grad():
-            # This computes the distance between every text token and ground truth mel frame 
-            # using a  Gaussian log-likelihood formula 
-            factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
-            y_fine_square = torch.matmul(factor.transpose(1, 2), y_fine ** 2)
-            # Original code was:
-            #   y_mu_double = torch.matmul(2.0 * (factor * mu_x).transpose(1, 2), y)
-            # But (2.0 * factor * mu_x) is useless, because factor = -0.5 * tensor.ones
-            # I've replaced it with just -mu_x
-            y_fine_mu_double = torch.matmul(-mu_x.transpose(1, 2), y_fine)
-            mu_square = torch.sum(factor * (mu_x ** 2), 1).unsqueeze(-1)
-            log_prior = y_fine_square - y_fine_mu_double + mu_square + self.mas_const
-
+            # Original code was using a factor defined as a tensor:
+            #   factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
+            # but it is equivalent to multiplying by -0.5 directly.
+            # It was also adding a mas constant: 
+            #   self.mas_const = -0.5 * LOG_2_PI * n_feats
+            # but that does not influence the alignment at all. 
+            # It was also using matmuls and transpositions that can be simplified as follows:
+            y_sq = -0.5 * (y_fine ** 2).sum(dim=1, keepdim=True)  # (B, 1, T_mel)
+            mu_y = torch.matmul(mu_x.transpose(1, 2), y_fine)  # (B, T_text, T_mel)
+            mu_sq = -0.5 * (mu_x ** 2).sum(dim=1, keepdim=True).transpose(1, 2)  # (B, T_text, 1)
+            log_prior = y_sq + mu_y + mu_sq  # (B, T_text, T_mel)
             attn_fine = maximum_path_gpu(log_prior, attn_mask_fine.squeeze(1).to(torch.int32), log_prior.dtype)
 
         return attn_fine
