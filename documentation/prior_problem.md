@@ -88,26 +88,39 @@ Same applies to smooth_l1:
 ```
 
 # The fix:
-I just got to epoch 64 with no problems yet. Here are the changes I made since the last attempt:
+I just got to epoch 139 with no problems yet. Here are the changes I made since the last attempt:
 
 - Lowered weight decay from 1e-2 to 1e-3 
 I trained with 1e-2 successfully in the past. Now the param norm grows rapidly.
+Not sure if this helps or not. I thought that maybe the decay is erasing the model.
 
-- Changed prior loss formula from smooth_L1 with a beta of 0.07 to Huber with a Delta of 0.1
-Because Huber multiplies by Delta, the loss is now 10x smaller than previous attempt.
-Because Delta is 0.1 instead of 0.07, MSE loss kicks in much sooner than in the previous attempt.
+- I started with a smooth_L1 with a Beta of 0.3 and I was logging prior residual quantiles. 
+At epoch 49 I stopped, checked the p50 residual and found it was between 0.4 and 0.5.
+I changed Beta to 0.04 and resumed training.
 
 - Removed n_feats from the prior normalization formula denominator.
 This makes the loss 100 times larger than previous attempt.
-The 10x smaller from Huber and 100x larger from removing n_feasts, loss is now 10 times larger than previous attempt. 
 
-Here's my understanding of how this fixed the problem:
-The new tokenization scheme made, the number of symbols per sequence 1.5x larger.
+Here's my guess of what could have been the solution:
+1. The new tokenization scheme made, the number of symbols per sequence 1.5x larger.
 The sum of y_fine_mask in the denominator proportional to sequence length. When it grows, the loss gets *smaller*.
 The loss is calculated by summing up the error between predicted and ground truth mels on *each mel bine* of *each mel frame* of each sample in the batch. 
 At first, the error is large, resulting in a strong signal to drive the loss down. 
 By epoch 50, *the error gets smaller and smaller*, as the model learns, but the *denominator stays large*.
+Because I removed the denominator, the loss is now larger (around 5).
 
-_When the loss gets very small, the rather large weight decay eats up the weight updates._
+2. The switch to Smooth L1 was also good, because a pure L1 of that magnitude would have been too blunt.
+L1 keeps the same gradients to the very end, it punishes small errors too much. Smooth L1 still punishes big errors
+but it returns small gradients for small errors. 
 
-Bottom line is, I think the combination of larger weights and smaller decay fixed it.
+The L1 loss is too blunt, model continues to punish even the estimations that are very close to the truth.
+At some point, the gradients will make the model jump to a state that makes some mistakes, and won't be able 
+to correct them, because of that. If the MAS alignment will change, the model will respond with more corrections in 
+the wrong direction. Any jump in prior that is big enough to cause alignment to change will push the model into a 
+positive feedback loop it cannot escape.
+And this is not new, it was probably always a problem with this model, but now I just made it easier to reproduce
+
+## Update:
+I still saw a jump in the prior loss at epoch 94, but the model recovered and loss continued to drop.
+After that, the loss was a bit more wiggly than in the first 94 epochs, similar looking to the curve when I was using an L1 formula. 
+I think a Beta of 0.5 might smooth out the loss curve more, if needed.
