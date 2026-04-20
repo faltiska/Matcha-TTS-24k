@@ -91,19 +91,19 @@ class StyleEncoderLightningModule(LightningModule):
 
     def _compute_losses(self, batch):
         x, x_lengths = batch["x"], batch["x_lengths"]
-        y, y_lengths = batch["y"], batch["y_lengths"]
+        y_fine, y_fine_lengths = batch["y_fine"], batch["y_fine_lengths"]
         spks = batch["spks"]
 
         real_spk_emb = self.matcha.speaker_embeddings(spks)
 
-        y_mask = sequence_mask(y_lengths, y.shape[-1]).unsqueeze(1).to(y.dtype)
+        y_fine_mask = sequence_mask(y_fine_lengths, y_fine.shape[-1]).unsqueeze(1).to(y_fine.dtype)
 
         with torch.no_grad():
-            mu_x_real, _, _ = self.matcha.encoder(x, x_lengths, real_spk_emb, real_spk_emb)
+            mu_x_real, _, _ = self.matcha.encoder(x, x_lengths, real_spk_emb)
 
-        pred_spk_emb = self.acoustic_style_encoder(y, y_mask)
+        pred_spk_emb = self.acoustic_style_encoder(y_fine, y_fine_mask)
 
-        mu_x_pred, _, _ = self.matcha.encoder(x, x_lengths, pred_spk_emb, pred_spk_emb)
+        mu_x_pred, _, _ = self.matcha.encoder(x, x_lengths, pred_spk_emb)
 
         loss = F.l1_loss(mu_x_pred, mu_x_real)
 
@@ -114,7 +114,7 @@ class StyleEncoderLightningModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         ase_loss, emb_dist = self._compute_losses(batch)
-        bs = batch["x"].shape[0]
+        bs = batch["y_fine"].shape[0]
         self.log_dict({
             "loss/train": ase_loss,
             "emb_dist/train": emb_dist,
