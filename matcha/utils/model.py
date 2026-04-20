@@ -64,9 +64,10 @@ def downsample(mu_y_fine):
     Halves the time resolution of a mel spectrogram by averaging pairs of adjacent frames.
     If the original had a hop length of 128, the result will have a hop of 256.
     """
-    mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
-
-    # This does more averaging, and it could fix the harshness in speaker 4:
-    # mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
+    # Normally I could just do: 
+    #   mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
+    # but it averages frames in pairs and does nto average cross pairs: 1+2, 3+4, 5+6, so on
+    # This does more averaging, 1+2+3, 3+4+5, 6+7+8, but it sounds great:
+    mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
 
     return mu_y
