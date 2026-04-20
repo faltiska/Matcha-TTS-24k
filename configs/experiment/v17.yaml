@@ -17,7 +17,7 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: null
+ckpt_path: logs/train/v17/checkpoint_epoch=424.ckpt
 
 model:
   spk_emb_dim: 96
@@ -45,6 +45,7 @@ model:
       p_dropout: 0.05
 
   decoder:
+    # other figures that could work
     # 384 = 6 * 64
     # 360 = 5 * 72
     # 336 = 6 * 56
@@ -57,7 +58,5 @@ model:
     use_mu_prior: true
 
   optimizer:
-    lr: 1e-4
-    # With 1e-3, param norm grows kind of rapidly, but any larger values will eat up the Encoder model
-    # I ran with 1e-2 and by epoch 54, the prior loss shoots up and never recovers.
-    weight_decay: 1e-3
+    lr: 5e-5 # lowered from 1e-4 at epoch 234
+    weight_decay: 5e-4 # lowered from 1e-3 to 5e-4 at epoch 234
