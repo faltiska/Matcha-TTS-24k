@@ -43,7 +43,7 @@ def predict_embeddings(style_encoder, csv_rows, mel_dir):
     for i, row in enumerate(csv_rows):
         rel_base = row[0]
 
-        mel_path = Path(mel_dir) / (rel_base + ".npy")
+        mel_path = Path(mel_dir) / (rel_base + ".fine.npy")
         mel = torch.from_numpy(np.load(mel_path).astype(np.float32)).to(DEVICE)
         y = mel.unsqueeze(0)
 
