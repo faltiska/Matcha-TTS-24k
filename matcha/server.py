@@ -22,12 +22,12 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v17/runs/checkpoint_epoch=054.ckpt"
+CHECKPOINT_PATH = "logs/train/v17/checkpoint_epoch=424.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
 
-MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 2000))
+MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 1000))
 
 # length_scale is inverse of client speed: higher = slower speech
 LENGTH_SCALE_MIN      = 0.1   # fastest (client speed=2.0)
