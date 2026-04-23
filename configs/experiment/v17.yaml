@@ -8,6 +8,13 @@
 # resolution combined with having a lot of phonemes; 
 # I lowered the LR to 5e-5 and resumed from epoch 54, but it still started growing at 56.   
 # I resumed from epoch 49 too, it started growing at 59.
+#
+# The solution was to switch to a smooth_l1 loss formula, with the threshold set to 0.04
+#
+# For fine-tuning, lower LR a lot, say 5e-6, set decay to 0, set dropouts to 0, run 2-3 epochs with all components.
+# Save checkpoints and compute validation every epoch.
+# Then take the best ckpt from that run, and run for another 2-3 epochs with prior loss set to False,
+# so the decoder catches up with the new Encoder state.
 
 run_name: v17
 
@@ -17,11 +24,11 @@ defaults:
 data:
   max_frames_per_batch: 30000
 
-ckpt_path: logs/train/v17/checkpoint_epoch=424.ckpt
+ckpt_path: logs/train/v17/checkpoint_epoch=601.ckpt
 
 model:
   spk_emb_dim: 96
-  prior_loss: true
+  prior_loss: false
 
   encoder:
     encoder_params:
@@ -33,7 +40,9 @@ model:
       n_heads: 6
       n_layers: 4
       kernel_size: 7
-      p_dropout: 0.05
+      # reduced from 0.05 to 0 at epoch 599 for fine-tuning
+      p_dropout: 0
+      
       prenet: true
       # should not go over 5, it causes prior loss does not drop well
       prenet_kernel_size: 5 
@@ -43,7 +52,7 @@ model:
       kernel_size: 5
       n_layers: 4
       p_dropout: 0.05
-
+      
   decoder:
     # other figures that could work
     # 384 = 6 * 64
@@ -52,11 +61,27 @@ model:
     channels: [360, 360]
     attention_head_dim: 72
     num_heads: 5
-    dropout: 0.05
-
+    # reduced from 0.05 to 0 at epoch 599 for fine-tuning
+    dropout: 0
+    
   cfm:
     use_mu_prior: true
 
   optimizer:
-    lr: 5e-5 # lowered from 1e-4 at epoch 234
-    weight_decay: 5e-4 # lowered from 1e-3 to 5e-4 at epoch 234
+    # lowered from 1e-4 to 5e-5 at epoch 234
+    # then to 2e-5 at epoch 424
+    # reduced to 5e-6 at epoch 599 for fine-tuning
+    lr: 5e-6
+    # lowered from 1e-3 to 5e-4 at epoch 234
+    # then to 2e-4 at epoch 424
+    # reduced to 0 at epoch 599 for fine-tuning
+    weight_decay: 0
+
+callbacks:
+  model_checkpoint:
+    # changed from 5 to 1 at epoch 599 for fine-tuning
+    every_n_epochs: 1
+
+trainer:
+  # changed from 5 to 1 at epoch 599 for fine-tuning
+  check_val_every_n_epoch: 1  

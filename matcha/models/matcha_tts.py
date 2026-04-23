@@ -113,10 +113,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # This helps Duration Predictor A LOT. We have to compensate for the +2 before synthesis, see inference.py.  
         logw_ = torch.log(2 + mas_durations.unsqueeze(1)) * x_mask
 
-        # logw - log-scaled durations from the Duration Predictor
-        # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm. 
-        dur_loss = duration_loss(logw, logw_, x_lengths)
-
         # Original code was: 
         #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
         #   mu_y = mu_y.transpose(1, 2)
@@ -125,6 +121,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
         if self.prior_loss:
+            # logw - log-scaled durations from the Duration Predictor
+            # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
+            # It only makes sense to calculate the duration loss if prior loss is set to true.
+            # Otherwise, MAS would find the same alignment and Duration Predictor has nothing new to learn. 
+            dur_loss = duration_loss(logw, logw_, x_lengths)
+    
             # Original code was: 
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
@@ -150,6 +152,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                     self.log("debug_prior/residuals_p90", q[3], on_step=False, on_epoch=True, batch_size=y.shape[0])
         else:
             prior_loss = 0
+            dur_loss = 0
 
         mu_y_coarse = downsample(mu_y_fine)
 

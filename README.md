@@ -124,10 +124,11 @@ Averaging weights from multiple checkpoints can improve give you a little better
 You can expect the worst speakers to get a bit better but the best speakers to get a bit worse.
 ```
 python -m matcha.utils.average_checkpoints \
-"logs/train/v4/runs/to average/checkpoint_epoch=1189.ckpt" \
-"logs/train/v4/runs/to average/checkpoint_epoch=1200.ckpt" \
-"logs/train/v4/runs/to average/checkpoint_epoch=1208.ckpt" \
--o logs/train/v4/averaged2.ckpt
+"logs/train/v17/checkpoint_epoch=603.ckpt" \
+"logs/train/v17/checkpoint_epoch=604.ckpt" \
+"logs/train/v17/checkpoint_epoch=605.ckpt" \
+"logs/train/v17/checkpoint_epoch=606.ckpt" \
+-o logs/train/v4/averaged.ckpt
 ```
 
 ### Transplant a speaker embedding from one checkpoint to another:

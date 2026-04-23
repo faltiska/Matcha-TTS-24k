@@ -171,6 +171,7 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def on_before_optimizer_step(self, optimizer):
+        # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
         submodules = {
             "speaker_embeddings": self.speaker_embeddings,
             "encoder":            self.encoder,
@@ -190,7 +191,6 @@ class BaseLightningClass(LightningModule, ABC):
             param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
             self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
 
-            # Grad norm computation is rather slow, so enable it only if you must see the grad norm chart.
             params_with_grad = [p for p in module.parameters() if p.grad is not None]
             if params_with_grad:
                 grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])

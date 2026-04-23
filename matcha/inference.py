@@ -13,17 +13,17 @@ import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  0},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  0},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  0},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  0},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  0},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  0},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  0},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  0},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  0},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  0},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  0},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  1.04},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  1.03},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  1.02},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  1.00},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  1.02},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  1.05},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  1.01},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  1.04},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  1.03},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  1.01},
+    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  1},
 ]
 
 SAMPLE_RATE = 24000
@@ -63,7 +63,7 @@ class MatchaTTSInfer(nn.Module):
             mixed = weight * e if mixed is None else mixed + weight * e
         return mixed
 
-    def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, scale_correction=0, length_scale=1.0, debug=False):
+    def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, scale_correction=1.0, length_scale=1.0, debug=False):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -117,16 +117,8 @@ class MatchaTTSInfer(nn.Module):
 
         # scale_correction is the per-speaker correction factor measured after training, by comparing
         # generated speech to ground truth. A scale of 1.08 means the model underestimates total duration by 8%.
-        # I believe the model underestimates each phoneme duration by a small number of frames. I believe the errors are
-        # not proportional to the phoneme length. If so, it means, short phonemes are affected more.
-        # I decided to apply an additive correction, instead of a multiplicative one.
-        # We spread the missing frames equally across all phonemes so short phonemes benefit more than long ones.
-        predicted_total_frames = phoneme_durations.sum(dim=1, keepdim=True)
-        n_phonemes = x_lengths.unsqueeze(1).float()
-        correction = predicted_total_frames * scale_correction / n_phonemes
-        phoneme_durations = phoneme_durations + correction
-
-        phoneme_durations = phoneme_durations * length_scale
+        # Apply scale correction first so the default duration is accurate, then apply the user's length scale.
+        phoneme_durations = phoneme_durations * scale_correction * length_scale
 
         # Original code was:
         #  w = torch.exp(logw) * x_mask
@@ -213,7 +205,7 @@ def load_vocoder(vocoder_name):
 
 
 @torch.inference_mode()
-def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, scale_correction=0, length_scale=1.0, debug=False):
+def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, scale_correction=1.0, length_scale=1.0, debug=False):
     text_processed = process_text(text, language)
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(

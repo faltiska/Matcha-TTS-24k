@@ -47,7 +47,7 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.03.24-1
+export TAG=26.04.21-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -161,12 +161,13 @@ Both in EC2 VPC, with their own security group allowing:
 ### Initial Deployment
 
 ```bash
-export TAG=26.03.24-1
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+
+export TAG=26.04.21-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
-# Login and pull
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Create service with 3 replicas
@@ -186,12 +187,15 @@ docker service create \
 ### Rolling Updates (Zero Downtime)
 
 ```bash
-export TAG=26.03.17-1
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+
+export TAG=26.04.21-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
-# Login and pull new version
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Update service (rolling update with 20s delay)
