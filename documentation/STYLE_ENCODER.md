@@ -81,8 +81,7 @@ All dimension values must match the Matcha checkpoint exactly.
 ## Running training
 
 ```bash
-python -m matcha.train_style_encoder \
-  model.matcha_checkpoint_path=logs/train/.../checkpoint.ckpt
+python -m matcha.train_style_encoder
 ```
 
 ---
@@ -100,8 +99,8 @@ python -m matcha.utils.precompute_mels -i configs/data/extra-speakers-24k.yaml
 
 ```bash
 python -m matcha.add_speaker \
-  --style-encoder-ckpt logs/train_style_encoder/style_encoder_v1/runs/2026-03-14_08-31-11/checkpoints/checkpoint_epoch=019.ckpt \
-  --matcha-ckpt logs/train/v7/checkpoint_epoch=099.ckpt \
+  --style-encoder-ckpt logs/train_style_encoder/style_encoder_v1/runs/2026-04-23_14-45-07/checkpoints/checkpoint_epoch=149.ckpt \
+  --matcha-ckpt logs/train/v17/checkpoint_epoch=603.ckpt \
   --csv data/extra-speakers-24k/train.csv \
   --output checkpoint_with_new_speaker.ckpt
 ```

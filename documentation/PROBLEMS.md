@@ -16,13 +16,12 @@ The rounding was applied before summing up. I am now applying it after summing u
 I think this fixed the problem.
 
 5. Prior loss, though very large in value, was progressing so little (delta 0.0001), and the encoder model was not learning.
-I have modified the loss formula so it does not calculate the square of the differences and does not reduce by half.  
-This made training *much more stable* in early stages.
-Unexpectedly, it also made the *duration loss* learn *much faster*.
-By itself, this change is probably good.
+I have modified the loss formula from MSE to smooth_l1, which penalizes big errors more.  
+This made training *much more stable* in early stages.  It also made the *duration loss* learn *much faster*.
 
 6. The Diffusion Loss gradients were flowing back to the encoder.
-The Decoder was able to influence the encoder this way, pushing it in a direction that makes the diffusion job easier. But the encoder is supposed to generate a mel that looks as close to the original as possible.
+The Decoder was able to influence the encoder this way, pushing it in a direction that makes the diffusion job easier. 
+But the encoder is supposed to generate a mel that looks as close to the original as possible.
 I have detached the encoder output before feeding it into the decoder loss formula. 
 The Duration Loss gradients were already detached.
 
@@ -46,17 +45,17 @@ The encoder mel is almost identical to the ground truth. I have converted it to 
 bit more metallic and a with some rare cracks and pops. The CFM just has to add finer detail to it.
 It learns faster now.
 
-10. Separators inserted in between annotation symbols and the annotated phonemes
+10. Separators in between every tow phonemes
 They are required between voiced phonemes, for a simple reason. In between 2 phoneme sounds, there is always a short
-period when a phoneme morphs into the next. That does not sound like the previous phoneme or the next.
+period when a phoneme morphs into the next. It is called a "Formant".
 By inserting a separator, we allow the model to assign that transitional sound to something.
-But some symbols produced by eSpeak are just annotations, like the stress marker that means "put an emphasis on the next 
-vowel", or the duration annotation that means "elongate the previous vowel", like in this example: "ˈɔː". 
-We do not need separators between those.
-Because of how mel bins work, there is a minimum mel duration for any symbol. In my case, the minimum is 11ms. 
-That separator between a stress symbol and its vowel will be at least 11ms long.
-I added a method that groups annotations with their phonemes. 
-Rules are extremely complex, I have a feeling this hasn't been done before. 
+But the same separator symbol was used everywhere. The formants are different depending on the surrounding phonemes.
+They are different both in acoustical content and in duration.
+With a single symbol everywhere, the model had a hard time learning the characteristics.
+I have modified the phonemization scheme, replacing each voiced phoneme p1 (only vowels and consonants) with a tuple 
+of (pre1, p1, post1). I have also introduced a way to use fine-resolution mels, reducing the minimum duration per 
+symbol from the 10ms imposed by Vocos (and by the Decoder) to just 5ms.
+I have a feeling this hasn't been done before. 
 
 11. Kernel size too small to see past the separators
 Look at the phonetic representation for this text (the pipe is the separator described above).
@@ -71,10 +70,9 @@ a larger kernel the signal will be very strong even at the input.
 have had much more weight than the los from short phonemes. It uses MSE loss and when the estimator predicts 9 frames 
 instead of 8, the loss is 9 ** 2 - 8 ** 2 = 17 but if the model predicted 2 instead of 3, the loss would have been just 5
 making the model much more forgiving with errors on short phonemes.
-But the author did not realize ln(2) = 0.69 and the MSE losses are really forgiving with subunitary numbers.
+But the author did not think about small numbers. ln(2) = 0.69 and the MSE losses are really forgiving with subunitary numbers.
 The fix was to add a 2 before calculating the logs, since ln(3) > 1. 
 It has a huge effect, duration estimation loss drops like a rock with this change.
 
 13. Matmul in bf16 was introducing instability around MAS alignment.
-I may have introduced this myself, original repo was using fp16.
 I am still using bf16 now, but I cast tensors to fp32 for matmul, and it fixed the problem.
