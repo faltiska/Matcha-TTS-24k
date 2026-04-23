@@ -12,7 +12,7 @@ defaults:
   - hydra: default
 
 task_name: "train_style_encoder"
-run_name: style_encoder_v1
+run_name: style_encoder_v2
 tags: ["style_encoder"]
 
 train: True

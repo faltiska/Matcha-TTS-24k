@@ -1,0 +1,32 @@
+_target_: matcha.data.text_mel_datamodule.TextMelDataModule
+name: extra-speakers-24k
+train_filelist_path: data/extra-speakers-24k/train.csv
+valid_filelist_path: data/extra-speakers-24k/valid.csv
+# The precompute script will put mels here:
+mel_dir: data/extra-speakers-24k/mels
+
+# Not used, use max_frames_per_batch instead 
+# batch_size: 33
+
+# See DynamicBatchSampler in text_mel_datamodule
+max_frames_per_batch: 32000
+
+num_workers: 16
+persistent_workers: true
+
+pin_memory: True
+n_spks: 10
+n_fft: 1024
+n_feats: 100
+sample_rate: 24000
+hop_length: 256
+win_length: 1024
+f_min: 0
+f_max: 12000
+seed: ${seed}
+
+data_statistics:
+  mel_mean: -3.306311
+  mel_std: 5.464756
+  
+mel_backend: vocos

@@ -5,7 +5,7 @@ defaults:
 _target_: matcha.models.style_encoder.StyleEncoderLightningModule
 
 # Path to a trained Matcha checkpoint
-matcha_checkpoint_path: logs/train/v7/checkpoint_epoch=099.ckpt
+matcha_checkpoint_path: logs/train/v17/checkpoint_epoch=603.ckpt
 
 # Must match the Matcha checkpoint's data config
 n_feats: 100
