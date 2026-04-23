@@ -1,4 +1,56 @@
-# MatchaTTS Production Deployment
+# MatchaTTS Production Deployment - summary
+Do these for each release.
+
+1. Replace *26.04.23-1* with the current tag.
+2. Replace *logs/train/v17/checkpoint_epoch=603.ckpt* with the path to the image you want to release. 
+
+3. Build the image and test it locally
+```bash
+# Linux
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v17/checkpoint_epoch=603.ckpt
+export TAG=26.04.23-1
+export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
+export IMAGE_NAME=evie/matcha
+docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
+docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
+```
+Test with Postman locally.
+
+4Push the image to ECR and clean up local environment:
+```bash
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+docker push $REGISTRY/$IMAGE_NAME:$TAG
+docker container remove matcha
+docker image prune -f
+docker container prune -f
+docker builder prune -f
+```
+
+5Log into the remote EC2 machine
+```bash
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+```
+
+6Pull the image and do a rolling update:
+```bash
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+export TAG=26.04.23-1
+export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
+export IMAGE_NAME=evie/matcha
+docker pull $REGISTRY/$IMAGE_NAME:$TAG
+docker service update --update-delay 120s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+```
+Test with Postman in EC2
+
+7Clean up the remove environment.
+```bash
+docker container prune
+docker image prune -a
+```
+
+---
+
+# MatchaTTS Production Deployment - full docs
 
 ## Prerequisites
 
@@ -198,6 +250,10 @@ docker service create \
 ```
 
 ### Rolling Updates (Zero Downtime)
+```bash
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+```
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
