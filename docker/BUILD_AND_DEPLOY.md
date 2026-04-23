@@ -47,13 +47,14 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.04.21-1
+export TAG=26.04.23-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
-# Copy checkpoint into docker/, build image
-cp /path/to/checkpoint.ckpt docker/checkpoint.ckpt
+# Prepare the checkpoint and copy it to the docker folder
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v17/checkpoint_epoch=603.ckpt
 
+# Build docker image
 docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
 
 # Run it and do a quick test with Postman
@@ -61,10 +62,6 @@ docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.
 
 # Log into container
 docker exec -it matcha /bin/bash
-
-# Cleanup
-docker container remove matcha
-docker image remove 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
 ```
 
 ## Cleanup docker caches
@@ -72,6 +69,7 @@ Docker holds huge amounts of data. Check it with:
 ```
 docker system df
 ```
+
 You can reclaim the space, but the next build command will be slow and will download some of those files again:
 ```
 docker system prune -a --volumes -f
@@ -82,8 +80,19 @@ docker system prune -a --volumes -f
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-
 docker push $REGISTRY/$IMAGE_NAME:$TAG
+
+# Stop and remove the container I started for testing the image. 
+docker container remove matcha
+
+# Remove dangling images only (untagged intermediate layers from previous builds)
+docker image prune -f
+
+# Remove stopped containers
+docker container prune -f
+
+# Remove unused build cache (keeps downloaded base layers)
+docker builder prune -f
 ```
 
 ## EC2 Instance Setup
@@ -159,12 +168,16 @@ Both in EC2 VPC, with their own security group allowing:
 ## Deployment
 
 ### Initial Deployment
-
+Log into the remote EC2 machine:
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+```
 
-export TAG=26.04.21-1
+Create the service (only needs to be done once):
+```bash
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
+export TAG=26.04.23-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -188,11 +201,7 @@ docker service create \
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-
-ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-
-export TAG=26.04.21-1
+export TAG=26.04.23-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 

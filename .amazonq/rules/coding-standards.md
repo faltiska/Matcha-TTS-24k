@@ -1,6 +1,6 @@
 # Project location
-This project is stored in a WSL filesystem.
-We are in IntelliJ in Windows, so use wsl file system paths to locate project files.
+You are running in IntelliJ, in windows, but the project is in a WSL file system.
+You have access to the workspace and can read any file, as long as you use UNC paths for WSL. 
 I can execute linux commands in the IntelliJ terminal so if you need any cli executed, 
 give me a linux command and I will run it for you, but give me the commands one at a time.
 
@@ -38,14 +38,14 @@ Use your judgment.
 Assign intermediate results to named variables instead.
 
 # Keep performance in mind at all times
-1. When writing code, think very carefully about performance:
-   - Think about alternate ways of writing code and choose the variant that executes faster
-   - Think about ways to avoid memory allocations that would not be strictly required
-   - Find the right balance between fast code and efficient memory allocations
-   - Avoid moving data between CPU and GPU
+When writing code, think very carefully about performance:
+- Think about alternate ways of writing code and choose the variant that executes faster
+- Think about ways to avoid memory allocations that would not be strictly required
+- Find the right balance between fast code and efficient memory allocations
+- Avoid moving data between CPU and GPU
 
 # General rules
 1. Please do not answer using variable names, I am a human being, cannot remember the code by heart, I do not know what things like "logw_pred" represent.
-2. KIF that was trueep your answers short and focused.
+2. Keep your answers short and focused.
 3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
-4. When executing grp commands, always exclude the "logs" and ".venv" folders  
+4. When executing grep commands, always exclude the "logs" and ".venv" folders  
