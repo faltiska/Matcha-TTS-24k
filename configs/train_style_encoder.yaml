@@ -22,5 +22,11 @@ limit_val_batches: 0
 data:
   num_workers: 2
 
-ckpt_path: null
 seed: 1234
+
+ckpt_path: logs/train_style_encoder/style_encoder_v2/runs/2026-04-23_16-21-06/checkpoints/checkpoint_epoch=204.ckpt
+
+model:
+  optimizer:
+    # reduced from 1e-4 to 5e-5 at epoch 200
+    lr: 5e-5

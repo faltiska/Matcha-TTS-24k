@@ -1,3 +1,23 @@
+"""
+I have modified Matcha TTS and just completed a training that finally sounds good.
+
+The model has an Encoder with Speaker Embeddings, that accepts a phonetic representation, and generates a state 
+that will be used in 2 ways:
+- as input for the Duration Predictor
+- as input for the Mel Predictor
+
+The output of the Mel Predictor combined with durations from a MAS algorithm results in a predicted mel spectrogram 
+which will be used to calculate the Encoder loss and as input for the diffusion based Decoder.
+The Encoder loss (called a prior loss) is calculated as the difference between the ground truth mel and the predicted mel.
+Duration Predictor and Decoder losses are decoupled from the Encoder. Only the prior loss drives the Encoder and the 
+Speaker Embeddings. The architecture works fine, and the synthesized voice sounds good.
+
+On top of this, I wrote a Style Encoder, which was supposed to be able to predict Speaker Embeddings for new speakers, 
+based on a small set of mel spectrograms.
+
+I trained that, and ran inference with it on a new speaker. The speaker sounds intelligible, timbre is very accurate, 
+but it has a weird accent and makes pronunciation mistakes.
+"""
 import math
 import torch
 import torch.nn as nn
@@ -138,7 +158,6 @@ class StyleEncoderLightningModule(LightningModule):
         self.log_dict({
             "train/loss": ase_loss,
             "train/emb_dist": emb_dist,
-            "train/step": float(self.global_step),
         }, on_step=False, on_epoch=True, logger=True, batch_size=bs)
         return ase_loss
 
