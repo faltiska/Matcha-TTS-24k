@@ -170,29 +170,29 @@ class BaseLightningClass(LightningModule, ABC):
 
         return total_loss
 
-    def on_before_optimizer_step(self, optimizer):
-        # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
-        submodules = {
-            "speaker_embeddings": self.speaker_embeddings,
-            "encoder":            self.encoder,
-            "decoder":            self.decoder,
-            "phoneme_embeddings": self.encoder.emb,
-            "enc_prenet":         self.encoder.prenet,
-            "enc_transformer":    self.encoder.encoder._orig_mod,
-            "enc_proj_m":         self.encoder.proj_m,
-        }
-        for name, module in submodules.items():
-            # Param norm helps me check if the weight decay value from Adam / AdamW is too large.
-            # If param_norm stays flat or slightly increases: weight decay is just fine.
-            # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
-            #
-            # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
-            # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
-            param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
-            self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
-
-            params_with_grad = [p for p in module.parameters() if p.grad is not None]
-            if params_with_grad:
-                grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])
-                self.log(f"grad_norm/{name}", torch.linalg.vector_norm(grad_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
+    # def on_before_optimizer_step(self, optimizer):
+    #     # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
+    #     submodules = {
+    #         "speaker_embeddings": self.speaker_embeddings,
+    #         "encoder":            self.encoder,
+    #         "decoder":            self.decoder,
+    #         "phoneme_embeddings": self.encoder.emb,
+    #         "enc_prenet":         self.encoder.prenet,
+    #         "enc_transformer":    self.encoder.encoder._orig_mod,
+    #         "enc_proj_m":         self.encoder.proj_m,
+    #     }
+    #     for name, module in submodules.items():
+    #         # Param norm helps me check if the weight decay value from Adam / AdamW is too large.
+    #         # If param_norm stays flat or slightly increases: weight decay is just fine.
+    #         # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
+    #         #
+    #         # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
+    #         # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
+    #         param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
+    #         self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
+    # 
+    #         params_with_grad = [p for p in module.parameters() if p.grad is not None]
+    #         if params_with_grad:
+    #             grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])
+    #             self.log(f"grad_norm/{name}", torch.linalg.vector_norm(grad_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
 
