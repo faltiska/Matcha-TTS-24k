@@ -15,3 +15,4 @@ spk_emb_dim: 96
 n_feats: ${data.n_feats}
 data_statistics: ${data.data_statistics}
 prior_loss: true
+prior_loss_beta: 0.1

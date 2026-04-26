@@ -1,0 +1,71 @@
+# @package _global_
+# Let Duration Predictor gradients flow back into the speaker embeddings
+# I had to manually implement a schedule for the smooth_l1 beta:
+# I started with a Beta of 0.05 but at epoch 75 it shot up. Increasing it to 0.075 did not help.
+# I chose 0.076 because I knew it works with 0.1 from a previous attempt, and I tried the midpoint. 
+# I tried 0.17 next, because p90 was fully below that, and the prior loss still had a bump, but it recovered.
+# I thought the optimizer momentum was pushing the model in the wrong direction despite the Beta adjustment.
+# To test, I resumed from epoch 64 with the same settings, and the bump did not happen. 
+# To take the test further, I resumed from epoch 64 with a Beta of 0.075 and the instability happened later.
+# I decided to train with 0.1 like tha last time.
+
+run_name: v18
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: logs/train/v18/checkpoint_epoch=064.ckpt
+
+model:
+  spk_emb_dim: 96
+  prior_loss: true
+  prior_loss_beta: 0.09
+  
+  encoder:
+    encoder_params:
+      # 192 + 96 = 288
+      # 288 / 6 = 48, divisible by 8
+      n_channels: 192
+      # 288 * 4 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 7
+      p_dropout: 0.05
+      
+      prenet: true
+      # should not go over 5, it causes prior loss does not drop well
+      prenet_kernel_size: 5
+    
+    duration_predictor_params:
+      filter_channels_dp: 96
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.05
+  
+  decoder:
+    # other figures that could work
+    # 384 = 6 * 64
+    # 360 = 5 * 72
+    # 336 = 6 * 56
+    channels: [360, 360]
+    attention_head_dim: 72
+    num_heads: 5
+    dropout: 0.05
+  
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-3
+
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 5
+
+trainer:
+  check_val_every_n_epoch: 5

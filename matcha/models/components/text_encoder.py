@@ -132,8 +132,9 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         # The total phonetic representation, including annotations and separators must be shorter than this.
         # The server should enforce a max text length that can fit into this. The client app too.
-        # With the (pre, phoneme, post) tokenization scheme, a 1000 symbols input text will be less than 3000 symbols long after tokenization.
-        self.max_seq_len = 3000
+        # With the (pre, phoneme, post) tokenization scheme, a 1000 symbols input text will be less than 3000 symbols 
+        # long after tokenization, but since some symbols are multibyte, I want some extra space, just inh case.
+        self.max_seq_len = 4000
         # Pre-allocate and fill cos/sin caches
         theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2).float() / self.d))
         seq_idx = torch.arange(self.max_seq_len).float()
@@ -402,6 +403,6 @@ class TextEncoder(nn.Module):
         # Because speaker_embedding was concatenated into x, so we have to strip it before
         # passing it to the Duration Predictor, which needs it as an explicit param.
         x = x[:, :-self.spk_emb_dim, :]
-        logw = self.proj_w(x.detach(), x_mask, speaker_embedding.detach())
+        logw = self.proj_w(x.detach(), x_mask, speaker_embedding)
 
         return mu, logw, x_mask
