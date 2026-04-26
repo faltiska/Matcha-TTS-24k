@@ -132,10 +132,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
             # The L2 loss was causing instability in early epochs, so I switched to a smooth L1 loss:
-            prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=0.04, reduction='sum')
+            beta = self.hparams.prior_loss_beta
+            prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=beta, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
-            # It punishes errors larger than 0.04 like an L1, but is lenient like an L2 with smaller errors. 
-            # Huber loss will be much smaller in value, as it multiplies by the threshold, so stick to smooth_l1.
+            # It punishes errors larger than Beta like an L1, but is lenient like an L2 with smaller errors. 
 
             # This helps pick a good beta value: train for 50 epochs and look at thr p50 distribution. Say it has values
             # between 0.03 and 0.05. That tells you a beta of 0.04 is probably best. All errors below the threshold are
