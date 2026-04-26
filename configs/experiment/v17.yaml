@@ -9,8 +9,7 @@
 # I lowered the LR to 5e-5 and resumed from epoch 54, but it still started growing at 56.   
 # I resumed from epoch 49 too, it started growing at 59.
 #
-# The solution was to switch to a smooth_l1 loss formula. I started with a Beta of 0.1, watched the quantiles, 
-# then changed to 0.04 at epoch 49.
+# The solution was to switch to a smooth_l1 loss formula, with the threshold set to 0.04
 #
 # For fine-tuning, lower LR a lot, say 5e-6, set decay to 0, set dropouts to 0, run 2-3 epochs with all components.
 # Save checkpoints and compute validation every epoch.
@@ -29,7 +28,6 @@ ckpt_path: logs/train/v17/checkpoint_epoch=601.ckpt
 
 model:
   spk_emb_dim: 96
-  # changed to false at epoch 601 for fine-tuning 
   prior_loss: false
 
   encoder:

@@ -1,8 +1,8 @@
 # Project location
-You are running in an IntelliJ plugin, in Windows, but the project is in a WSL file system.
-You have access to the entire project, and you can read any file, but you have to use UNC paths for WSL, like "\\wsl.localhost\Ubuntu\...". 
+You are running in IntelliJ, in windows, but the project is in a WSL file system.
+You have access to the workspace and can read any file, as long as you use UNC paths for WSL. 
 I can execute linux commands in the IntelliJ terminal so if you need any cli executed, 
-give me a linux command, with linux paths, and I will run it for you, but give me the commands one at a time.
+give me a linux command and I will run it for you, but give me the commands one at a time.
 
 
 # Coding Standards
@@ -15,7 +15,7 @@ give me a linux command, with linux paths, and I will run it for you, but give m
    - Appy the "exist fast" principle to avoid deep nesting and improve readability.
    - Never create a method that only holds a single call to another method.
 3. Change only what is necessary. Do not rewrite existing code unless I asked for it.
-4. NEVER delete my comments or docstrings. This is a hard rule with no exceptions, even when rewriting or replacing a block of code. If you are replacing a block that contains comments, you must carry those comments over to the new version.
+4. Do not delete my docstrings unless you had to delete the code it was documenting.
 5. Match the existing coding style as close as possible, unless it breaks the above rules.
 
 6. Avoid using ternary expressions in assignments. Use classic `if/else` blocks instead.

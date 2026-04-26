@@ -71,15 +71,13 @@ class StyleEncoder(nn.Module):
 
 
 class StyleEncoderLightningModule(LightningModule):
-    """Trains the StyleEncoder against a frozen MatchaTTS checkpoint.
+    """Trains AcousticStyleEncoder against a frozen MatchaTTS checkpoint.
 
     For each batch:
-      1. The StyleEncoder predicts speaker embedding from mel
-      2. Run the frozen Matcha encoder with real speaker embedding → mu_x_real, logw_real
-      3. Run the frozen Matcha encoder with predicted embedding → mu_x_pred, logw_pred
-      4. Calculate losses: 
-            Acoustic loss: smooth L1(mu_x_pred, mu_x_real)
-            Rhythm loss: smooth L1(logw_pred, logw_real)
+      1. Run frozen Matcha encoder with real speaker embedding → mu_x_real
+      2. ASE predicts speaker embedding from mel
+      3. Run frozen Matcha encoder with predicted embedding → mu_x_pred
+      4. Loss: smooth L1(mu_x_pred, mu_x_real)
     """
 
     def __init__(
@@ -95,7 +93,7 @@ class StyleEncoderLightningModule(LightningModule):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
-        self.style_encoder = StyleEncoder(
+        self.acoustic_style_encoder = StyleEncoder(
             n_feats=n_feats,
             hidden_channels=ase_hidden_channels,
             n_layers=ase_n_layers,
@@ -107,8 +105,8 @@ class StyleEncoderLightningModule(LightningModule):
         for param in matcha.parameters():
             param.requires_grad = False
         self.matcha = matcha
-        self.matcha.encoder = torch.compile(self.matcha.encoder)
-        self.style_encoder = torch.compile(self.style_encoder)
+        # self.matcha.encoder = torch.compile(self.matcha.encoder)
+        # self.acoustic_style_encoder = torch.compile(self.acoustic_style_encoder)
         self.register_buffer("_quantile_probs", torch.tensor([0.25, 0.5, 0.75, 0.9]), persistent=False)
 
     def configure_optimizers(self):
@@ -119,28 +117,22 @@ class StyleEncoderLightningModule(LightningModule):
         y_fine, y_fine_lengths = batch["y_fine"], batch["y_fine_lengths"]
         spks = batch["spks"]
 
+        real_spk_emb = self.matcha.speaker_embeddings(spks)
+
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine.shape[-1]).unsqueeze(1).to(y_fine.dtype)
-        pred_speaker_emb = self.style_encoder(y_fine, y_fine_mask)
-
-        real_speaker_emb = self.matcha.speaker_embeddings(spks)
-        with torch.no_grad():
-            mu_x_real, logw_real, x_mask = self.matcha.encoder(x, x_lengths, real_speaker_emb)
-
-        mu_x_pred, logw_pred, _ = self.matcha.encoder(x, x_lengths, pred_speaker_emb)
-
-        # Acoustic loss - gradients flow back to pred_speaker_emb
-        acoustic_loss = F.smooth_l1_loss(mu_x_pred * x_mask, mu_x_real * x_mask, beta=0.001, reduction='sum')
-        acoustic_loss = acoustic_loss / x_mask.sum()
-
-        # Rhythm loss - gradients flow back to pred_speaker_emb
-        rhythm_loss = F.smooth_l1_loss(logw_pred * x_mask, logw_real * x_mask, beta=0.001, reduction='sum')
-        rhythm_loss = rhythm_loss / x_mask.sum()
-
-        # Combined loss
-        total_loss = acoustic_loss + rhythm_loss
 
         with torch.no_grad():
-            per_sample_emb_dist = (pred_speaker_emb - real_speaker_emb).pow(2).mean(dim=1).sqrt()
+            mu_x_real, _, x_mask = self.matcha.encoder(x, x_lengths, real_spk_emb)
+
+        pred_spk_emb = self.acoustic_style_encoder(y_fine, y_fine_mask)
+
+        mu_x_pred, _, _ = self.matcha.encoder(x, x_lengths, pred_spk_emb)
+
+        loss = F.smooth_l1_loss(mu_x_pred * x_mask, mu_x_real * x_mask, beta=0.001, reduction='sum')
+        loss = loss / x_mask.sum()
+
+        with torch.no_grad():
+            per_sample_emb_dist = (pred_spk_emb - real_spk_emb).pow(2).mean(dim=1).sqrt()  # (B,)
             emb_dist = per_sample_emb_dist.mean()
 
             is_first_batch_of_epoch = batch_idx == 0
@@ -158,18 +150,16 @@ class StyleEncoderLightningModule(LightningModule):
                 self.log("debug/emb_dist_p75", q_emb[2], on_step=False, on_epoch=True, batch_size=x.shape[0])
                 self.log("debug/emb_dist_p90", q_emb[3], on_step=False, on_epoch=True, batch_size=x.shape[0])
 
-        return total_loss, acoustic_loss, rhythm_loss, emb_dist
+        return loss, emb_dist
 
     def training_step(self, batch, batch_idx):
-        total_loss, acoustic_loss, rhythm_loss, emb_dist = self._compute_losses(batch, batch_idx)
+        ase_loss, emb_dist = self._compute_losses(batch, batch_idx)
         bs = batch["y_fine"].shape[0]
         self.log_dict({
-            "train/total_loss": total_loss,
-            "train/acoustic_loss": acoustic_loss,
-            "train/rhythm_loss": rhythm_loss,
+            "train/loss": ase_loss,
             "train/emb_dist": emb_dist,
         }, on_step=False, on_epoch=True, logger=True, batch_size=bs)
-        return total_loss
+        return ase_loss
 
     def on_before_optimizer_step(self, optimizer):
         norms = grad_norm(self, norm_type=2)
