@@ -1,0 +1,79 @@
+# @package _global_
+# Let Duration Predictor gradients flow back into the speaker embeddings.
+# I tried with a manual schedule for the smooth_l1 beta, but prior loss kept exploding.
+# After a lot of attempts, I decided to switch to Huber with a Beta of 0.04.
+# Plus, I forgot the LR set to 5e-5 (decay 1e-4).
+# Losses dropped much, much slower that usual, but validation losses and residuals look better than before. 
+# And, more importantly, I see no jumps in the prior loss, not even the small jumps that I used to accept if they autocorrected. 
+# And I do not need to keep changing the Beta every 50 epochs; big plus. 
+# It is possible that a lower LR is actually a good idea.
+
+# LR schedule: Started with LR 5e-5, decay 1e-4.
+# Reduced LR to 4e-5 at epoch 799
+# Got a small jump in Encoder loss at epoch 924, so I reduced LR to 2e-5 and decay to 2e-5 and resumed from epoch 924. 
+  
+# I have to try without the 20x multiplier. It makes the Encoder gradients 20x more prominent than the Duration 
+# Predictor gradients in the Speaker Embedding updates. In AdamW, the weight update is proportional to the LR
+# but not to the gradients. Only the sign of the gradients matter. 
+
+run_name: v18
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  max_frames_per_batch: 30000
+
+ckpt_path: logs/train/v18/checkpoint_epoch=1124.ckpt
+
+model:
+  spk_emb_dim: 96
+  prior_loss: false
+  prior_loss_threshold: 0.04
+  prior_loss_scale: 20
+  
+  encoder:
+    encoder_params:
+      # 192 + 96 = 288
+      # 288 / 6 = 48, divisible by 8
+      n_channels: 192
+      # 288 * 4 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 7
+      p_dropout: 0.00
+      
+      prenet: true
+      # should not go over 5, it causes prior loss does not drop well
+      prenet_kernel_size: 5
+    
+    duration_predictor_params:
+      filter_channels_dp: 96
+      kernel_size: 5
+      n_layers: 4
+      p_dropout: 0.00
+  
+  decoder:
+    # other figures that could work
+    # 384 = 6 * 64
+    # 360 = 5 * 72
+    # 336 = 6 * 56
+    channels: [360, 360]
+    attention_head_dim: 72
+    num_heads: 5
+    dropout: 0.00
+  
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    lr: 1e-5
+    weight_decay: 0
+    
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 1
+
+trainer:
+  check_val_every_n_epoch: 1
