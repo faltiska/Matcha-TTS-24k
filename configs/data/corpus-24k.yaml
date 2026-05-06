@@ -15,7 +15,7 @@ num_workers: 16
 persistent_workers: true
 
 pin_memory: True
-n_spks: 10
+n_spks: 15
 n_fft: 1024
 n_feats: 100
 sample_rate: 24000
