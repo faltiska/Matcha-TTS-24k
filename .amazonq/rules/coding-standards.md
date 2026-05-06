@@ -1,9 +1,9 @@
 # Project location
-You are running in an IntelliJ plugin, in Windows, but the project is in a WSL file system.
-You have access to the entire project, and you can read any file, but you have to use UNC paths for WSL, like "\\wsl.localhost\Ubuntu\...". 
-I can execute linux commands in the IntelliJ terminal so if you need any cli executed, 
-give me a linux command, with linux paths, and I will run it for you, but give me the commands one at a time.
-
+IntelliJ and the AmazonQ plugin are running in Windows, but the project is in Ubuntu, in WSL.
+You have access to the entire project, but you have to use UNC paths for WSL, like "\\wsl.localhost\Ubuntu\...".
+You can execute any linux commands, but run them with wsl using a login shell: 
+`wsl -d Ubuntu -- bash -lc "<command>"` 
+so that PATH and environment variables from .profile/.bashrc are available.
 
 # Coding Standards
 1. Write self-explanatory code, as clear as for a person that never saw the code to be able to understand it.
