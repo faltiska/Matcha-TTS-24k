@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from matcha.text.phonemizers import multilingual_phonemizer
-from matcha.text.symbols import symbols
+from matcha.text.symbols import symbol_to_id, N_VOCAB
 
 
 def _load_yaml_config(path: Path) -> Dict[str, Any]:
@@ -39,8 +39,8 @@ def parse_filelist(filelist_path: Path, split_char: str = "|"):
 def validate_filelist(filelist_path: Path):
     entries = parse_filelist(filelist_path)
     total = len(entries)
-    symbol_set = set(symbols)
-    unknown_symbols = set()
+    id_to_symbol = {v: k for k, v in symbol_to_id.items()}
+    found_errors = False
     max_ipa_len = 0
 
     print(f"[validate_corpus_ipa] Input: {filelist_path}")
@@ -53,22 +53,29 @@ def validate_filelist(filelist_path: Path):
 
         language = parts[2]
         text = parts[3]
-        phonemes, symbol_ids = multilingual_phonemizer(text, language)
+
+        try:
+            _, symbol_ids = multilingual_phonemizer(text, language)
+        except KeyError as e:
+            print(f"\n[validate_corpus_ipa] Unknown symbol {e} not in symbol_to_id, in: {repr(text)}")
+            found_errors = True
+            print(f"\r[validate_corpus_ipa] {i}/{total} done.", end="", flush=True)
+            continue
+
         max_ipa_len = max(max_ipa_len, len(symbol_ids))
 
-        for symbol in phonemes:
-            if symbol not in symbol_set and symbol not in unknown_symbols:
-                unknown_symbols.add(symbol)
-                print(f"\n[validate_corpus_ipa] Unknown symbol {repr(symbol)} in: {repr(text)}")
+        for symbol_id in symbol_ids:
+            if symbol_id >= N_VOCAB:
+                symbol = id_to_symbol.get(symbol_id % N_VOCAB, '?')
+                print(f"\n[validate_corpus_ipa] Symbol ID {symbol_id} ('{symbol}') exceeds N_VOCAB={N_VOCAB}, in: {repr(text)}")
+                found_errors = True
+                break
 
         print(f"\r[validate_corpus_ipa] {i}/{total} done.", end="", flush=True)
 
     print()
     print(f"[validate_corpus_ipa] Max IPA sequence length: {max_ipa_len}")
-    if unknown_symbols:
-        print(f"[validate_corpus_ipa] WARNING: Found {len(unknown_symbols)} unknown symbols not in symbols.py:")
-        print(f"[validate_corpus_ipa] {sorted(unknown_symbols)}")
-    else:
+    if not found_errors:
         print(f"[validate_corpus_ipa] All symbols are valid.")
 
 
