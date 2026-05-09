@@ -5,7 +5,6 @@ when needed.
 Parameters from hparam.py will be used
 """
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -14,8 +13,6 @@ from typing import List, Tuple, Dict, Any
 import torch
 import torchaudio as ta
 import numpy as np
-from hydra import compose, initialize
-from omegaconf import open_dict
 from tqdm.auto import tqdm
 
 from matcha.mel.extractors import get_mel_extractor
@@ -170,14 +167,14 @@ def main():
 
     args = parser.parse_args()
 
-    with initialize(version_base="1.3", config_path="../../configs/data"):
-        cfg = compose(config_name=args.input_config, return_hydra_config=True, overrides=[])
-
-    with open_dict(cfg):
-        del cfg["hydra"]
-        del cfg["_target_"]
-        cfg["train_filelist_path"] = str(os.path.join(root_path, cfg["train_filelist_path"]))
-        cfg["valid_filelist_path"] = str(os.path.join(root_path, cfg["valid_filelist_path"]))
+    try:
+        from omegaconf import OmegaConf
+        raw = OmegaConf.load(args.input_config)
+        cfg = dict(OmegaConf.to_container(raw, resolve=True))
+    except Exception:
+        import yaml
+        with open(args.input_config, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
 
     mel_dir = cfg.get("mel_dir")
     if mel_dir and os.path.exists(mel_dir):
