@@ -34,8 +34,11 @@ if [[ "$DELETE_MELS" =~ ^[Yy]$ ]]; then
     echo "Done."
 fi
 
-echo "=== Step 1: Validate IPA symbols ==="
-python -m matcha.utils.validate_corpus_ipa -i "$DATA_CONFIG"
+read -r -p "Run IPA symbol validation? [y/N] " RUN_IPA
+if [[ "$RUN_IPA" =~ ^[Yy]$ ]]; then
+    echo "=== Step 1: Validate IPA symbols ==="
+    python -m matcha.utils.validate_corpus_ipa -i "$DATA_CONFIG"
+fi
 
 echo "=== Step 2: Normalize trailing silence ==="
 python -m matcha.utils.normalize_silence -i "$DATA_CONFIG" --target_silence 0.8

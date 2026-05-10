@@ -30,15 +30,17 @@ log = logging.getLogger(__name__)
 
 
 def freeze_all_except_target_speaker(model: LightningModule, target_speaker: int):
+    spk_emb_param_names = {"speaker_embeddings_enc.weight", "speaker_embeddings_dur.weight"}
     for name, param in model.named_parameters():
-        param.requires_grad = name == "speaker_embeddings.weight"
+        param.requires_grad = name in spk_emb_param_names
 
     def _mask_grad(grad):
         masked = torch.zeros_like(grad)
         masked[target_speaker] = grad[target_speaker]
         return masked
 
-    model.speaker_embeddings.weight.register_hook(_mask_grad)
+    model.speaker_embeddings_enc.weight.register_hook(_mask_grad)
+    model.speaker_embeddings_dur.weight.register_hook(_mask_grad)
     log.info(f"Unfrozen spk_emb_encoder/duration/decoder row {target_speaker} only. All other parameters frozen.")
 
 
@@ -75,7 +77,8 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     def patched_on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         original_on_load_checkpoint(checkpoint)
         all_param_names = [name for name, _ in self.named_parameters()]
-        spk_emb_indices = [all_param_names.index(n) for n in all_param_names if n == "speaker_embeddings.weight"]
+        spk_emb_indices = [all_param_names.index(n) for n in all_param_names
+                           if n in ("speaker_embeddings_enc.weight", "speaker_embeddings_dur.weight")]
         for opt_state in checkpoint.get("optimizer_states", []):
             old_state = opt_state.get("state", {})
             opt_state["state"] = {
@@ -89,7 +92,8 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     model.on_load_checkpoint = types.MethodType(patched_on_load_checkpoint, model)
 
     def patched_configure_optimizers(self):
-        spk_emb_params = [p for n, p in self.named_parameters() if n  == "speaker_embeddings.weight"]
+        spk_emb_params = [p for n, p in self.named_parameters()
+                          if n in ("speaker_embeddings_enc.weight", "speaker_embeddings_dur.weight")]
         return self.hparams.optimizer(params=spk_emb_params)
 
     model.configure_optimizers = types.MethodType(patched_configure_optimizers, model)

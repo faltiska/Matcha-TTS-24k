@@ -35,8 +35,7 @@ python -m matcha.utils.filter_by_wav_duration data/corpus-24k/validate.csv 12
 Check if the corpus uses any unknown IPA symbol. 
 eSpeak could generate a symbol we do not have in our symbols.py map.
 ```
-python -m matcha.utils.validate_corpus_ipa data/corpus-24k/train.csv
-python -m matcha.utils.validate_corpus_ipa data/corpus-24k/validate.csv
+python -m matcha.utils.validate_corpus_ipa -i configs/data/corpus-24k.yaml
 ```
 
 Measure trailing silence per speaker to check for inconsistencies.
@@ -57,7 +56,7 @@ After running, verify the normalization by measuring again - all speakers should
 Delete the mels folders from the corpus, if they exist.
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
-python -m matcha.utils.generate_data_statistics -i corpus-24k.yaml
+python -m matcha.utils.generate_data_statistics -i configs/data/corpus-24k.yaml
 ```
 It will output something like
 {'mel_mean': -1.7744582891464233, 'mel_std': 4.116815090179443}

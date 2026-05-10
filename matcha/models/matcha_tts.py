@@ -26,6 +26,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
+        prior_loss_threshold=0.04,
         plot_mel_on_validation_end=False,
     ):
         super().__init__()
@@ -39,7 +40,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
 
         if n_spks > 1:
-            self.speaker_embeddings = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.speaker_embeddings_enc = torch.nn.Embedding(n_spks, spk_emb_dim)
+            self.speaker_embeddings_dur = torch.nn.Embedding(n_spks, spk_emb_dim)
 
         self.encoder = TextEncoder(
             encoder.encoder_params,
@@ -82,10 +84,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
         """
-        speaker_embedding = self.speaker_embeddings(spks)
+        speaker_embedding_enc = self.speaker_embeddings_enc(spks)
+        speaker_embedding_dur = self.speaker_embeddings_dur(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
         y_fine_max_length = y_fine.shape[-1]
 
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
@@ -131,11 +134,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # The L2 loss was causing instability in early epochs, so I switched to a smooth L1 loss:
-            beta = self.hparams.prior_loss_beta
-            prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=beta, reduction='sum')
+            # The L2 loss was causing instability in early epochs, so I switched to Huber loss.
+            # Since Huber has very small values, I am also scaling it (easier than implementing separate LRs).
+            delta = self.hparams.prior_loss_threshold
+            prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=delta, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
-            # It punishes errors larger than Beta like an L1, but is lenient like an L2 with smaller errors. 
 
             # This helps pick a good beta value: train for 50 epochs and look at thr p50 distribution. Say it has values
             # between 0.03 and 0.05. That tells you a beta of 0.04 is probably best. All errors below the threshold are

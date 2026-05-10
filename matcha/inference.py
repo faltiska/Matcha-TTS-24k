@@ -13,17 +13,22 @@ import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",    "scale_correction":  1.04},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",   "scale_correction":  1.03},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",   "scale_correction":  1.02},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",  "scale_correction":  1.00},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",  "scale_correction":  1.02},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur", "scale_correction":  1.05},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole", "scale_correction":  1.01},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",   "scale_correction":  1.04},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise", "scale_correction":  1.03},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",  "scale_correction":  1.01},
-    {"id": "10", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  1},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",      "scale_correction":  1.10},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",     "scale_correction":  1.08},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction":  1.06},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction":  0.99},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction":  1.10},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction":  1.11},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction":  1.00},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",     "scale_correction":  1.08},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction":  1.04},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction":  1.03},
+    {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction":  1.05},
+    {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction":  1.04},
+    {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.06},
+    {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.09},
+    {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.08},
+    # {"id": "15", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  1},
 ]
 
 SAMPLE_RATE = 24000
@@ -35,7 +40,8 @@ DEVICE = torch.device("cuda")
 class MatchaTTSInfer(nn.Module):
     def __init__(self, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
         super().__init__()
-        self.speaker_embeddings = nn.Embedding(n_spks, spk_emb_dim)
+        self.speaker_embeddings_enc = nn.Embedding(n_spks, spk_emb_dim)
+        self.speaker_embeddings_dur = nn.Embedding(n_spks, spk_emb_dim)
         n_vocab = N_VOCAB
         self.encoder = TextEncoder(encoder.encoder_params,
                                    encoder.duration_predictor_params, n_vocab, spk_emb_dim)
@@ -56,12 +62,14 @@ class MatchaTTSInfer(nn.Module):
             speaker embeddings, shape (1, spk_emb_dim)
         """
         device = next(self.parameters()).device
-        mixed = None
+        mixed_enc, mixed_dur = None, None
         for spk_id, weight in speaker_mix:
             spk_tensor = torch.tensor([spk_id], device=device, dtype=torch.long)
-            e = self.speaker_embeddings(spk_tensor)
-            mixed = weight * e if mixed is None else mixed + weight * e
-        return mixed
+            e_enc = self.speaker_embeddings_enc(spk_tensor)
+            e_dur = self.speaker_embeddings_dur(spk_tensor)
+            mixed_enc = weight * e_enc if mixed_enc is None else mixed_enc + weight * e_enc
+            mixed_dur = weight * e_dur if mixed_dur is None else mixed_dur + weight * e_dur
+        return mixed_enc, mixed_dur
 
     def synthesise(self, x, x_lengths, n_timesteps, speaker=0, voice_mix=None, scale_correction=1.0, length_scale=1.0, debug=False):
         """
@@ -101,14 +109,15 @@ class MatchaTTSInfer(nn.Module):
         """
 
         if voice_mix is not None:
-            speaker_embedding = self.mix_speakers(voice_mix)
+            speaker_embedding_enc, speaker_embedding_dur = self.mix_speakers(voice_mix)
         else:
             device = next(self.parameters()).device
             spk_tensor = torch.tensor([speaker], device=device, dtype=torch.long)
-            speaker_embedding = self.speaker_embeddings(spk_tensor)
+            speaker_embedding_enc = self.speaker_embeddings_enc(spk_tensor)
+            speaker_embedding_dur = self.speaker_embeddings_dur(spk_tensor)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding)
+        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
 
         # I am doing -2 to compensate for the +2 added during training, see matcha_tts
         phoneme_durations = (torch.exp(logw) - 2) * x_mask

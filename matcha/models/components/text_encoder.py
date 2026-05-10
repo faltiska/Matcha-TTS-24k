@@ -80,6 +80,10 @@ class DurationPredictor(nn.Module):
 
         # Project to 2x filter_channels to get both scale (gamma) and shift (beta)
         self.spk_proj = torch.nn.Linear(spk_emb_dim, filter_channels * 2)
+        # Initialize so FiLM is a no-op at the start of training: gamma=1, beta=0
+        torch.nn.init.zeros_(self.spk_proj.weight)
+        torch.nn.init.ones_(self.spk_proj.bias[:filter_channels])
+        torch.nn.init.zeros_(self.spk_proj.bias[filter_channels:])
 
         self.conv_layers.append(
             torch.nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size // 2)
@@ -101,9 +105,6 @@ class DurationPredictor(nn.Module):
             x = conv(x * x_mask)
             x = torch.relu(x)
             x = norm(x)
-            # Both Sonnet 4.6 Extended and Gemini Thinking flagged this as being out of order.
-            # I tested with the "right order" and found that the duration predictor is learning slower/less
-            # This is the code written by Amazon Q / Sonnet 4.6 
             x = (x * gamma) + beta
             x = self.drop(x)
 
@@ -338,7 +339,7 @@ class TextEncoder(nn.Module):
                 self.n_channels,
                 self.n_channels,
                 kernel_size=encoder_params.prenet_kernel_size,
-                n_layers=6,
+                n_layers=6, # I have tested with 4 and it is considerably worse
                 p_dropout=encoder_params.p_dropout,
             )
         else:
@@ -363,7 +364,7 @@ class TextEncoder(nn.Module):
         torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
-            self.n_channels,
+            self.n_channels + spk_emb_dim,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
@@ -371,7 +372,7 @@ class TextEncoder(nn.Module):
             spk_emb_dim=self.spk_emb_dim,
         )
 
-    def forward(self, x, x_lengths, speaker_embedding):
+    def forward(self, x, x_lengths, speaker_embedding_enc, speaker_embedding_dur):
         """Run forward pass to the transformer based encoder and duration predictor
 
         Args:
@@ -396,13 +397,10 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.shape[2]), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-        x = torch.cat([x, speaker_embedding.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
+        x = torch.cat([x, speaker_embedding_enc.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 
-        # Because speaker_embedding was concatenated into x, so we have to strip it before
-        # passing it to the Duration Predictor, which needs it as an explicit param.
-        x = x[:, :-self.spk_emb_dim, :]
-        logw = self.proj_w(x.detach(), x_mask, speaker_embedding)
+        logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
 
         return mu, logw, x_mask

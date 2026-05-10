@@ -53,7 +53,8 @@ class StyleEncoder(nn.Module):
         for _ in range(n_layers):
             self.convs.append(nn.Conv1d(in_ch, hidden_channels, kernel_size=5, padding=2))
             in_ch = hidden_channels
-        self.proj = nn.Linear(hidden_channels, spk_emb_dim)
+        self.proj_enc = nn.Linear(hidden_channels, spk_emb_dim)
+        self.proj_dur = nn.Linear(hidden_channels, spk_emb_dim)
 
     def forward(self, mel, mel_mask):
         """
@@ -61,13 +62,14 @@ class StyleEncoder(nn.Module):
             mel:      (B, n_feats, T_mel)
             mel_mask: (B, 1, T_mel)
         Returns:
-            (B, spk_emb_dim)
+            emb_enc: (B, spk_emb_dim) - embedding for the text encoder
+            emb_dur: (B, spk_emb_dim) - embedding for the duration predictor
         """
         x = mel
         for conv in self.convs:
             x = torch.relu(conv(x * mel_mask))
         pooled = masked_mean_pool(x, mel_mask)
-        return self.proj(pooled)
+        return self.proj_enc(pooled), self.proj_dur(pooled)
 
 
 class StyleEncoderLightningModule(LightningModule):
@@ -120,13 +122,14 @@ class StyleEncoderLightningModule(LightningModule):
         spks = batch["spks"]
 
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine.shape[-1]).unsqueeze(1).to(y_fine.dtype)
-        pred_speaker_emb = self.style_encoder(y_fine, y_fine_mask)
+        pred_speaker_emb_enc, pred_speaker_emb_dur = self.style_encoder(y_fine, y_fine_mask)
 
-        real_speaker_emb = self.matcha.speaker_embeddings(spks)
+        real_speaker_emb_enc = self.matcha.speaker_embeddings_enc(spks)
+        real_speaker_emb_dur = self.matcha.speaker_embeddings_dur(spks)
         with torch.no_grad():
-            mu_x_real, logw_real, x_mask = self.matcha.encoder(x, x_lengths, real_speaker_emb)
+            mu_x_real, logw_real, x_mask = self.matcha.encoder(x, x_lengths, real_speaker_emb_enc, real_speaker_emb_dur)
 
-        mu_x_pred, logw_pred, _ = self.matcha.encoder(x, x_lengths, pred_speaker_emb)
+        mu_x_pred, logw_pred, _ = self.matcha.encoder(x, x_lengths, pred_speaker_emb_enc, pred_speaker_emb_dur)
 
         # Acoustic loss - gradients flow back to pred_speaker_emb
         acoustic_loss = F.smooth_l1_loss(mu_x_pred * x_mask, mu_x_real * x_mask, beta=0.001, reduction='sum')
@@ -140,7 +143,7 @@ class StyleEncoderLightningModule(LightningModule):
         total_loss = acoustic_loss + rhythm_loss
 
         with torch.no_grad():
-            per_sample_emb_dist = (pred_speaker_emb - real_speaker_emb).pow(2).mean(dim=1).sqrt()
+            per_sample_emb_dist = (pred_speaker_emb_enc - real_speaker_emb_enc).pow(2).mean(dim=1).sqrt()
             emb_dist = per_sample_emb_dist.mean()
 
             is_first_batch_of_epoch = batch_idx == 0

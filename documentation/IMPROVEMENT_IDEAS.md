@@ -1,3 +1,47 @@
+# Duration Predictor improvements
+
+1. Norm-before-activation, and SiLU.
+   Your ConvSiluNorm (the Prenet) uses the standard order: Conv → LayerNorm → SiLU → Dropout. 
+   The DP uses Conv → ReLU → LayerNorm → FiLM → Dropout — activation before norm. The current order means LayerNorm is normalizing a half-zero 
+   distribution (everything below 0 was killed by ReLU), so its variance estimate is biased and the dynamic range of the normalized output is reduced.
+   Consider matching the Prenet's pattern:
+   pythonfor conv, norm in zip(self.conv_layers, self.norm_layers):
+   x = conv(x * x_mask)
+   x = norm(x)
+   x = F.silu(x)
+   x = (x * gamma) + beta
+   x = self.drop(x)
+   SiLU is smoother than ReLU and lets a small gradient flow through negative values, which matters for a regression head that needs precise per-token deltas. 
+   Worth A/B testing — could be neutral, but consistent with the rest of the model.
+2. Residual connections.
+   With 4 layers and no residuals, gradient signal degrades through depth. 
+   Adding residuals on layers 2..n (the first one changes channel count, so it can't trivially residual) is straightforward:
+   pythonfor i, (conv, norm) in enumerate(zip(self.conv_layers, self.norm_layers)):
+   residual = x if i > 0 else None
+   x = conv(x * x_mask)
+   x = norm(x)
+   x = F.silu(x)
+   x = (x * gamma) + beta
+   x = self.drop(x)
+   if residual is not None:
+   x = x + residual
+   Especially helpful if you ever want to push DP depth past 4.
+3. With per-speaker data sometimes being unbalanced, the duration-side speaker table can drift toward overconfident per-speaker biases. 
+If you ever see val-time DP loss diverging from train-time, consider explicitly enabling weight decay on speaker_embeddings_dur.weight 
+while leaving other embeddings alone.
+to fix it, ad Speaker Dropout. 
+This is the targeted intervention I'd actually push on. It's not the same as raising the DP's self.drop rate (which you've correctly
+identified as costly). It zeros the speaker embedding pathway with small probability, forcing the DP to fall back on per-token encoder 
+features when the speaker identity is hidden. In MatchaTTS.forward, right after the lookup:
+```python
+   pythonspeaker_embedding_dur = self.speaker_embeddings_dur(spks)
+   if self.training:
+     keep = (torch.rand(speaker_embedding_dur.shape[0], device=speaker_embedding_dur.device) > 0.1)
+     speaker_embedding_dur = speaker_embedding_dur * keep.unsqueeze(-1)
+```
+This is the same idea as classifier-free-guidance dropout in diffusion: occasionally remove the conditioning, train the model to handle both cases. It doesn't increase the DP's per-channel dropout rate, so the convs and FiLM continue to learn at full strength. It directly attacks the memorization vector — per-speaker biases — by occasionally taking that crutch away.
+Train loss should be nearly unaffected. Val loss, if the hypothesis is right, should drop. Probability 0.1 is a reasonable starting point; if the gap closes but val loss is too noisy, lower it; if the gap doesn't close, raise it to 0.2.
+
 # Try conformer blocks for Decoder:
 down_block_type="transformer",
 mid_block_type="transformer",

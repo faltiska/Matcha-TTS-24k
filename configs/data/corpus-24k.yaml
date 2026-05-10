@@ -24,9 +24,9 @@ win_length: 1024
 f_min: 0
 f_max: 12000
 seed: ${seed}
-
+  
 data_statistics:
-  mel_mean: -3.306311
-  mel_std: 5.464756
+  mel_mean: -4.25993
+  mel_std: 6.170012  
   
 mel_backend: vocos

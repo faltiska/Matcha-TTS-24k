@@ -98,7 +98,7 @@ class BaseLightningClass(LightningModule, ABC):
 
     def add_speaker_if_needed(self, checkpoint):
         state_dict = checkpoint["state_dict"]
-        emb_keys = [k for k in ("speaker_embeddings.weight",) if
+        emb_keys = [k for k in ("speaker_embeddings_enc.weight", "speaker_embeddings_dur.weight") if
                     k in state_dict]
         if emb_keys:
             old_n_spks = state_dict[emb_keys[0]].shape[0]

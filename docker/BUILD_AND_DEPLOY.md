@@ -1,14 +1,14 @@
 # MatchaTTS Production Deployment - summary
 Do these for each release.
 
-1. Replace *26.04.23-1* with the current tag.
-2. Replace *logs/train/v17/checkpoint_epoch=603.ckpt* with the path to the image you want to release. 
+1. Replace *26.05.08-1* with the current tag.
+2. Replace *logs/train/v18-prod/checkpoint_epoch=1134.ckpt* with the path to the image you want to release. 
 
 3. Build the image and test it locally
 ```bash
 # Linux
-python -m matcha.utils.prepare_ckpt_for_release logs/train/v17/checkpoint_epoch=603.ckpt
-export TAG=26.04.23-1
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v18-prod/checkpoint_epoch=1134.ckpt
+export TAG=26.05.08-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
@@ -16,7 +16,7 @@ docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.
 ```
 Test with Postman locally.
 
-4Push the image to ECR and clean up local environment:
+4. Push the image to ECR and clean up local environment:
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker push $REGISTRY/$IMAGE_NAME:$TAG
@@ -26,23 +26,23 @@ docker container prune -f
 docker builder prune -f
 ```
 
-5Log into the remote EC2 machine
+5. Log into the remote EC2 machine
 ```bash
 ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
 ```
 
-6Pull the image and do a rolling update:
+6. Pull the image and do a rolling update:
 ```bash
-aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.04.23-1
+export TAG=26.05.08-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
-docker service update --update-delay 120s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+docker service update --image $REGISTRY/$IMAGE_NAME:$TAG matcha
 ```
 Test with Postman in EC2
 
-7Clean up the remove environment.
+7. Clean up the remove environment.
 ```bash
 docker container prune
 docker image prune -a
@@ -99,12 +99,12 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.04.23-1
+export TAG=26.05.08-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
 # Prepare the checkpoint and copy it to the docker folder
-python -m matcha.utils.prepare_ckpt_for_release logs/train/v17/checkpoint_epoch=603.ckpt
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v18-prod/checkpoint_epoch=1134.ckpt
 
 # Build docker image
 docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
@@ -229,24 +229,25 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 Create the service (only needs to be done once):
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.04.23-1
+export TAG=26.05.08-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
-# Create service with 3 replicas
+# Create service with 1 replica, such that it keeps one replica up during updates
 docker service create \
   --name matcha \
-  --replicas 2 \
+  --replicas 1 \
   --publish 8881:8000 \
   --env CHECKPOINT_PATH=/app/models/checkpoint.ckpt \
   --env MAX_TEXT_LENGTH=500 \
   --generic-resource "NVIDIA-GPU=0" \
   --update-delay 120s \
   --update-parallelism 1 \
-  --update-order stop-first \
+  --update-order start-first \
   $REGISTRY/$IMAGE_NAME:$TAG
+
 ```
 
 ### Rolling Updates (Zero Downtime)
@@ -257,14 +258,14 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.04.23-1
+export TAG=26.05.08-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
 docker pull $REGISTRY/$IMAGE_NAME:$TAG
 
 # Update service (rolling update with 20s delay)
-docker service update --update-delay 120s --image $REGISTRY/$IMAGE_NAME:$TAG matcha
+docker service update --image $REGISTRY/$IMAGE_NAME:$TAG matcha
 
 # Remove stopped containers
 docker container prune
@@ -286,10 +287,10 @@ docker service logs -f matcha
 docker service ps matcha
 
 # Scale service
-docker service update matcha --replicas 3
+docker service update matcha --replicas 2
 
 # List containers
-docker container ls
+docker container ls -a
 
 # Exec into container
 docker exec -it <container_id> bash
@@ -302,6 +303,12 @@ docker service rm matcha
 
 # Leave swarm (cleanup)
 docker swarm leave --force
+
+# Restart the container
+docker service update --force matcha
+
+# List local images
+docker images
 ```
 
 ## Testing

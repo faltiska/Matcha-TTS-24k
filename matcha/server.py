@@ -22,7 +22,7 @@ torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
 
-CHECKPOINT_PATH = "logs/train/v17/checkpoint_epoch=424.ckpt"
+CHECKPOINT_PATH = "logs/train/v18-prod-candidate/checkpoint_epoch=1134.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -55,7 +55,7 @@ class InferenceRequest(BaseModel):
     voice: int | str = 0
     response_format: str = "mp3"
     speed: float = 1.0
-    steps: int = 15
+    steps: int = 20
 
 
 def parse_voice_mix(voice_str: str):

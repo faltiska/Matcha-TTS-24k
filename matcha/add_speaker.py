@@ -38,7 +38,8 @@ def parse_csv(csv_path):
 
 
 def predict_embeddings(style_encoder, csv_rows, mel_dir):
-    embs = []
+    embs_enc = []
+    embs_dur = []
 
     for i, row in enumerate(csv_rows):
         rel_base = row[0]
@@ -48,14 +49,16 @@ def predict_embeddings(style_encoder, csv_rows, mel_dir):
         y = mel.unsqueeze(0)
 
         with torch.no_grad():
-            pred_spk_emb = style_encoder.acoustic_style_encoder(y, torch.ones(1, 1, y.shape[-1], device=DEVICE))
+            pred_emb_enc, pred_emb_dur = style_encoder.style_encoder(y, torch.ones(1, 1, y.shape[-1], device=DEVICE))
 
-        embs.append(pred_spk_emb.squeeze(0))
+        embs_enc.append(pred_emb_enc.squeeze(0))
+        embs_dur.append(pred_emb_dur.squeeze(0))
         print(f"\r[add_speaker] {i + 1}/{len(csv_rows)}", end="", flush=True)
 
     print()
-    avg_spk_emb = torch.stack(embs).mean(dim=0)
-    return avg_spk_emb
+    avg_emb_enc = torch.stack(embs_enc).mean(dim=0)
+    avg_emb_dur = torch.stack(embs_dur).mean(dim=0)
+    return avg_emb_enc, avg_emb_dur
 
 
 def expand_embedding_table(state_dict, key, new_row):
@@ -83,14 +86,15 @@ def main():
     csv_rows = parse_csv(args.csv)
     mel_dir = Path(args.csv).parent / "mels"
     print(f"[add_speaker] Processing {len(csv_rows)} recordings from {mel_dir}...")
-    avg_spk_emb = predict_embeddings(style_encoder, csv_rows, mel_dir)
+    avg_emb_enc, avg_emb_dur = predict_embeddings(style_encoder, csv_rows, mel_dir)
 
     output_path = Path(args.output)
     shutil.copy2(args.matcha_ckpt, output_path)
     ckpt = torch.load(output_path, map_location="cpu", weights_only=False)
 
     sd = ckpt["state_dict"]
-    new_n_spks = expand_embedding_table(sd, "speaker_embeddings.weight", avg_spk_emb)
+    new_n_spks = expand_embedding_table(sd, "speaker_embeddings_enc.weight", avg_emb_enc)
+    expand_embedding_table(sd, "speaker_embeddings_dur.weight", avg_emb_dur)
     ckpt["hyper_parameters"]["n_spks"] = new_n_spks
 
     torch.save(ckpt, output_path)
