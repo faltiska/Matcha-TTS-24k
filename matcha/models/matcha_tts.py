@@ -59,7 +59,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.update_data_statistics(data_statistics)
         self.batch_idx = 0
-        self.register_buffer("_quantile_probs", torch.tensor([0.25, 0.5, 0.75, 0.9]), persistent=False)
+        self.register_buffer("_quantile_probs", torch.tensor([0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]), persistent=False)
 
     def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks):
         """
@@ -123,13 +123,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         #   mu_y = torch.matmul(mu_x, attn.squeeze(1))
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
+        # logw - log-scaled durations from the Duration Predictor
+        # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
+        dur_loss = duration_loss(logw, logw_, x_lengths)
+
         if self.prior_loss:
-            # logw - log-scaled durations from the Duration Predictor
-            # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-            # It only makes sense to calculate the duration loss if prior loss is set to true.
-            # Otherwise, MAS would find the same alignment and Duration Predictor has nothing new to learn. 
-            dur_loss = duration_loss(logw, logw_, x_lengths)
-    
             # Original code was: 
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
@@ -140,22 +138,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=delta, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
 
-            # This helps pick a good beta value: train for 50 epochs and look at thr p50 distribution. Say it has values
-            # between 0.03 and 0.05. That tells you a beta of 0.04 is probably best. All errors below the threshold are
-            # given an L2 treatment, all values above it an L1.
-            # Also, if the distribution has a heavy right tail (p90 much larger than 3x p50), it's a sign some frames 
-            # are consistently hard to predict.
-            if self.batch_idx == 0 and self.training:
+            # This helps pick a good beta value: Watch the percentiles.
+            if self.batch_idx == 0:
                 with torch.no_grad():
-                    valid_residuals = torch.abs(y_fine - mu_y_fine)[y_fine_mask.expand_as(y_fine).bool()]
-                    q = torch.quantile(valid_residuals, self._quantile_probs)
-                    self.log("debug_prior/residuals_p25", q[0], on_step=False, on_epoch=True, batch_size=y.shape[0])
-                    self.log("debug_prior/residuals_p50", q[1], on_step=False, on_epoch=True, batch_size=y.shape[0])
-                    self.log("debug_prior/residuals_p75", q[2], on_step=False, on_epoch=True, batch_size=y.shape[0])
-                    self.log("debug_prior/residuals_p90", q[3], on_step=False, on_epoch=True, batch_size=y.shape[0])
+                    self._log_prior_residual_diagnostics(x, y, y_fine, mu_y_fine, y_fine_mask, attn_fine)
         else:
             prior_loss = 0
-            dur_loss = 0
 
         mu_y_coarse = downsample(mu_y_fine)
 
@@ -168,6 +156,71 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
 
         return diff_loss, dur_loss, prior_loss
+
+    def _log_prior_residual_diagnostics(self, x, y, y_fine, mu_y_fine, y_fine_mask, attn_fine):
+        valid_residuals = torch.abs(y_fine - mu_y_fine)[y_fine_mask.expand_as(y_fine).bool()]
+        q = torch.quantile(valid_residuals, self._quantile_probs)
+        batch_size = y.shape[0]
+        self.log("debug_prior/residuals_p25",  q[0], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p50",  q[1], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p75",  q[2], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p90",  q[3], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p95",  q[4], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p99",  q[5], on_step=False, on_epoch=True, batch_size=batch_size)
+        self.log("debug_prior/residuals_p100", q[6], on_step=False, on_epoch=True, batch_size=batch_size)
+        # self._log_hard_phonemes(x, y_fine, mu_y_fine, y_fine_mask, attn_fine)
+
+    def _log_hard_phonemes(self, x, y_fine, mu_y_fine, y_fine_mask, attn_fine):
+        from matcha.text.symbols import symbols, PRE_ID, POST_ID, ipa_symbols
+        hard_threshold = 0.9
+
+        # Per-frame residual: mean absolute error across mel features, shape (B, T_mel)
+        per_frame_residual = torch.abs(y_fine - mu_y_fine).mean(dim=1)
+
+        # attn_fine shape: (B, T_text, T_mel) — each mel frame maps to exactly one text token
+        # argmax over T_text gives the token index responsible for each mel frame
+        token_per_frame = attn_fine.squeeze(1).argmax(dim=1)  # (B, T_mel)
+
+        valid_mask = y_fine_mask.squeeze(1)  # (B, T_mel)
+        hard_mask = (per_frame_residual > hard_threshold) & valid_mask.bool()
+
+        # Accumulate total residual and count per token id
+        token_residual_max = torch.zeros(3 * PRE_ID, device=y_fine.device)
+        token_hard_count   = torch.zeros(3 * PRE_ID, device=y_fine.device)
+        for b in range(x.shape[0]):
+            hard_frame_indices = hard_mask[b].nonzero(as_tuple=True)[0]
+            if hard_frame_indices.numel() == 0:
+                continue
+            token_ids = x[b][token_per_frame[b][hard_frame_indices]]   # token id for each hard frame
+            residuals = per_frame_residual[b][hard_frame_indices]
+            token_residual_max.scatter_reduce_(0, token_ids, residuals, reduce="amax", include_self=True)
+            token_hard_count.scatter_add_(0, token_ids, torch.ones_like(residuals))
+
+        active_token_ids = token_hard_count.nonzero(as_tuple=True)[0]
+        if active_token_ids.numel() == 0:
+            return
+
+        max_residuals = token_residual_max[active_token_ids]
+        top_indices = max_residuals.argsort(descending=True)[:10]
+        top_token_ids = active_token_ids[top_indices].tolist()
+        top_residuals = max_residuals[top_indices].tolist()
+
+        lines = []
+        for token_id, residual in zip(top_token_ids, top_residuals):
+            base_symbol = symbols[token_id % PRE_ID]
+            is_ipa = base_symbol in ipa_symbols
+            has_pre  = token_id >= PRE_ID  and token_id < POST_ID
+            has_post = token_id >= POST_ID
+            if is_ipa and has_pre:
+                label = f"(pre, {base_symbol})"
+            elif is_ipa and has_post:
+                label = f"({base_symbol}, post)"
+            else:
+                label = base_symbol
+            lines.append(f"{label}(id={token_id}): {residual:.4f}")
+
+        summary = "  ".join(lines)
+        self.logger.experiment.add_text("debug_prior/hard_phonemes", summary, global_step=self.global_step)
 
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
