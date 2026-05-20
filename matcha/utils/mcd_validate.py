@@ -27,34 +27,6 @@ speaker_009 MCD:  4.82 dB   4.62 dB  4.51 dB  4.42 dB  4.39 dB  4.36 dB  4.28 dB
 -----------------------------------------------------------------------------------------------------------
 Average MCD:      4.63 dB   4.45 dB  4.28 dB  4.15 dB  4.09 dB  4.06 dB  4.02 dB  3.94 dB  3.94 dB  3.91 dB
 
-                  v13/044  v13/064  v13/109  v13/134  v13/184        v14/044  v14/064  v14/099  v14/149  v14/214  v14/269
-speaker_000 MCD:  6.05 dB  5.55 dB  5.19 dB  5.04 dB  4.95 dB        5.97 dB  5.59 dB  5.32 dB  5.04 dB  4.78 dB  4.85 dB        
-speaker_001 MCD:  4.75 dB  4.40 dB  3.83 dB  3.70 dB  3.55 dB        4.77 dB  4.23 dB  3.97 dB  3.64 dB  3.41 dB  3.38 dB        
-speaker_002 MCD:  4.65 dB  4.40 dB  4.05 dB  3.99 dB  3.78 dB        4.76 dB  4.51 dB  4.16 dB  3.94 dB  3.71 dB  3.62 dB        
-speaker_003 MCD:  4.06 dB  3.84 dB  3.52 dB  3.42 dB  3.33 dB        4.00 dB  3.61 dB  3.29 dB  3.04 dB  2.88 dB  2.86 dB        
-speaker_004 MCD:  6.09 dB  5.73 dB  5.31 dB  5.14 dB  5.01 dB        6.12 dB  5.79 dB  5.47 dB  5.11 dB  4.94 dB  4.82 dB        
-speaker_005 MCD:  4.61 dB  4.47 dB  4.08 dB  4.00 dB  3.87 dB        4.56 dB  4.39 dB  4.08 dB  4.01 dB  3.86 dB  3.81 dB        
-speaker_006 MCD:  4.65 dB  4.40 dB  4.16 dB  4.17 dB  3.99 dB        4.66 dB  4.23 dB  4.05 dB  3.96 dB  3.91 dB  3.78 dB        
-speaker_007 MCD:  6.13 dB  5.78 dB  5.31 dB  5.27 dB  5.05 dB        6.05 dB  5.74 dB  5.39 dB  5.14 dB  5.00 dB  4.94 dB        
-speaker_008 MCD:  6.26 dB  5.85 dB  5.30 dB  5.34 dB  5.18 dB        6.24 dB  5.76 dB  5.59 dB  5.23 dB  4.99 dB  4.88 dB        
-speaker_009 MCD:  5.55 dB  5.31 dB  4.80 dB  4.72 dB  4.66 dB        5.62 dB  5.22 dB  4.93 dB  4.74 dB  4.53 dB  4.50 dB        
--------------------------------------------------------------        ----------------------------------------------------        
-Average MCD:      5.28 dB  4.97 dB  4.55 dB  4.48 dB  4.34 dB        5.27 dB  4.91 dB  4.63 dB  4.38 dB  4.20 dB  4.14 dB
-
-                  v16/044  v16/064  v16/094  v16/164  v16/224  v16/279  
-speaker_000 MCD:  6.25 dB  5.64 dB  5.33 dB  5.01 dB  4.81 dB  4.74 dB        
-speaker_001 MCD:  4.93 dB  4.21 dB  3.94 dB  3.60 dB  3.45 dB  3.32 dB        
-speaker_002 MCD:  4.94 dB  4.34 dB  4.13 dB  3.90 dB  3.66 dB  3.55 dB        
-speaker_003 MCD:  4.04 dB  3.54 dB  3.26 dB  2.99 dB  2.87 dB  2.71 dB        
-speaker_004 MCD:  5.97 dB  5.50 dB  5.38 dB  5.04 dB  4.82 dB  4.75 dB        
-speaker_005 MCD:  4.71 dB  4.36 dB  4.14 dB  3.95 dB  3.87 dB  3.79 dB        
-speaker_006 MCD:  4.64 dB  4.30 dB  4.02 dB  3.94 dB  3.75 dB  3.71 dB        
-speaker_007 MCD:  6.06 dB  5.66 dB  5.41 dB  5.18 dB  4.96 dB  4.91 dB        
-speaker_008 MCD:  6.24 dB  5.76 dB  5.48 dB  5.10 dB  4.93 dB  4.87 dB        
-speaker_009 MCD:  5.55 dB  5.10 dB  4.96 dB  4.70 dB  4.35 dB  4.34 dB        
-----------------------------------------------------------------------        
-Average MCD:      5.33 dB  4.84 dB  4.61 dB  4.34 dB  4.15 dB  4.07 dB
-
                   v17/044  v17/064  v17/094  v17/164  v17/224  v17/264  v17/369  v17/424  v17/494  v17/579  v17/599  v17/603
 speaker_000 MCD:  5.87 dB  5.44 dB  5.17 dB  4.89 dB  4.85 dB  4.71 dB  4.60 dB  4.57 dB  4.60 dB  4.56 dB  4.60 dB  4.44 dB
 speaker_001 MCD:  4.62 dB  4.10 dB  3.81 dB  3.52 dB  3.44 dB  3.29 dB  3.24 dB  3.15 dB  3.10 dB  3.17 dB  3.15 dB  3.05 dB
@@ -84,24 +56,24 @@ speaker_009 MCD   5.86 dB  5.54 dB  5.40 dB  4.84 dB  4.67 dB  4.61 dB  4.44 dB 
 Average MCD:      5.50 dB  5.17 dB  4.99 dB  4.55 dB  4.38 dB  4.31 dB  4.17 dB  4.11 dB  4.09 dB  4.01 dB  3.95 dB  3.90 dB  3.87 dB  3.80 dB
 
 
-V19       epoch       044      064      094      164      229      264      374      429      499      584      824     1049     1086     1134
-speaker_000 MCD   6.16 dB  5.82 dB   
-speaker_001 MCD   4.57 dB  4.31 dB   
-speaker_002 MCD   4.62 dB  4.39 dB   
-speaker_003 MCD   3.84 dB  3.55 dB   
-speaker_004 MCD   6.43 dB  5.94 dB   
-speaker_005 MCD   4.55 dB  4.37 dB   
-speaker_006 MCD   4.44 dB  4.26 dB   
-speaker_007 MCD   5.96 dB  5.55 dB   
-speaker_008 MCD   6.26 dB  5.85 dB   
-speaker_009 MCD   5.52 dB  5.15 dB   
-speaker_010 MCD   4.81 dB  4.59 dB   
-speaker_011 MCD   5.48 dB  5.35 dB   
-speaker_012 MCD   4.84 dB  4.57 dB   
-speaker_013 MCD   7.07 dB  6.68 dB   
-speaker_014 MCD   6.42 dB  6.16 dB   
------------------------------------------------------------------------------------------------------------------------------------------------------ 
-Average MCD:      5.40 dB  5.10 dB  
+V19       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
+speaker_000 MCD   6.12 dB  5.73 dB  5.52 dB  5.18 dB  4.90 dB  4.77 dB  4.69 dB  4.73 dB  4.61 dB  4.43 dB  4.46 dB  4.38 dB   
+speaker_001 MCD   4.56 dB  4.36 dB  4.00 dB  3.75 dB  3.46 dB  3.26 dB  3.23 dB  3.21 dB  3.18 dB  3.06 dB  3.01 dB  2.92 dB   
+speaker_002 MCD   4.64 dB  4.45 dB  4.21 dB  3.91 dB  3.74 dB  3.59 dB  3.51 dB  3.47 dB  3.41 dB  3.40 dB  3.36 dB  3.27 dB   
+speaker_003 MCD   3.94 dB  3.59 dB  3.28 dB  3.05 dB  2.88 dB  2.71 dB  2.69 dB  2.67 dB  2.61 dB  2.55 dB  2.47 dB  2.44 dB   
+speaker_004 MCD   6.22 dB  6.11 dB  5.88 dB  5.15 dB  4.93 dB  4.79 dB  4.55 dB  4.58 dB  4.46 dB  4.41 dB  4.39 dB  4.26 dB   
+speaker_005 MCD   4.59 dB  4.46 dB  4.35 dB  4.00 dB  3.82 dB  3.76 dB  3.68 dB  3.70 dB  3.70 dB  3.62 dB  3.61 dB  3.52 dB   
+speaker_006 MCD   4.57 dB  4.28 dB  4.12 dB  3.97 dB  3.98 dB  3.85 dB  3.80 dB  3.71 dB  3.69 dB  3.72 dB  3.63 dB  3.59 dB   
+speaker_007 MCD   5.94 dB  5.63 dB  5.42 dB  5.19 dB  5.01 dB  4.82 dB  4.75 dB  4.73 dB  4.64 dB  4.63 dB  4.59 dB  4.54 dB   
+speaker_008 MCD   5.90 dB  5.94 dB  5.63 dB  5.24 dB  5.02 dB  4.85 dB  4.73 dB  4.74 dB  4.68 dB  4.69 dB  4.64 dB  4.54 dB   
+speaker_009 MCD   5.44 dB  5.23 dB  4.98 dB  4.71 dB  4.55 dB  4.35 dB  4.30 dB  4.30 dB  4.24 dB  4.22 dB  4.18 dB  4.10 dB   
+speaker_010 MCD   4.76 dB  4.71 dB  4.60 dB  4.28 dB  4.17 dB  4.13 dB  4.03 dB  4.02 dB  3.93 dB  3.94 dB  3.87 dB  3.88 dB   
+speaker_011 MCD   5.70 dB  5.37 dB  5.21 dB  5.11 dB  5.04 dB  5.02 dB  4.96 dB  4.95 dB  4.92 dB  4.94 dB  4.89 dB  4.89 dB   
+speaker_012 MCD   4.83 dB  4.58 dB  4.42 dB  4.12 dB  4.08 dB  3.92 dB  3.88 dB  3.89 dB  3.78 dB  3.80 dB  3.72 dB  3.71 dB   
+speaker_013 MCD   6.91 dB  6.72 dB  6.49 dB  6.21 dB  5.86 dB  5.65 dB  5.69 dB  5.60 dB  5.56 dB  5.52 dB  5.49 dB  5.44 dB   
+speaker_014 MCD   6.33 dB  6.16 dB  6.03 dB  5.71 dB  5.63 dB  5.51 dB  5.50 dB  5.45 dB  5.46 dB  5.39 dB  5.43 dB  5.37 dB   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+Average MCD:      5.36 dB  5.16 dB  4.94 dB  4.64 dB  4.47 dB  4.33 dB  4.27 dB  4.25 dB  4.19 dB  4.15 dB  4.12 dB  4.06 dB   
 
 All measurements until V8 were taken with the recommended scaling applied.
 Measurements after V8 were taken without any scale corrections.
@@ -130,7 +102,7 @@ def pick_samples(valid_filelist: Path, speaker_id: str) -> list[tuple[str, Path]
     all_rows = parse_filelist(valid_filelist)
     samples = []
     skipped = 0
-    for rel_path, spk_id, _lang, text in all_rows:
+    for rel_path, spk_id, _lang, text, _phoneme_ids in all_rows:
         if spk_id != speaker_id:
             continue
         if skipped < SAMPLE_OFFSET:
