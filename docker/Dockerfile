@@ -27,6 +27,7 @@ RUN --mount=type=cache,target=/uv-cache,uid=1001 \
 COPY --chown=appuser:appuser matcha ./matcha
 COPY --chown=appuser:appuser docker/checkpoint.ckpt ./models/checkpoint.ckpt
 
+ARG IMAGE_VERSION=unknown
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -36,7 +37,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     MATCHA_CACHE_DIR=/app/.cache \
     TORCH_HOME=/app/.cache/torch \
     CHECKPOINT_PATH=/app/models/checkpoint.ckpt \
-    MAX_TEXT_LENGTH=500
+    MAX_TEXT_LENGTH=1000 \
+    IMAGE_VERSION=$IMAGE_VERSION
 
 EXPOSE 8000
 

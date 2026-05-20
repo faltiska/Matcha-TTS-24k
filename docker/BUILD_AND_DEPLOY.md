@@ -1,18 +1,18 @@
 # MatchaTTS Production Deployment - summary
 Do these for each release.
 
-1. Replace *26.05.08-1* with the current tag.
-2. Replace *logs/train/v18-prod/checkpoint_epoch=1134.ckpt* with the path to the image you want to release. 
+1. Replace *26.05.20-1* with the current tag.
+2. Replace *logs/train/v19/checkpoint_epoch=1281.ckpt* with the path to the image you want to release. 
 
 3. Build the image and test it locally
 ```bash
 # Linux
-python -m matcha.utils.prepare_ckpt_for_release logs/train/v18-prod/checkpoint_epoch=1134.ckpt
-export TAG=26.05.08-1
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v19/checkpoint_epoch=1281.ckpt
+export TAG=26.05.20-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
-docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
-docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
+docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG --build-arg IMAGE_VERSION=$TAG .
+docker container remove matcha; docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
 ```
 Test with Postman locally.
 
@@ -21,9 +21,7 @@ Test with Postman locally.
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
 docker push $REGISTRY/$IMAGE_NAME:$TAG
 docker container remove matcha
-docker image prune -f
-docker container prune -f
-docker builder prune -f
+docker system prune -a
 ```
 
 5. Log into the remote EC2 machine
@@ -33,7 +31,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 
 6. Pull the image and do a rolling update:
 ```bash
-export TAG=26.05.08-1
+export TAG=26.05.20-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
@@ -42,7 +40,7 @@ docker service update --image $REGISTRY/$IMAGE_NAME:$TAG matcha
 ```
 Test with Postman in EC2
 
-7. Clean up the remove environment.
+7. Clean up the remote environment.
 ```bash
 docker container prune
 docker image prune -a
@@ -99,15 +97,15 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.05.08-1
+export TAG=26.05.20-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
 # Prepare the checkpoint and copy it to the docker folder
-python -m matcha.utils.prepare_ckpt_for_release logs/train/v18-prod/checkpoint_epoch=1134.ckpt
+python -m matcha.utils.prepare_ckpt_for_release logs/train/v19/checkpoint_epoch=1281.ckpt
 
 # Build docker image
-docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG .
+docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG --build-arg IMAGE_VERSION=$TAG .
 
 # Run it and do a quick test with Postman
 docker run -p 8000:8000 --gpus all --name matcha 678811077621.dkr.ecr.eu-west-1.amazonaws.com/$IMAGE_NAME:$TAG
@@ -229,7 +227,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 Create the service (only needs to be done once):
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.05.08-1
+export TAG=26.05.20-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -240,8 +238,6 @@ docker service create \
   --name matcha \
   --replicas 1 \
   --publish 8881:8000 \
-  --env CHECKPOINT_PATH=/app/models/checkpoint.ckpt \
-  --env MAX_TEXT_LENGTH=500 \
   --generic-resource "NVIDIA-GPU=0" \
   --update-delay 120s \
   --update-parallelism 1 \
@@ -258,7 +254,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.05.08-1
+export TAG=26.05.20-1
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
