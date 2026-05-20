@@ -6,6 +6,8 @@ Usage:
 """
 
 import argparse
+import os
+import tempfile
 from pathlib import Path
 from typing import Dict, Any
 
@@ -42,6 +44,7 @@ def validate_filelist(filelist_path: Path):
     id_to_symbol = {v: k for k, v in symbol_to_id.items()}
     found_errors = False
     max_ipa_len = 0
+    output_rows = []
 
     print(f"[validate_corpus_ipa] Input: {filelist_path}")
     print(f"[validate_corpus_ipa] Found {total} entries...")
@@ -49,6 +52,7 @@ def validate_filelist(filelist_path: Path):
     for i, parts in enumerate(entries, start=1):
         if len(parts) < 4:
             print(f"[validate_corpus_ipa] WARNING: Skipping malformed line {i}: {parts}")
+            output_rows.append(parts)
             continue
 
         language = parts[2]
@@ -59,6 +63,7 @@ def validate_filelist(filelist_path: Path):
         except KeyError as e:
             print(f"\n[validate_corpus_ipa] Unknown symbol {e} not in symbol_to_id, in: {repr(text)}")
             found_errors = True
+            output_rows.append(parts)
             print(f"\r[validate_corpus_ipa] {i}/{total} done.", end="", flush=True)
             continue
 
@@ -71,12 +76,25 @@ def validate_filelist(filelist_path: Path):
                 found_errors = True
                 break
 
+        # Store the first 4 columns plus the precomputed phoneme IDs as a space-separated string
+        phoneme_ids_str = " ".join(str(id) for id in symbol_ids)
+        output_rows.append(parts[:4] + [phoneme_ids_str])
+
         print(f"\r[validate_corpus_ipa] {i}/{total} done.", end="", flush=True)
 
     print()
     print(f"[validate_corpus_ipa] Max IPA sequence length: {max_ipa_len}")
     if not found_errors:
         print(f"[validate_corpus_ipa] All symbols are valid.")
+
+    # Write to a temp file first, then atomically replace the original
+    dir = filelist_path.parent
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=dir, delete=False, suffix=".tmp") as tmp:
+        tmp_path = tmp.name
+        for row in output_rows:
+            tmp.write("|".join(row) + "\n")
+    os.replace(tmp_path, filelist_path)
+    print(f"[validate_corpus_ipa] Phoneme IDs written to {filelist_path}")
 
 
 def main():

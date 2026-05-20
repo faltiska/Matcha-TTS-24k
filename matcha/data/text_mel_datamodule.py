@@ -17,7 +17,6 @@ from lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import Sampler
 
-from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.mel.extractors import get_mel_extractor
 from matcha.utils.model import fix_len_compatibility, normalize
 from math import ceil
@@ -426,8 +425,10 @@ class TextMelDataset(torch.utils.data.Dataset):
         language = csv_row[2]
         text = csv_row[3]
 
-        _, phoneme_ids = multilingual_phonemizer(text, language)
-        phoneme_ids = torch.IntTensor(phoneme_ids)
+        precomputed_phoneme_ids_available = len(csv_row) >= 5
+        if not precomputed_phoneme_ids_available:
+            raise RuntimeError(f"No precomputed phoneme IDs found for: {csv_row[0]}. Run validate_corpus_ipa first.")
+        phoneme_ids = torch.IntTensor([int(x) for x in csv_row[4].split()])
         
         mel, mel_fine = self.get_mel(rel_base_path)
 
