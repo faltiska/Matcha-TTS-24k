@@ -16,7 +16,7 @@ The rounding was applied before summing up. I am now applying it after summing u
 I think this fixed the problem.
 
 5. Prior loss, though very large in value, was progressing so little (delta 0.0001), and the encoder model was not learning.
-I have modified the loss formula from MSE to smooth_l1, which penalizes big errors more.  
+I have modified the loss formula from MSE to Huber, which penalizes big errors more.  
 This made training *much more stable* in early stages.  It also made the *duration loss* learn *much faster*.
 
 6. The Diffusion Loss gradients were flowing back to the encoder.
@@ -70,7 +70,7 @@ a larger kernel the signal will be very strong even at the input.
 have had much more weight than the los from short phonemes. It uses MSE loss and when the estimator predicts 9 frames 
 instead of 8, the loss is 9 ** 2 - 8 ** 2 = 17 but if the model predicted 2 instead of 3, the loss would have been just 5
 making the model much more forgiving with errors on short phonemes.
-But the author did not think about small numbers. ln(2) = 0.69 and the MSE losses are really forgiving with subunitary numbers.
+But the author did not think about small numbers. ln(2) = 0.69.
 The fix was to add a 2 before calculating the logs, since ln(3) > 1. 
 It has a huge effect, duration estimation loss drops like a rock with this change.
 

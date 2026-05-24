@@ -3,7 +3,7 @@
 ```bash
 uv venv .venv --python 3.13
 source .venv/bin/activate
-uv pip install torch torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cu130 --upgrade
+uv pip install torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/cu130 --upgrade
 uv pip install -r requirements.txt --upgrade
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
@@ -123,11 +123,9 @@ Averaging weights from multiple checkpoints can improve give you a little better
 You can expect the worst speakers to get a bit better but the best speakers to get a bit worse.
 ```
 python -m matcha.utils.average_checkpoints \
-"logs/train/v17/checkpoint_epoch=603.ckpt" \
-"logs/train/v17/checkpoint_epoch=604.ckpt" \
-"logs/train/v17/checkpoint_epoch=605.ckpt" \
-"logs/train/v17/checkpoint_epoch=606.ckpt" \
--o logs/train/v4/averaged.ckpt
+logs/train/v19/checkpoint_epoch=1276.ckpt \
+logs/train/v19/checkpoint_epoch=1278.ckpt \
+-o logs/train/v19/averaged.ckpt
 ```
 
 ### Transplant a speaker embedding from one checkpoint to another:
@@ -182,6 +180,12 @@ sudo apt install libcudnn9-cuda-13 --update
 or update all linux packages:
 ```
 sudo apt update && sudo apt full-upgrade
+```
+
+# UV library management
+Clean up unused libraries from UV cache 
+```
+uv cache clean && uv cache prune
 ```
 
 # Misc
