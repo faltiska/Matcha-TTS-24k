@@ -40,11 +40,6 @@ def generate_path(duration, mask):
     return path * mask
 
 
-def duration_loss(logw, logw_, lengths):
-    loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
-    return loss
-
-
 def normalize(data, mean, std):
     """
     Mean and Std are corpus-wide statistics, that should be precalculated before training.
