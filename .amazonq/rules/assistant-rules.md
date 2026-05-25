@@ -1,3 +1,8 @@
+# Architecture
+
+Please read the file ./documentation/components.md which describes the architecture of the model.
+It is imperative to know what I implemented, because it is quite different from the original Matcha TTS model.
+
 # Project location
 IntelliJ and the AmazonQ plugin are running in Windows, but the project is in Ubuntu, in WSL.
 You have access to the entire project, but you have to use UNC paths for WSL, like "\\wsl.localhost\Ubuntu\...".
