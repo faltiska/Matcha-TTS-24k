@@ -2,74 +2,136 @@
 
 ## What Each Module Does During Training
 
+### Phonemizer
+Supported languages: en-us, en-gb, ro, fr-fr, it.
+NeMo text normalization runs before eSpeak (numbers, dates, abbreviations, etc.). 
+Not available for RO, where eSpeak's own normalization is used.
+A leading space is prepended to the phoneme stream so the model gets a brief initial silence to ease into the utterance.
+
+The Phonemizer design is driven by the use of MAS downstream.
+MAS is used to find phoneme durations, and to do that it needs to identify mel frames in the input spectrograms.
+The Encoder generates the mel frame for each phoneme, and MAS can detect something like "this frame is repeated 5 times 
+in the given spectrogram".
+But the input mel spectrogram contains more than just the individual phonemes. The transition from one phoneme to another
+(called coarticulation) does not sound like exactly like the surrounding phonemes. We need to insert an additional symbol
+between every 2 voiced phonemes, so that the Encoder will model the coarticulation there, so that MAS can identify it.
+There are 3 possible ways to do this:
+1. A single symbol is inserted in between all phonemes (original Matcha design, worst design, since the 
+model sees the same symbol pronounced in about 5000 different ways, with 5000 different lengths).
+2. A distinct symbol for each possible pair of voiced phoneme gets inserted in between them (creates a huge dictionary
+of around 5000 symbols, that occur so infrequently in the corpus, that the model cannot really learn)
+3. A mid-ground solution, currently implemented, where each voiced phoneme (and only voiced phonemes) is replaced by a tuple of
+(pre-phoneme, phoneme, post-phoneme), with a dictionary of less than 600 symbols. 
+ 
+The problem with the approach currently implemented is that each coarticulation is modeled by 2 symbols.
+A pair of phonemes will be represented as 6 symbols. Since MAS must assign at least 1 frame to each symbol, it means the
+2 phonemes will take at least 6 mel frames. If they are 2 short consonants, that means 6 x 10.6ms = 64ms
+
+The 10.6 ms figure is imposed by the Vocoder. I will explain later why I chose Vocos 24KHz with a hop of 256. 
+
+64ms is too long. Short consonants are 15 - 20ms. MAS eats up the space in the input spectrogram, and runs out of frames 
+to assign before it finishes the input sentence phonemes. This lead to multiple skipped phonemes, while other were 
+elongated unnaturally.
+
+To fix this, I am running the Encoder and MAS in a higher resolution. 
+I am using 24KHz / hop 128 input mel spectrograms, that have frames of 5.3ms.
+
 ### Text Encoder
-Takes phoneme IDs and produces two things independently:
-- A mel spectrogram (one vector per phoneme, in mel-feature space) — this is the "encoder mel"
-- Predicted log-durations for each phoneme (from the Duration Predictor sub-module)
+A small stack of convolutions with SiLU activation, Norm and Dropout, called a pre-net, takes phonemes and processes 
+them before they are fed into the Encoder.
 
-The encoder never receives durations as input. Durations are a result of the encoder mel, not an input to it.
+The main component is the Encoder, an attention model that takes pre-net and produces an internal representation.
+It uses Rotary Positional Embeddings (RoPE) applied to half of each head's embedding.
 
-### Duration Predictor
-A CNN sub-module inside the Text Encoder. It takes the encoder's phoneme features (detached, so its gradients don't 
-affect the encoder) and predicts how many mel frames each phoneme should span. Trained against reference durations from MAS.
+The encoder output is fed into a Mel Predictor that outputs one mel frame per phoneme. The Mel Predictor is a simple 
+sequence of Conv → SiLU → Conv.
+The Encoder input is concatenated with speaker embeddings that encode the acoustic characteristics of each speaker.
+The Mel Predictor input is the Encoder output (which still has the embeddings).  
+The gradients from the Mel Predictor flow back into the Encoder too.
+
+The Encoder output is also fed into a Duration Predictor that guesses the duration per phoneme.
+The gradients from the Duration Predictor don't flow back into the Encoder.
+The Duration Predictor has its own speaker embeddings that encode the rhythm characteristics of each speaker.
+It is a stack of Conv1d → ReLU → LayerNorm → FiLM → Dropout layers. The speaker embedding is projected through a single 
+linear layer into a `gamma` (scale) and `beta` (shift) pair that is applied after LayerNorm at every layer. 
+The projection is initialized so FiLM starts as a no-op (`gamma=1`, `beta=0`), letting the model converge before the 
+speaker conditioning starts to drive.
+
+The encoder could use FlashAttention but because of the boolean mask used, Torch falls back to CUTLASS instead. 
+It computes attention without ever materializing the full attention matrix — slower than FlashAttention but still optimized.
 
 ### Reference Durations (MAS)
 The reference durations used to train the Duration Predictor come from MAS (Monotonic Alignment Search): compares the 
-encoder mel against the ground truth mel frame-by-frame using a Gaussian log-likelihood, and finds the best alignment. 
-This is computed during training, on the fly.
+mel frames generated by the Encoder against the ground truth mel frame-by-frame and finds the best alignment. 
+This is computed continuously during training.
 
-The reference durations only affect the Duration Predictor training. The encoder mel, prior loss, and decoder loss are 
-completely unaffected, because the encoder mel is generated from phonemes only — durations play no role in building it.
+MAS itself and the prior loss are computed in fp32, with autocast explicitly disabled around the matmuls. 
+I thought I saw some instability in BF16. I should revisit this.
 
-### Prior Loss
-Measures how close the encoder mel is to the ground truth mel (L1 distance, frame by frame). Trains the encoder to 
-produce a mel that already resembles the target.
+The MAS detected durations are used to assemble the mel frames from the Encoder into full length spectrograms which can
+then be compared to the input spectrograms to calculate the Prior Loss that drives the Encoder and the Mel Predictor.
+The Prior is a Huber loss, using MSE is causing a very large validation to train loss gap.
 
-### Flow Matching Decoder
-Receives only the encoder mel and the ground truth mel. Durations do not exist as far as the decoder is concerned, 
-they are never passed to it, not even indirectly.
+Also, the Duration Predictor loss is calculated by comparing its output to the durations detected by MAS. 
+It is also a Huber loss.
 
+The MAS targets are stored as `log(2 + d)` rather than `log(d)`: the `+2` shifts
+the targets above 1, so the squared region of the Huber loss penalises overshoot harder. 
+This trick helps the Duration Predictor significantly. The `+2` is undone at inference time as `exp(logw) - 2`.
+
+### Decoder
+This is a generative model trained with Conditional Flow Matching, a sort of diffusion model. 
+It is larger and slower than the rest of the components. It takes the spectrogram assembled as described above. 
+It learns the path for taking each value in that spectrogram into the corresponding value in the ground 
+truth spectrogram. Receives only the assembled mel and the ground truth mel. 
 At a random timestep, it interpolates between noise and ground truth to get a noisy sample, then learns to predict the 
-velocity field (direction from noise toward ground truth).
+velocity field (direction) from noise toward ground truth.
 
-The encoder mel length equals the ground truth mel length — both come from the same audio file. 
-Durations have no influence on this.
+Architecturally it is a small U-Net: each down/mid/up stage is a convolutional residual block (ResNet), followed by a stack 
+of attention blocks. I have 2 types of attention blocks, Transformer and Conformer, configurable, but I trained with 
+Transformer so far.
+The diffusion timestep is injected via a sinusoidal positional embedding + MLP, broadcast into every ResNet block.
+
+ODE starts from the assembled mel plus noise as input, both during training and inference.
+This was described in the original Matcha paper, but it is not what is implemented ikn their github code.
+
+The Decoder gradients don't flow back into the Encoder, Mel Predictor, or Duration Predictor.
+The Decoder does not have speaker embeddings. The speaker characteristics are already encoded in the assembled mel.
+Tone, rhythm, prosody, is all there. If you took the mel assembled from the Encoder output and MAS durations, 
+and generate an audio file from it, you would find that it sounds almost like the ground truth, though a little choppy.
+It has some clicks and pops. The Decoder's job is to convert the jagged Encoder spectrogram into one that sounds smooth.
+
+At this point, we can no longer work in fine resolution. The Encoder training would be too slow, and its output would not
+match what the Vocoder expects. I need to go back to standard resolution at this point. I'm downsampling the assembled mel
+that had 5.3ms frames into a spectrogram with 10.6ms frames by averaging adjacent frames (avg_pool1d with a kernel of 3).
+
+As such, the Decoder needs a different set of ground truth mels for computing losses, mels generated with a hop of 256, 
+not the fine resolution mels used as to calculate the Encoder loss.
+
+### Vocoder
+I needed a high quality vocoder that is not horribly slow. The only one I could find that meets both criteria is Vocos
+and the best one I found was trained on 24KHz mels, with 100 bins and a hop of 256. It is almost as good, but 50 times
+faster than the amazing BigVGAN from nVidia.
 
 ### Speaker Embeddings
-Two separate embedding tables: one for the encoder, one for the duration predictor. 
-Each is concatenated to the respective module's input features. The decoder has no speaker conditioning.
+Two separate embedding tables: one for the encoder, one for the duration predictor.
+The Encoder concatenates the speaker embedding to its input.
+The Duration Predictor uses embeddings for FiLM conditioning.
+The Decoder has no speaker conditioning.
 
 ---
 
 ## What Each Module Does During Inference
 
-At inference there is no ground truth mel, so MAS cannot run. The Duration Predictor's output is used instead to decide 
-how many frames each phoneme spans, which determines the total output length.
+Duration Predictor's output is used to decide how many frames each phoneme spans, which determines the total output length.
+The Decoder runs a configurable ODE solver, but I found that "midpoint" is the best option.
+The Encoder generates a mel frame per phoneme. We use durations and mel frames to assemble a complete fine resolution 
+spectrogram. We downsample it to standard resolution and feed it into the Decoder.
+The Decoder generates the final spectrogram which is fed into the Vocoder. 
+The Vocoder generates the final audio.
 
-Inference applies a monotonic positions fix to the predicted durations: 
-cumulative sum → round → enforce each position ≥ previous+1 → derive integer durations by differencing. 
-This guarantees every phoneme gets at least 1 frame and no two phonemes start at the same frame.
-
-The decoder still receives only the encoder mel — durations are used to build it (by repeating each phoneme's encoder 
-vector for the right number of frames), but the durations themselves are not passed to the decoder.
-
----
-
-## The Complete Training Flow
-
-1. Phoneme IDs → encoder mel + predicted log-durations
-2. MAS reference durations → duration loss against predicted log-durations
-3. MAS alignment map → used for prior loss (encoder mel is already built independently)
-4. Prior loss: encoder mel vs ground truth mel (L1)
-5. Decoder loss: flow matching from noise toward ground truth, conditioned on encoder mel
-
-## The Complete Inference Flow
-
-1. Phoneme IDs → encoder mel + predicted log-durations
-2. Predicted durations → monotonic fix → integer durations per phoneme
-3. Durations → each phoneme's encoder vector repeated for its frame count → frame-aligned encoder mel
-4. Decoder: ODE integration from noise → refined mel, conditioned on frame-aligned encoder mel
-5. Vocoder: mel → audio waveform
+At inference, you can also blend multiple speakers. The mix is applied to both embedding tables (encoder and duration predictor)
+independently, producing a voice that is acoustically and rhythmically a weighted average of its sources.
 
 ---
 
@@ -80,5 +142,4 @@ vector for the right number of frames), but the durations themselves are not pas
 - **MAS Alignment**: `matcha/models/matcha_tts.py` (uses `super_monotonic_align`)
 - **Main Model**: `matcha/models/matcha_tts.py`
 - **Vocos Vocoder**: `matcha/vocos24k/vocos_wrapper.py`
-- **HiFiGAN Vocoder**: `matcha/hifigan/models.py`
 - **CLI Interface**: `matcha/cli.py`
