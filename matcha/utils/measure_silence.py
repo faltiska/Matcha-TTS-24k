@@ -1,9 +1,13 @@
 """
-Measure trailing silence per speaker in a corpus.
+Measure leading and trailing silence per speaker in a corpus.
+
+Leading silence is found by scanning forward from sample 0; trailing silence by scanning
+backward from the end. Both scans share the same window grid (anchored at sample 0) so
+they compose cleanly and are independent of file length.
 
 Usage:
   python -m matcha.utils.measure_silence -i configs/data/corpus-24k.yaml
-  
+
 """
 
 import argparse
@@ -39,74 +43,128 @@ def parse_filelist(filelist_path: Path, split_char: str = "|") -> List[Tuple[str
         return [tuple(line.strip().split(split_char)) for line in f if line.strip()]
 
 
-def measure_trailing_silence(wav_path: Path, effective_silence_threshold: float, absolute_silence_threshold: float, debug: bool = False) -> Tuple[float, float]:
+def _count_leading_silent_windows(is_below_threshold: torch.Tensor) -> int:
+    count = 0
+    for i in range(len(is_below_threshold)):
+        if is_below_threshold[i]:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _count_trailing_silent_windows(is_below_threshold: torch.Tensor) -> int:
+    count = 0
+    for i in range(len(is_below_threshold) - 1, -1, -1):
+        if is_below_threshold[i]:
+            count += 1
+        else:
+            break
+    return count
+
+
+def measure_silence(
+        wav_path: Path,
+        effective_silence_threshold: float,
+        absolute_silence_threshold: float,
+        debug: bool = False,
+) -> Tuple[float, float, float, float]:
     """
-    Measure trailing silence duration in seconds using RMS in 10ms windows.
-    Measures two sections: effective silence (e.g. -60dB) and absolute silence (e.g., -90dB).
-    
+    Measure leading and trailing silence durations in seconds using RMS in 10ms windows.
+    Each end is measured at two thresholds: effective silence (e.g. -60dB) and
+    absolute silence (e.g., -90dB).
+
     Returns:
-        Tuple of (effective_silence_duration, absolute_silence_duration) in seconds
+        Tuple of (leading_effective_duration, leading_absolute_duration,
+                  trailing_effective_duration, trailing_absolute_duration) in seconds.
     """
     try:
         audio, sr = ta.load(str(wav_path))
-        
+
         # Convert to mono
         if audio.shape[0] > 1:
             audio = audio[0]
         else:
             audio = audio.squeeze(0)
-        
+
         effective_silence_threshold_amp = 10 ** (effective_silence_threshold / 20.0)
         absolute_silence_threshold_amp = 10 ** (absolute_silence_threshold / 20.0)
-        
+
         # Calculate RMS in 10ms windows
         window_frames = int(0.01 * sr)  # 10ms
         audio_squared = audio ** 2
-        
+
         # Pad to make it divisible by window size
         pad_size = window_frames - (len(audio) % window_frames)
         if pad_size < window_frames:
             audio_squared = torch.nn.functional.pad(audio_squared, (0, pad_size))
-        
+
         # Reshape and calculate RMS per window
         audio_squared = audio_squared.reshape(-1, window_frames)
         rms = torch.sqrt(audio_squared.mean(dim=1))
-        
-        # Count trailing silence for both thresholds
-        is_below_effective_silence_threshold = rms < effective_silence_threshold_amp
-        is_below_absolute_silence_threshold = rms < absolute_silence_threshold_amp
-        
-        # Count effective silence
-        windows_below_effective_silence_threshold = 0
-        for i in range(len(is_below_effective_silence_threshold) - 1, -1, -1):
-            if is_below_effective_silence_threshold[i]:
-                windows_below_effective_silence_threshold += 1
-            else:
-                break
-        
-        # Count absolute silence
-        windows_below_absolute_silence_threshold = 0
-        for i in range(len(is_below_absolute_silence_threshold) - 1, -1, -1):
-            if is_below_absolute_silence_threshold[i]:
-                windows_below_absolute_silence_threshold += 1
-            else:
-                break
-        
-        effective_silence_duration = (windows_below_effective_silence_threshold * window_frames) / sr
-        absolute_silence_duration = (windows_below_absolute_silence_threshold * window_frames) / sr
-        
+
+        is_below_effective_threshold = rms < effective_silence_threshold_amp
+        is_below_absolute_threshold = rms < absolute_silence_threshold_amp
+
+        # Leading silence: scan forward from index 0
+        leading_effective_windows = _count_leading_silent_windows(is_below_effective_threshold)
+        leading_absolute_windows = _count_leading_silent_windows(is_below_absolute_threshold)
+
+        # Trailing silence: scan backward from the last index
+        trailing_effective_windows = _count_trailing_silent_windows(is_below_effective_threshold)
+        trailing_absolute_windows = _count_trailing_silent_windows(is_below_absolute_threshold)
+
+        leading_effective_duration = (leading_effective_windows * window_frames) / sr
+        leading_absolute_duration = (leading_absolute_windows * window_frames) / sr
+        trailing_effective_duration = (trailing_effective_windows * window_frames) / sr
+        trailing_absolute_duration = (trailing_absolute_windows * window_frames) / sr
+
         if debug:
-            print(f"\n{wav_path.name}: sr={sr}, effective={effective_silence_duration*1000:.1f}ms, absolute={absolute_silence_duration*1000:.1f}ms")
-        
-        return effective_silence_duration, absolute_silence_duration
+            print(f"\n{wav_path.name}: sr={sr}")
+            print(f"  Leading:  effective={leading_effective_duration * 1000:.1f}ms, absolute={leading_absolute_duration * 1000:.1f}ms")
+            print(f"  Trailing: effective={trailing_effective_duration * 1000:.1f}ms, absolute={trailing_absolute_duration * 1000:.1f}ms")
+
+        return (
+            leading_effective_duration,
+            leading_absolute_duration,
+            trailing_effective_duration,
+            trailing_absolute_duration,
+        )
     except Exception as e:
         print(f"Error processing {wav_path}: {e}")
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
+
+
+def _print_silence_table(
+        title: str,
+        speaker_effective_silences: Dict[str, List[float]],
+        speaker_absolute_silences: Dict[str, List[float]],
+        effective_threshold_db: float,
+        absolute_threshold_db: float,
+) -> None:
+    print(f"\n{title} (effective: {effective_threshold_db} dB, absolute: {absolute_threshold_db} dB)")
+    print("=" * 98)
+    print(f"{'Speaker':<10} {'Count':<8} {'Effective Mean':<16} {'Effective Std':<16} {'Absolute Mean':<16} {'Absolute Std':<16}")
+    print("-" * 98)
+    for speaker_id in sorted(speaker_effective_silences.keys()):
+        effective_ms = np.array(speaker_effective_silences[speaker_id]) * 1000
+        absolute_ms = np.array(speaker_absolute_silences[speaker_id]) * 1000
+        count = len(effective_ms)
+        print(f"{speaker_id:<10} {count:<8} {np.mean(effective_ms):<16.1f} {np.std(effective_ms):<16.1f} {np.mean(absolute_ms):<16.1f} {np.std(absolute_ms):<16.1f}")
+    print("=" * 98)
+
+
+def _print_longest_files(title: str, speaker_to_longest: Dict[str, Tuple[str, float]]) -> None:
+    print(f"\n{title}:")
+    print("-" * 98)
+    for speaker_id in sorted(speaker_to_longest.keys()):
+        file_path, duration_sec = speaker_to_longest[speaker_id]
+        print(f"Speaker {speaker_id}: {duration_sec * 1000:.1f}ms - {file_path}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Measure trailing silence per speaker in a corpus."
+        description="Measure leading and trailing silence per speaker in a corpus."
     )
     parser.add_argument(
         "-i",
@@ -138,12 +196,19 @@ def main():
         if not wav_path.exists():
             print(f"File not found: {wav_path}")
             return
-        
-        soft, hard = measure_trailing_silence(wav_path, args.effective_silence_threshold, args.absolute_silence_threshold, debug=True)
-        print(f"\nSoft silence (-70dB): {soft * 1000:.1f} ms")
-        print(f"Hard silence (-90dB): {hard * 1000:.1f} ms")
+
+        lead_eff, lead_abs, tail_eff, tail_abs = measure_silence(
+            wav_path,
+            args.effective_silence_threshold,
+            args.absolute_silence_threshold,
+            debug=True,
+        )
+        print(f"\nLeading  effective ({args.effective_silence_threshold} dB): {lead_eff * 1000:.1f} ms")
+        print(f"Leading  absolute  ({args.absolute_silence_threshold} dB): {lead_abs * 1000:.1f} ms")
+        print(f"Trailing effective ({args.effective_silence_threshold} dB): {tail_eff * 1000:.1f} ms")
+        print(f"Trailing absolute  ({args.absolute_silence_threshold} dB): {tail_abs * 1000:.1f} ms")
         return
-    
+
     # Corpus mode
     if not args.data_config:
         print("Error: Either --data-config or --file must be provided")
@@ -154,74 +219,100 @@ def main():
 
     train_filelist = _resolve_path(str(cfg["train_filelist_path"]))
 
-    # Print header first
-    print(f"\nTrailing Silence Statistics (effective: {args.effective_silence_threshold} dB, absolute: {args.absolute_silence_threshold} dB)")
-    print("=" * 98)
-    print(f"{'Speaker':<10} {'Count':<8} {'Effective Mean':<16} {'Effective Std':<16} {'Absolute Mean':<16} {'Absolute Std':<16}")
-    print("-" * 98)
-    
     # Collect measurements per speaker
-    speaker_soft_silences = defaultdict(list)
-    speaker_hard_silences = defaultdict(list)
-    speaker_max_soft = {}  # Track file with longest soft silence per speaker
+    speaker_leading_effective = defaultdict(list)
+    speaker_leading_absolute = defaultdict(list)
+    speaker_trailing_effective = defaultdict(list)
+    speaker_trailing_absolute = defaultdict(list)
+    speaker_longest_leading = {}  # Track file with longest leading effective silence per speaker
+    speaker_longest_trailing = {}  # Track file with longest trailing effective silence per speaker
     last_printed_speaker = None
-    
+
     total = 0
     for fl in [train_filelist]:
         if not fl.exists():
             raise FileNotFoundError(f"Filelist not found: {fl}")
-        
+
         entries = parse_filelist(fl)
         for parts in entries:
             if not parts or len(parts) < 2:
                 continue
-            
+
             rel_base = parts[0]
             speaker_id = parts[1]
             wav_path = (fl.parent / "wav" / (rel_base + ".wav")).resolve()
-            
+
             if not wav_path.exists():
                 print(f"Warning: {wav_path} not found")
                 continue
-            
-            soft_duration, hard_duration = measure_trailing_silence(wav_path, args.effective_silence_threshold, args.absolute_silence_threshold, debug=False)
-            speaker_soft_silences[speaker_id].append(soft_duration)
-            speaker_hard_silences[speaker_id].append(hard_duration)
-            
-            # Track file with longest soft silence
-            if speaker_id not in speaker_max_soft or soft_duration > speaker_max_soft[speaker_id][1]:
-                speaker_max_soft[speaker_id] = (str(wav_path), soft_duration)
-            
+
+            lead_eff, lead_abs, tail_eff, tail_abs = measure_silence(
+                wav_path,
+                args.effective_silence_threshold,
+                args.absolute_silence_threshold,
+                debug=False,
+            )
+            speaker_leading_effective[speaker_id].append(lead_eff)
+            speaker_leading_absolute[speaker_id].append(lead_abs)
+            speaker_trailing_effective[speaker_id].append(tail_eff)
+            speaker_trailing_absolute[speaker_id].append(tail_abs)
+
+            # Track files with the longest effective silence at each end
+            longest_leading_so_far = speaker_longest_leading.get(speaker_id)
+            if longest_leading_so_far is None or lead_eff > longest_leading_so_far[1]:
+                speaker_longest_leading[speaker_id] = (str(wav_path), lead_eff)
+
+            longest_trailing_so_far = speaker_longest_trailing.get(speaker_id)
+            if longest_trailing_so_far is None or tail_eff > longest_trailing_so_far[1]:
+                speaker_longest_trailing[speaker_id] = (str(wav_path), tail_eff)
+
             total += 1
-            
+
             if total % 100 == 0:
-                # Only print stats for the current speaker
-                soft_ms = np.array(speaker_soft_silences[speaker_id]) * 1000
-                hard_ms = np.array(speaker_hard_silences[speaker_id]) * 1000
-                soft_mean = np.mean(soft_ms)
-                soft_std = np.std(soft_ms)
-                hard_mean = np.mean(hard_ms)
-                hard_std = np.std(hard_ms)
-                count = len(soft_ms)
-                
+                count = len(speaker_leading_effective[speaker_id])
+                lead_mean_ms = np.mean(np.array(speaker_leading_effective[speaker_id]) * 1000)
+                tail_mean_ms = np.mean(np.array(speaker_trailing_effective[speaker_id]) * 1000)
+
                 # Print new line only if speaker changed
                 if speaker_id != last_printed_speaker:
                     if last_printed_speaker is not None:
                         print()  # New line for new speaker
                     last_printed_speaker = speaker_id
-                
-                print(f"\r{speaker_id:<10} {count:<8} {soft_mean:<16.1f} {soft_std:<16.1f} {hard_mean:<16.1f} {hard_std:<16.1f}", end="", flush=True)
-    
+
+                print(
+                    f"\rspeaker {speaker_id:<6} {count:<6} files   "
+                    f"lead eff mean: {lead_mean_ms:>6.1f} ms   "
+                    f"tail eff mean: {tail_mean_ms:>6.1f} ms",
+                    end="",
+                    flush=True,
+                )
+
     print()  # New line after progress
-    print("=" * 98)
     print(f"Total files processed: {total}")
-    
-    # Print files with longest silence per speaker
-    print("\nFiles with longest trailing soft silence per speaker:")
-    print("-" * 98)
-    for speaker_id in sorted(speaker_max_soft.keys()):
-        file_path, duration_sec = speaker_max_soft[speaker_id]
-        print(f"Speaker {speaker_id}: {duration_sec*1000:.1f}ms - {file_path}")
+
+    _print_silence_table(
+        "Leading Silence Statistics",
+        speaker_leading_effective,
+        speaker_leading_absolute,
+        args.effective_silence_threshold,
+        args.absolute_silence_threshold,
+    )
+    _print_silence_table(
+        "Trailing Silence Statistics",
+        speaker_trailing_effective,
+        speaker_trailing_absolute,
+        args.effective_silence_threshold,
+        args.absolute_silence_threshold,
+    )
+
+    _print_longest_files(
+        "Files with longest leading effective silence per speaker",
+        speaker_longest_leading,
+    )
+    _print_longest_files(
+        "Files with longest trailing effective silence per speaker",
+        speaker_longest_trailing,
+    )
 
 
 if __name__ == "__main__":
