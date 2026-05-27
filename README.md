@@ -7,6 +7,11 @@ uv pip install torch torchcodec torchaudio --index-url https://download.pytorch.
 uv pip install -r requirements.txt --upgrade
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
+
+# the new cuda 13.2 version does not have torchaudio yet:
+uv pip install torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/cu132 --force-reinstall
+# the nightly version does not work, throws a Segmentation Fault
+uv pip install --pre torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/nightly/cu132 --force-reinstall
 ```
 
 ## A note on running inference and training at the same time
@@ -38,22 +43,30 @@ eSpeak could generate a symbol we do not have in our symbols.py map.
 python -m matcha.utils.validate_corpus_ipa -i configs/data/corpus-24k.yaml
 ```
 
-Measure trailing silence per speaker to check for inconsistencies.
-Different speakers may have different amounts of trailing silence, which can cause the model to learn silence duration as a spurious feature for speaker identification 
+Measure leading and trailing silence per speaker to check for inconsistencies.
+Different speakers may have different amounts of silence at either end of the recordings, which can cause the model to learn silence duration as a spurious feature for speaker identification 
 instead of actual voice characteristics.
 ```
 python -m matcha.utils.measure_silence -i configs/data/corpus-24k.yaml
 ```
-If you see significant variation in trailing silence between speakers (e.g., some speakers with ~300ms and others with ~900ms), you should normalize it.
-Backup your wav files first, then add silence to reach a consistent target duration:
+The script prints two tables (Leading and Trailing), each showing per-speaker mean and standard deviation at -60dB (effective) and -90dB (absolute) thresholds, plus the file with the longest silence per speaker at each end.
+
+If you see significant variation between speakers (e.g., some speakers with ~300ms trailing and others with ~900ms), you should normalize both ends.
+Backup your wav files first, then run:
 ```
-python -m matcha.utils.normalize_silence -i configs/data/corpus-24k.yaml --target_silence 0.8
+python -m matcha.utils.normalize_silence -i configs/data/corpus-24k.yaml \
+    --target_leading_silence 0.2 --target_trailing_silence 0.8
 ```
-The script measures current silence at -60dB threshold and adds only what's needed to reach the target.
-After running, verify the normalization by measuring again - all speakers should now have the same trailing silence duration.
+Either flag is optional, but at least one must be provided. Targets must be whole multiples of 10ms; the script asserts this on startup.
+The script measures current silence at -60dB threshold and rebuilds each file as `target_leading_silence_samples zeros + speech_content + target_trailing_silence_samples zeros`. The skip check uses integer sample counts, so the script is fully idempotent — re-running it on the same corpus is a no-op.
+
+After running, verify the normalization by measuring again — all speakers should now have the same leading and trailing silence durations.
 
 ### Calculate corpus statistics
 Delete the mels folders from the corpus, if they exist.
+```
+rm -rf data/corpus-24k/mels
+```
 Compute statistics for the corpus and update the corpus yaml with te stats:
 ```
 python -m matcha.utils.generate_data_statistics -i configs/data/corpus-24k.yaml
