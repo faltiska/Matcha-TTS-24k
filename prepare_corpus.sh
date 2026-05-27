@@ -1,7 +1,7 @@
 #!/bin/bash
 # Prepare a corpus for training:
 #   1. Validate IPA symbols in train and validate filelists
-#   2. Normalize trailing silence in wav files
+#   2. Normalize leading and trailing silence in wav files
 #   3. Precompute mel spectrograms
 #
 # Usage: ./prepare_corpus.sh configs/data/corpus-24k.yaml
@@ -40,8 +40,11 @@ if [[ "$RUN_IPA" =~ ^[Yy]$ ]]; then
     python -m matcha.utils.validate_corpus_ipa -i "$DATA_CONFIG"
 fi
 
-echo "=== Step 2: Normalize trailing silence ==="
-python -m matcha.utils.normalize_silence -i "$DATA_CONFIG" --target_silence 0.8
+read -r -p "Normalize silence? [y/N] " NORMALIZE_SILENCE
+if [[ "$NORMALIZE_SILENCE" =~ ^[Yy]$ ]]; then
+  echo "=== Step 2: Normalize leading and trailing silence ==="
+  python -m matcha.utils.normalize_silence -i "$DATA_CONFIG" --target_leading_silence 0.2 --target_trailing_silence 0.8
+fi 
 
 echo "=== Step 3: Precompute mel spectrograms ==="
 python -m matcha.utils.precompute_mels -i "$DATA_CONFIG"
