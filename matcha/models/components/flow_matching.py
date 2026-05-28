@@ -2,7 +2,7 @@ from abc import ABC
 
 import torch
 import torch.nn.functional as F
-from torchdiffeq import odeint, odeint_adjoint
+from torchdiffeq import odeint
 
 from matcha.models.components.decoder import Decoder
 from .ode_solver_wrapper import OdeSolverWrapper
