@@ -51,6 +51,21 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
 
 
+# Number of space symbols injected at each end of every utterance, after eSpeak has run, so the model
+# always sees a stable silence anchor before and after the spoken content.
+# The wavs have been normalized to 200ms leading and 800ms trailing silence (see normalize_silence.py),
+# so each injected space ends up owning ~50ms of mel frames after MAS. That ~50ms also matches the
+# typical word-boundary pause the space symbol already represents in mid-sentence usage, keeping its
+# duration distribution consistent.
+# I hope this will help the model with short utterances like "I" or "Me.", which were not sounding great.
+# LEADING_SILENCE_SPACES = 4
+# TRAILING_SILENCE_SPACES = 16
+
+# Up to v19, I was adding a single leading space, no trailing: 
+LEADING_SILENCE_SPACES = 1
+TRAILING_SILENCE_SPACES = 0
+
+
 def cleanup_text(text):
     text = re.sub('[\"„“”«»¡¿]', '', text)
     text = re.sub(r'\s*[,<>()[\]{}—–…]\s*', ', ', text)
@@ -92,10 +107,11 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    # There's always a bit of silence at the start, so I am adding a space for it.
-    # I don't need a space at the end, because there is always punctuation at the end of the sentence.
-    phonemes = " " + phonemizer.phonemize([text])[0].rstrip()
-    
+    # Inject silence padding around the eSpeak output. Done after phonemize() because eSpeak
+    # collapses leading and trailing whitespace, so we cannot pre-pad the input text.
+    # See LEADING_SILENCE_SPACES / TRAILING_SILENCE_SPACES at the top of this file for the rationale.
+    phonemes = " " * LEADING_SILENCE_SPACES + phonemizer.phonemize([text])[0].rstrip() + " " * TRAILING_SILENCE_SPACES
+
     # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
     # the sound of the new one and at the end, where the phoneme morphs into the next one.   
     # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
