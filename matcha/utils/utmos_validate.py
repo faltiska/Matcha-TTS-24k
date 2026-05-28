@@ -45,7 +45,6 @@ from matcha.utils.precompute_mels import _load_yaml_config, _resolve_path, parse
 
 DATA_CONFIG = "configs/data/corpus-24k.yaml"
 VOCODER = "vocos"
-STEPS = 20
 SAMPLE_OFFSET = 10
 SAMPLES_PER_SPEAKER = 20
 UTMOS_SAMPLE_RATE = 16000
@@ -118,7 +117,7 @@ def main():
 
         scores = []
         for text, _gt_wav_path in samples:
-            waveform = pipeline(model, vocoder, text, language, spk_id, None, STEPS)
+            waveform = pipeline(model, vocoder, text, spk_id)
             scores.append(score_utmos(predictor, waveform, sample_rate, device))
         speaker_scores[voice["id"]] = sum(scores) / len(scores)
 

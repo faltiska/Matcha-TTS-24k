@@ -20,9 +20,10 @@ logging.getLogger("torch.utils._sympy.interp").setLevel(logging.ERROR)
 import torch
 torch._inductor.config.fx_graph_cache = True
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, ODE_SOLVER, VOICES
+from matcha.inference import (load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, 
+                              DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, VOICES)
 
-CHECKPOINT_PATH = "checkpoint_with_new_speaker.ckpt"
+CHECKPOINT_PATH = "logs/train/v19-prod/checkpoint_epoch=1281.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -39,18 +40,17 @@ async def lifespan(app: FastAPI):
     global model, vocoder
     print(f"[🍵] Loading model from {CHECKPOINT_PATH}...")
     model = load_matcha("custom_model", CHECKPOINT_PATH)
-    model.decoder.solver = ODE_SOLVER
+    model.decoder.solver = DEFAULT_ODE_SOLVER
     vocoder = load_vocoder("vocos")
     print("[🍵] Compiling the model...")
-    model.decoder.estimator = torch.compile(model.decoder.estimator, mode="reduce-overhead", dynamic=True)
-    warmup_texts = [
-        "Warming up the model with a short sentence.",
-        "Testing the system with a slightly longer text input.",
-        "Another warmup call to ensure full compilation.",
-        "Final warmup to prepare for production requests."
-    ]
-    for text in warmup_texts:
-        pipeline(model, vocoder, text, "en-us")
+    model.decoder.estimator = torch.compile(model.decoder.estimator, mode="default", dynamic=True)
+    warmup_text = "This is a short text for triggering the model compilation."
+    for i in range(3):
+        t = time.perf_counter()
+        waveform = pipeline(model, vocoder, warmup_text)
+        elapsed = time.perf_counter() - t
+        audio_duration = waveform.shape[-1] / SAMPLE_RATE
+        print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
     torch.cuda.synchronize()
     print("[🍵] Model loaded.")
     yield
@@ -63,7 +63,8 @@ class InferenceRequest(BaseModel):
     voice: int | str = 0
     response_format: str = "mp3"
     speed: float = 1.0
-    steps: int = 20
+    steps: int = DEFAULT_NUM_STEPS
+    solver: str = DEFAULT_ODE_SOLVER
 
 
 def parse_voice_mix(voice_str: str):
@@ -97,22 +98,21 @@ async def speak(request: InferenceRequest):
 
     if '+' in str(request.voice):
         id1, weight1, id2, weight2 = parse_voice_mix(request.voice)
-        language = VOICES[id1]["lang"]
         voice_mix = [(id1, weight1), (id2, weight2)]
         speaker = 0
     else:
         voice_id = int(request.voice)
-        language = VOICES[voice_id]["lang"]
         voice_mix = None
         speaker = voice_id
 
+    model.decoder.solver = request.solver
     t = time.perf_counter()
     if voice_mix is not None:
         scale_correction = sum(VOICES[spk_id]["scale_correction"] * weight for spk_id, weight in voice_mix)
     else:
         scale_correction = VOICES[speaker]["scale_correction"]
     length_scale = max(LENGTH_SCALE_MIN, min(LENGTH_SCALE_MAX, 1.0 / request.speed))
-    waveform = pipeline(model, vocoder, request.input.strip(), language, speaker, voice_mix, request.steps, scale_correction, length_scale)
+    waveform = pipeline(model, vocoder, request.input.strip(), speaker, voice_mix, request.steps, scale_correction, length_scale)
     elapsed = time.perf_counter() - t
     audio_duration = waveform.shape[-1] / SAMPLE_RATE
     print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

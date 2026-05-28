@@ -13,28 +13,31 @@ import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",      "scale_correction":  1.05},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",     "scale_correction":  1.03},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction":  1.03},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction":  1.01},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction":  1.05},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction":  1.05},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction":  1.02},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",      "scale_correction":  1.08},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",     "scale_correction":  1.05},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction":  1.05},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction":  1.03},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction":  1.08},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction":  1.08},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction":  1.05},
     {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",     "scale_correction":  1.04},
-    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction":  1.02},
-    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction":  1.01},
-    {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction":  1.03},
-    {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction":  1.05},
-    {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.01},
-    {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.03},
-    {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.03},
-    {"id": "15", "lang": "ro",    "gender": "female", "name": "Daria",  "scale_correction":  1},
+    {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction":  1.05},
+    {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction":  1.03},
+    {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction":  1.06},
+    {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction":  1.08},
+    {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.03},
+    {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.07},
+    {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.07},
 ]
 
 SAMPLE_RATE = 24000
 STD_RES_HOP_LENGTH = 256
 HIGH_RES_HOP_LENGTH = 128
-ODE_SOLVER = "midpoint"
+
+# mcd_validate.py shows how I chose these values
+DEFAULT_ODE_SOLVER = "midpoint"
+DEFAULT_NUM_STEPS = 4
+
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
@@ -214,7 +217,9 @@ def load_vocoder(vocoder_name):
 
 
 @torch.inference_mode()
-def pipeline(model, vocoder, text, language, speaker=0, voice_mix=None, n_timesteps=15, scale_correction=1.0, length_scale=1.0, debug=False):
+def pipeline(model, vocoder, text, speaker=0, voice_mix=None, n_timesteps=DEFAULT_NUM_STEPS, scale_correction=1.0, length_scale=1.0, debug=False):
+    primary_speaker_id = voice_mix[0][0] if voice_mix is not None else speaker
+    language = next(v["lang"] for v in VOICES if v["id"] == str(primary_speaker_id))
     text_processed = process_text(text, language)
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(

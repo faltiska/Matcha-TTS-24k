@@ -10,7 +10,8 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 import soundfile as sf
 import torch
 
-from matcha.inference import load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HIGH_RES_HOP_LENGTH, ODE_SOLVER, VOICES
+from matcha.inference import (load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HIGH_RES_HOP_LENGTH, 
+                              DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, VOICES)
 
 VOCODERS = { "vocos" }
 
@@ -57,8 +58,8 @@ def cli():
     parser.add_argument(
         "--solver",
         type=str,
-        default=ODE_SOLVER,
-        help="ODE solver to use (default: midpoint)",
+        default=DEFAULT_ODE_SOLVER,
+        help=f"ODE solver to use (default: {DEFAULT_ODE_SOLVER})",
     )
     parser.add_argument(
         "--length_scale",
@@ -68,8 +69,8 @@ def cli():
     )
     parser.add_argument("--steps", 
         type=int, 
-        default=20, 
-        help="Number of ODE steps  (default: 20)")
+        default=DEFAULT_NUM_STEPS, 
+        help=f"Number of ODE steps  (default: {DEFAULT_NUM_STEPS})")
     parser.add_argument(
         "--output_folder",
         type=str,
@@ -107,7 +108,6 @@ def speak(args, model, vocoder, text, speaker=0):
 
     t = time.perf_counter()
     voice = next((v for v in VOICES if v["id"] == str(speaker)), VOICES[0])
-    language = voice["lang"]
     scale_correction = voice["scale_correction"]
     if args.length_scale is not None:
         length_scale = args.length_scale
@@ -116,7 +116,7 @@ def speak(args, model, vocoder, text, speaker=0):
 
     if args.debug:
         decoder_wav, encoder_wav, phoneme_dur_pairs = pipeline(
-            model, vocoder, text.strip(), language, speaker or 0, None, args.steps, scale_correction, length_scale, debug=True
+            model, vocoder, text.strip(), speaker or 0, None, args.steps, scale_correction, length_scale, debug=True
         )
         elapsed = time.perf_counter() - t
         audio_duration = decoder_wav.shape[-1] / SAMPLE_RATE
@@ -138,7 +138,7 @@ def speak(args, model, vocoder, text, speaker=0):
         dur_path.write_text("\n".join(lines), encoding="utf-8")
         print(f"[🍵] Encoder wav and durations saved to {args.output_folder}")
     else:
-        waveform = pipeline(model, vocoder, text.strip(), language, speaker or 0, None, args.steps, scale_correction, length_scale)
+        waveform = pipeline(model, vocoder, text.strip(), speaker or 0, None, args.steps, scale_correction, length_scale)
         elapsed = time.perf_counter() - t
         audio_duration = waveform.shape[-1] / SAMPLE_RATE
         print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")

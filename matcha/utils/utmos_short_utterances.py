@@ -34,7 +34,6 @@ import torchaudio.functional as taf
 from matcha.inference import VOICES, SAMPLE_RATE, load_matcha, load_vocoder, pipeline
 
 VOCODER = "vocos"
-STEPS = 20
 UTMOS_SAMPLE_RATE = 16000
 OUTPUT_DIR = Path("logs/utmos_short")
 
@@ -238,7 +237,7 @@ def main():
         for bucket_name in BUCKET_ORDER:
             for utterance_index, text in enumerate(utterances_by_bucket[bucket_name]):
                 try:
-                    waveform = pipeline(model, vocoder, text, language, spk_id, None, STEPS)
+                    waveform = pipeline(model, vocoder, text, spk_id)
                 except Exception as exc:
                     print(f"  [error] {bucket_name}[{utterance_index}] {text!r}: {exc}")
                     continue
