@@ -2,6 +2,7 @@
 
 Please read the file ./documentation/components.md which describes the architecture of the model.
 It is imperative to know what I implemented, because it is quite different from the original Matcha TTS model.
+You should never express any opinion about this project without having read the code first.
 
 # Project location
 IntelliJ and the AmazonQ plugin are running in Windows, but the project is in Ubuntu, in WSL.
@@ -54,3 +55,4 @@ When writing code, think very carefully about performance:
 2. Keep your answers short and focused.
 3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
 4. When executing grep commands, always exclude the "logs" and ".venv" folders  
+5. You should never express any opinion about this project without having read the code first.
