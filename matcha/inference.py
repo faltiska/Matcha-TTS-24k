@@ -1,4 +1,5 @@
 import io
+import re
 import time
 import torch
 import torch.nn as nn
@@ -28,6 +29,7 @@ VOICES = [
     {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.03},
     {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.07},
     {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.07},
+    {"id": "15", "lang": "ro",    "gender": "male",   "name": "Bogdan",   "scale_correction":  1.07},
 ]
 
 SAMPLE_RATE = 24000
@@ -196,8 +198,23 @@ def load_matcha(model_name, checkpoint_path):
     return model
 
 
+def emphasize_intonation_marks(text: str) -> str:
+    """
+    Doubles every lone '?' or '!' symbols in the text, so the model produces a more pronounced rising/exclamation 
+    intonation. Some speakers have no intonation marks in their part of the corpus, and they do not pronounce question
+    marks with a raising pitch, or not consistently. But I noticed that doubling it makes the rise audibly clearer.
+    Runs of two or more symbols, are left untouched, so users can still opt out by typing '??' or '!!'
+    explicitly, and so we don't keep growing already-doubled marks across calls.
+    Mixed runs like '?!' become '??!!' because each mark is lone in its own kind.
+    """
+    text = re.sub(r'(?<!\?)\?(?!\?)', '??', text)
+    text = re.sub(r'(?<!!)!(?!!)', '!!', text)
+    return text
+
+
 def process_text(text: str, language: str):
-    separated_phonemes, phoneme_ids = multilingual_phonemizer(text, language)
+    emphasized_text = emphasize_intonation_marks(text)
+    separated_phonemes, phoneme_ids = multilingual_phonemizer(emphasized_text, language)
     phonemes = "".join(separated_phonemes)
     x = torch.tensor(phoneme_ids, dtype=torch.long, device=DEVICE)[None]
     x_lengths = torch.tensor([x.shape[-1]], dtype=torch.long, device=DEVICE)
