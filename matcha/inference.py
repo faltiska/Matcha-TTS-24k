@@ -29,7 +29,6 @@ VOICES = [
     {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.03},
     {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.07},
     {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.07},
-    {"id": "15", "lang": "ro",    "gender": "male",   "name": "Bogdan",   "scale_correction":  1.07},
 ]
 
 SAMPLE_RATE = 24000
