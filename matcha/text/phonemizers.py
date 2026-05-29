@@ -58,12 +58,12 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # typical word-boundary pause the space symbol already represents in mid-sentence usage, keeping its
 # duration distribution consistent.
 # I hope this will help the model with short utterances like "I" or "Me.", which were not sounding great.
-LEADING_SILENCE_SPACES = 4
-TRAILING_SILENCE_SPACES = 16
+# LEADING_SILENCE_SPACES = 4
+# TRAILING_SILENCE_SPACES = 16
 
 # Up to v19, I was adding a single leading space, no trailing: 
-# LEADING_SILENCE_SPACES = 1
-# TRAILING_SILENCE_SPACES = 0
+LEADING_SILENCE_SPACES = 1
+TRAILING_SILENCE_SPACES = 0
 
 
 def cleanup_text(text):
