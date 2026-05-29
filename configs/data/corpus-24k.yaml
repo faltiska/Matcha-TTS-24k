@@ -15,7 +15,7 @@ num_workers: 16
 persistent_workers: true
 
 pin_memory: True
-n_spks: 15
+n_spks: 16
 n_fft: 1024
 n_feats: 100
 sample_rate: 24000
@@ -26,7 +26,7 @@ f_max: 12000
 seed: ${seed}
   
 data_statistics:
-  mel_mean: -4.25993
-  mel_std: 6.170012  
+  mel_mean: -4.684777
+  mel_std: 6.512275
   
 mel_backend: vocos
