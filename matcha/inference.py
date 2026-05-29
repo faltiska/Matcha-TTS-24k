@@ -200,15 +200,13 @@ def load_matcha(model_name, checkpoint_path):
 
 def emphasize_intonation_marks(text: str) -> str:
     """
-    Doubles every lone '?' or '!' symbols in the text, so the model produces a more pronounced rising/exclamation 
-    intonation. Some speakers have no intonation marks in their part of the corpus, and they do not pronounce question
+    Doubles every lone '?' symbols in the text, so the model produces a more pronounced rising intonation. 
+    Some speakers have no intonation marks in their part of the corpus, and they do not pronounce question
     marks with a raising pitch, or not consistently. But I noticed that doubling it makes the rise audibly clearer.
-    Runs of two or more symbols, are left untouched, so users can still opt out by typing '??' or '!!'
-    explicitly, and so we don't keep growing already-doubled marks across calls.
-    Mixed runs like '?!' become '??!!' because each mark is lone in its own kind.
+    Runs of two or more symbols, are left untouched, so we don't keep growing already-doubled marks across calls.
+    Mixed pairs like '?!' or '!?' are also left untouched: as doubling there produced annoying artifacts.
     """
-    text = re.sub(r'(?<!\?)\?(?!\?)', '??', text)
-    text = re.sub(r'(?<!!)!(?!!)', '!!', text)
+    text = re.sub(r'(?<![?!])\?(?![?!])', '??', text)
     return text
 
 
