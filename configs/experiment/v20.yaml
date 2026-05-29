@@ -22,9 +22,9 @@ model:
   # Schedule:
   # Epoch 0:
   #  prior_loss_threshold: 0.15
-  #  duration_loss_threshold: 0.3
-  prior_loss_threshold: 0.1
-  duration_loss_threshold: 0.4
+  #  duration_loss_threshold: 0.5
+  prior_loss_threshold: 0.15
+  duration_loss_threshold: 0.5
   
   encoder:
     encoder_params:
