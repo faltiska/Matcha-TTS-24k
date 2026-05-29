@@ -125,7 +125,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        dur_loss = F.huber_loss(logw, logw_, delta=self.hparams.duration_loss_threshold, reduction='sum') / torch.sum(x_lengths)        
+        dur_loss = F.huber_loss(logw, logw_, delta=self.hparams.duration_loss_threshold, reduction='sum') / torch.sum(x_lengths)
+        # original code was: 
+        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
 
         if self.batch_idx == 0:
             with torch.no_grad():
