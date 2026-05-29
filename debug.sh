@@ -1,15 +1,15 @@
-CHECKPOINT=logs/train/v19/checkpoint_epoch=994.ckpt
+CHECKPOINT=logs/train/v20/runs/2026-05-29_18-52-31/checkpoints/checkpoint_epoch=004.ckpt
 
-python -m matcha.cli \
---checkpoint_path $CHECKPOINT \
---text "The rain continued its relentless assault against the windowpane, each drop a tiny, percussive reminder of the time slipping through his fingers." \
---spk "0,1,2,3,4,5,6,10,11,12" \
---debug 
+#python -m matcha.cli \
+#--checkpoint_path $CHECKPOINT \
+#--text "The rain continued its relentless assault against the windowpane, each drop a tiny, percussive reminder of the time slipping through his fingers." \
+#--spk "0,1,2,3,4,5,6,10,11,12" \
+#--debug 
 
 python -m matcha.cli \
 --checkpoint_path $CHECKPOINT \
 --text "Ploaia continua să cadă neîntrerupt peste oraș, fiecare picătură amintind de timpul care trece." \
---spk "7" \
+--spk "7,15" \
 --debug 
 
 python -m matcha.cli \

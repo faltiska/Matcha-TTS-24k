@@ -23,15 +23,16 @@ model:
   # Epoch 0:
   #  prior_loss_threshold: 0.15
   #  duration_loss_threshold: 0.3
-  prior_loss_threshold: 0.15
-  duration_loss_threshold: 0.3
+  prior_loss_threshold: 0.1
+  duration_loss_threshold: 0.4
   
   encoder:
     encoder_params:
-      # 192 + 96 = 288
-      # 288 / 6 = 48, divisible by 8
+      # Speaker embedding is no longer concatenated; it conditions the encoder via per-layer FiLM,
+      # so the backbone runs at n_channels (192), not n_channels + spk_emb_dim.
+      # 192 / 6 = 32, divisible by 8
       n_channels: 192
-      # 288 * 4 = 1152
+      # 192 * 6 = 1152
       filter_channels: 1152
       n_heads: 6
       n_layers: 4

@@ -259,6 +259,12 @@ class FFN(nn.Module):
 
 
 class Encoder(nn.Module):
+    """Transformer encoder with FiLM speaker conditioning.
+
+    The speaker embedding is projected to a per-layer scale (gamma) and shift (beta) pair that is
+    applied after each LayerNorm. This keeps the backbone speaker-agnostic at hidden_channels and
+    re-injects the speaker character at every layer, instead of concatenating it into the input.
+    """
     def __init__(
         self,
         hidden_channels,
@@ -267,6 +273,7 @@ class Encoder(nn.Module):
         n_layers,
         kernel_size=1,
         p_dropout=0.0,
+        spk_emb_dim=96,
         **kwargs,
     ):
         super().__init__()
@@ -276,6 +283,7 @@ class Encoder(nn.Module):
         self.n_layers = n_layers
         self.kernel_size = kernel_size
         self.p_dropout = p_dropout
+        self.spk_emb_dim = spk_emb_dim
 
         self.drop = torch.nn.Dropout(p_dropout)
         self.attn_layers = torch.nn.ModuleList()
@@ -296,7 +304,18 @@ class Encoder(nn.Module):
             )
             self.norm_layers_2.append(LayerNorm(hidden_channels))
 
-    def forward(self, x, x_mask):
+        # One projection produces a gamma/beta pair for both LayerNorms in every layer.
+        # Layout per layer: [gamma_1, beta_1, gamma_2, beta_2], each hidden_channels wide.
+        self.film_params_per_layer = 4 * hidden_channels
+        self.spk_proj = torch.nn.Linear(spk_emb_dim, n_layers * self.film_params_per_layer)
+        # Initialize so FiLM is a no-op at the start of training: every gamma=1, every beta=0.
+        # Bias layout matches forward: per layer [gamma_1, beta_1, gamma_2, beta_2].
+        torch.nn.init.zeros_(self.spk_proj.weight)
+        gamma_beta_per_layer = self.spk_proj.bias.view(n_layers, 4, hidden_channels)
+        torch.nn.init.ones_(gamma_beta_per_layer[:, 0::2])
+        torch.nn.init.zeros_(gamma_beta_per_layer[:, 1::2])
+
+    def forward(self, x, x_mask, spk_emb):
         # Original code was not doing .bool()
         # scaled_dot_product_attention interprets the mask differently depending on its dtype:
         # bool tensor: False positions get -inf added before softmax, so they become zero after softmax — they are fully excluded from attention
@@ -304,14 +323,22 @@ class Encoder(nn.Module):
         # The mask ha 1.0 for valid and 0.0 for padding, originally, so padding positions were getting a get +0.0 bias, which has no effect.
         # That allowed padding to participate in attention.
         attn_mask = (x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)).bool()
+
+        # Per-layer FiLM params, shaped (batch, n_layers, 4, hidden_channels, 1) so they broadcast
+        # over time. The 4 entries per layer are gamma_1, beta_1, gamma_2, beta_2.
+        film = self.spk_proj(spk_emb).view(spk_emb.shape[0], self.n_layers, 4, self.hidden_channels, 1)
+
         for i in range(self.n_layers):
+            gamma_1, beta_1, gamma_2, beta_2 = film[:, i].unbind(dim=1)
             x = x * x_mask
             y = self.attn_layers[i](x, x, attn_mask)
             y = self.drop(y)
             x = self.norm_layers_1[i](x + y)
+            x = (x * gamma_1) + beta_1
             y = self.ffn_layers[i](x, x_mask)
             y = self.drop(y)
             x = self.norm_layers_2[i](x + y)
+            x = (x * gamma_2) + beta_2
         x = x * x_mask
         return x
 
@@ -346,25 +373,26 @@ class TextEncoder(nn.Module):
             self.prenet = lambda x, x_mask: x
 
         self.encoder = Encoder(
-            encoder_params.n_channels + spk_emb_dim,
+            encoder_params.n_channels,
             encoder_params.filter_channels,
             encoder_params.n_heads,
             encoder_params.n_layers,
             encoder_params.kernel_size,
             encoder_params.p_dropout,
+            spk_emb_dim=self.spk_emb_dim,
         )
         # This is the largest encoder component I can compile for training. Even so, it has a big impact.
         self.encoder = torch.compile(self.encoder)
 
         self.proj_m = torch.nn.Sequential(
-            torch.nn.Conv1d(self.n_channels + spk_emb_dim, self.n_channels, 1),
+            torch.nn.Conv1d(self.n_channels, self.n_channels, 1),
             torch.nn.SiLU(),
             torch.nn.Conv1d(self.n_channels, self.n_feats, 1),
         )
         torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
-            self.n_channels + spk_emb_dim,
+            self.n_channels,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
@@ -397,8 +425,7 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.shape[2]), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
-        x = torch.cat([x, speaker_embedding_enc.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1)
-        x = self.encoder(x, x_mask)
+        x = self.encoder(x, x_mask, speaker_embedding_enc)
         mu = self.proj_m(x) * x_mask
 
         logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
