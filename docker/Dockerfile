@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM nvidia/cuda:13.0.2-base-ubuntu24.04
+FROM nvidia/cuda:13.1.2-base-ubuntu24.04
 
 RUN apt-get update -y && \
     apt-get install -y git cmake g++ curl espeak-ng espeak-ng-data ffmpeg && \
