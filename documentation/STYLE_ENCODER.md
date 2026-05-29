@@ -135,3 +135,29 @@ pred_emb_enc, pred_emb_dur = style_encoder(mel, mel_mask)
 ```
 
 The two predicted embeddings are passed to `matcha.encoder(...)` in place of the lookup table outputs — one for the text encoder, one for the duration predictor.
+
+
+## Improvement ideas
+
+Weakness 1 — pooling throws away everything but the mean
+masked_mean_pool collapses the time axis to a single average. Two cheap, well-established upgrades:
+•
+Stats pooling (mean + std): concatenate the masked mean and the masked standard deviation over time. Doubles the pooled width (so the linear heads' input goes hidden → 2*hidden), captures variability, and is what x-vector speaker encoders use. Minimal code, no new layers.
+•
+Attentive stats pooling: learn per-frame weights, then take weighted mean+std. Strictly more expressive (ECAPA-TDNN uses it), but adds a small attention layer. More moving parts.
+For minimal change with a real gain, I'd start with mean+std stats pooling.
+Weakness 2 — shallow conv stack, no normalization
+The current stack is 4 plain Conv1d+ReLU, ~17-frame receptive field, no normalization, no residuals. Two issues: receptive field too short to capture speaker character across longer spans, and no normalization makes a deeper stack harder to train. Fixes, in order of effort:
+•
+Add normalization + residuals to the existing conv blocks so you can deepen safely (your text_encoder.py already has LayerNorm and ConvSiluNorm — same idea, can mirror that style).
+•
+Widen the receptive field, either by going deeper or by dilations.
+The honest caveat I gave before still holds: these two fix timbre fidelity, which is already your good axis. They won't fix the accent — that's the entanglement/main-model story. So I'd treat them as a second, lower-priority workstream, not the headline.
+That leaves us with potentially three coordinated changes:
+1.
+Main model: concat → FiLM/AdaLN in the Encoder (fixes the accent; the headline).
+2.
+Style Encoder pooling: mean → mean+std.
+3.
+Style Encoder backbone: add norm/residuals, widen receptive field.
+Before I write a plan I still need the one decision from earlier — shared FiLM vs per-layer AdaLN in the Encoder — and now also: do you want all three in one plan, or just the main-model change first (since that's the one that targets your actual complaint)? My recommendation: per-layer AdaLN, and do change #1 first on its own so you can confirm the accent improves before spending effort on #2/#3.

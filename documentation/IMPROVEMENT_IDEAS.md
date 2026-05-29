@@ -147,3 +147,56 @@ x = self.norm_prosody(x + y)
 ```
 
 The mask shape is the only thing that changes vs self-attention — rows are `T_full`, columns are `T_clean`.
+
+
+# Conditioning Dropout on the speaker embedding (disentangle pronunciation from identity)
+
+## The problem it solves
+With FiLM speaker conditioning and only ~20 speakers, the shared encoder backbone *can still memorize
+per-speaker pronunciation*. FiLM multiplies content features by an embedding-derived `gamma` (`x * gamma`),
+which is a content×speaker interaction repeated at every layer. With few speakers it is cheap for the
+backbone to learn "embeddings near speaker N's region → render speaker N's specific pronunciation quirks",
+because a speaker's idiosyncratic pronunciation is real signal that lowers training loss.
+
+This memorization is harmless for the main model (it sounds good on the known speakers), but it is exactly
+what hurts the Style Encoder: a new embedding it predicts lands in a region where pronunciation is
+entangled with identity, so the new voice comes out with an accent / mispronunciations even though the
+timbre is right.
+
+## The idea
+For a random fraction of training steps, replace `speaker_embedding_enc` with zeros before it enters the
+encoder. When the embedding is zero, our FiLM projection (`spk_proj`) is initialized and behaves as the
+identity (`gamma=1`, `beta=0`), so the encoder runs fully unconditioned on those steps. This *forces* the
+backbone to produce correct, generic pronunciation with no speaker information at all.
+
+The result: pronunciation is pushed into the unconditional backbone weights and becomes
+embedding-invariant, while the embedding is left to carry only voice/timbre variation. That is what makes
+"pronunciation comes for free for any speaker, known or new" literally true, and it makes the off-manifold
+embeddings the Style Encoder predicts safe to use.
+
+## Notes for implementation
+- Only drop the *encoder* embedding (`speaker_embedding_enc`). The duration predictor embedding is a
+  separate concern; decide separately whether to drop it too.
+- Drop per-sample (independent Bernoulli per batch element), not per-batch, so each step still sees a mix.
+- Start with a modest rate (e.g. 0.1) and watch per-speaker prior-loss spread and the Style Encoder's
+  embedding-distance metrics.
+- Inference is unaffected (always uses the real embedding). Config-gate the rate so v19 / other experiments
+  are untouched.
+
+# Let the speaker embedding tables receive weight decay (or a norm penalty)
+
+`configure_optimizers` in `baselightningmodule.py` currently puts every `nn.Embedding` (including both
+speaker tables) in the no-decay group, so the speaker embeddings get zero weight-decay pressure today.
+That means nothing pulls speakers toward a shared region, which makes it easier for the backbone to carve
+out isolated per-speaker modes (the memorization described above).
+
+Allowing the speaker tables to decay — or adding a separate, tunable norm penalty just on them — pulls
+speakers together and shrinks those memorized modes, complementing conditioning dropout. This is a dial,
+not a switch: it is in mild tension with the "all character lives in the embedding" goal, so it needs to be
+tuned rather than turned on hard. A related, lower-priority variant is a low-rank `spk_proj` (bottleneck the
+conditioning path) to cap how much speaker-specific *content* FiLM can inject without reducing the
+backbone's pronunciation capacity.
+
+Note: shrinking the core backbone is *not* the right lever for genericity — it mostly costs pronunciation
+quality, which is the thing the backbone must own. The levers above target identity↔content entanglement
+directly instead.
