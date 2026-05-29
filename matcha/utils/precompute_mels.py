@@ -91,10 +91,10 @@ def compute_and_save_mel(
     try:
         audio, sr = ta.load(str(wav_path))
     except Exception as e:  # pylint: disable=broad-except
-        return False, f"Failed loading {wav_path}: {e}", 0
+        return False, f"Failed loading {wav_path}: {e}"
 
     if sr != sample_rate:
-        return False, f"Sample rate mismatch for {wav_path} (found {sr}, expected {sample_rate})", 0
+        return False, f"Sample rate mismatch for {wav_path} (found {sr}, expected {sample_rate})"
 
     try:
         if not out_path.exists():
