@@ -1,7 +1,6 @@
 from typing import Callable
 
 import torch
-import torchaudio
 
 
 def get_mel_extractor(
@@ -20,6 +19,7 @@ def get_mel_extractor(
     - Audio trimmed to multiple of hop_length before STFT
     - Natural log with eps=1e-7
     """
+    import torchaudio
     mel_spec = torchaudio.transforms.MelSpectrogram(
         sample_rate=sample_rate,
         n_fft=n_fft,
