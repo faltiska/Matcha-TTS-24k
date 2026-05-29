@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
-import torchaudio as ta
 from lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import Sampler
@@ -397,16 +396,20 @@ class TextMelDataset(torch.utils.data.Dataset):
         self.f_max = f_max
         self.mel_dir = mel_dir
         self.mel_backend = mel_backend
-        self.mel_extractor = get_mel_extractor(
-            mel_backend,
-            sample_rate=self.sample_rate,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            n_mels=self.n_mels,
-            f_min=self.f_min,
-            f_max=self.f_max,
-        )
+        precomputed_mels_available = mel_dir is not None
+        if not precomputed_mels_available:
+            self.mel_extractor = get_mel_extractor(
+                mel_backend,
+                sample_rate=self.sample_rate,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                win_length=self.win_length,
+                n_mels=self.n_mels,
+                f_min=self.f_min,
+                f_max=self.f_max,
+            )
+        else:
+            self.mel_extractor = None
 
         if data_parameters is not None:
             self.data_parameters = data_parameters
