@@ -3,15 +3,11 @@
 ```bash
 uv venv .venv --python 3.13
 source .venv/bin/activate
-uv pip install torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/cu130 --upgrade
+uv pip install torch torchcodec --index-url https://download.pytorch.org/whl/cu132 --upgrade
+uv pip install torchaudio --index-url https://download.pytorch.org/whl/test/cu132 --upgrade
 uv pip install -r requirements.txt --upgrade
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
-
-# the new cuda 13.2 version does not have torchaudio yet:
-uv pip install torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/cu132 --force-reinstall
-# the nightly version does not work, throws a Segmentation Fault
-uv pip install --pre torch torchcodec torchaudio --index-url https://download.pytorch.org/whl/nightly/cu132 --force-reinstall
 ```
 
 ## A note on running inference and training at the same time
@@ -185,9 +181,16 @@ rm -rf ~/.cache/torch_extensions/
 
 # nVidia drivers
 
-Update the drivers with:
+Make sure you do not have nVidia drivers, as, in WSL, you should rely on host drivers.
 ```
-sudo apt install cuda-drivers --update
+sudo apt-get purge nvidia-driver nvidia-dkms
+```
+Check to see you do not have nvidia drivers with:
+```
+dpkg -l | grep -E "nvidia-driver|nvidia-dkms"
+```
+You dso need cuDNN so install / update that with:
+```
 sudo apt install libcudnn9-cuda-13 --update
 ```
 or update all linux packages:

@@ -1,14 +1,14 @@
 # MatchaTTS Production Deployment - summary
 Do these for each release.
 
-1. Replace *26.05.24-1* with the current tag.
+1. Replace *26.05.29-2* with the current tag.
 2. Replace *logs/train/v19-prod/checkpoint_epoch=1281.ckpt* with the path to the image you want to release. 
 
 3. Build the image and test it locally
 ```bash
 # Linux
 python -m matcha.utils.prepare_ckpt_for_release logs/train/v19-prod/checkpoint_epoch=1281.ckpt
-export TAG=26.05.24-1
+export TAG=26.05.29-2
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 docker buildx build -f docker/Dockerfile -t $REGISTRY/$IMAGE_NAME:$TAG --build-arg IMAGE_VERSION=$TAG .
@@ -31,7 +31,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 
 6. Pull the image and do a rolling update:
 ```bash
-export TAG=26.05.24-1
+export TAG=26.05.29-2
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
@@ -97,7 +97,7 @@ See: https://docker-desktop.io/docs/docker/gpu
 
 ```bash
 # Linux
-export TAG=26.05.24-1
+export TAG=26.05.29-2
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -227,7 +227,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 Create the service (only needs to be done once):
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.05.24-1
+export TAG=26.05.29-2
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
@@ -254,7 +254,7 @@ ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.c
 
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-export TAG=26.05.24-1
+export TAG=26.05.29-2
 export REGISTRY=678811077621.dkr.ecr.eu-west-1.amazonaws.com
 export IMAGE_NAME=evie/matcha
 
