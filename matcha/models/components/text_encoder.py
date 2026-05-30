@@ -170,11 +170,11 @@ class RotaryPositionalEmbeddings(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     def __init__(
-        self,
-        channels,
-        out_channels,
-        n_heads,
-        p_dropout=0.0,
+            self,
+            channels,
+            out_channels,
+            n_heads,
+            p_dropout=0.0,
     ):
         super().__init__()
         assert channels % n_heads == 0
@@ -252,15 +252,15 @@ class Encoder(nn.Module):
     re-injects the speaker character at every layer, instead of concatenating it into the input.
     """
     def __init__(
-        self,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size=1,
-        p_dropout=0.0,
-        spk_emb_dim=96,
-        **kwargs,
+            self,
+            hidden_channels,
+            filter_channels,
+            n_heads,
+            n_layers,
+            kernel_size=1,
+            p_dropout=0.0,
+            spk_emb_dim=96,
+            **kwargs,
     ):
         super().__init__()
         self.hidden_channels = hidden_channels
@@ -331,11 +331,11 @@ class Encoder(nn.Module):
 
 class TextEncoder(nn.Module):
     def __init__(
-        self,
-        encoder_params,
-        duration_predictor_params,
-        n_vocab,
-        spk_emb_dim=128,
+            self,
+            encoder_params,
+            duration_predictor_params,
+            n_vocab,
+            spk_emb_dim=128,
     ):
         super().__init__()
         self.n_vocab = n_vocab
@@ -378,7 +378,7 @@ class TextEncoder(nn.Module):
         torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
-            self.n_channels,
+            self.n_channels + self.spk_emb_dim,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
@@ -414,6 +414,7 @@ class TextEncoder(nn.Module):
         x = self.encoder(x, x_mask, speaker_embedding_enc)
         mu = self.proj_m(x) * x_mask
 
-        logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
+        x_for_dp = torch.cat([x, speaker_embedding_enc.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1).detach()
+        logw = self.proj_w(x_for_dp, x_mask, speaker_embedding_dur)
 
         return mu, logw, x_mask
