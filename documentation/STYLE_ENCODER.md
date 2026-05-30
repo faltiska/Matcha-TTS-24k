@@ -2,13 +2,15 @@
 
 ## Purpose
 
-The Style Encoder lets you add a new voice to a trained Matcha-TTS model using a small set of recordings (~50 Harvard Sentences), without retraining the full model.
+The Style Encoder lets you add a new voice to a trained Matcha-TTS model using a small set of recordings 
+(~50 Harvard Sentences), without retraining the full model.
 
-Matcha-TTS represents each speaker as two learned vectors of numbers (96 each):
+Matcha-TTS represents each speaker as two learned vectors:
 - One drives the text encoder, shaping how phonemes are mapped to mel frames
 - One drives the duration predictor
 
-For a known speaker, these vectors come from two lookup tables trained over 4+ days. The Style Encoder learns to predict them directly from a short audio recording, so a new speaker does not need to go through full training.
+For a known speaker, these vectors come from two lookup tables trained over 4+ days. The Style Encoder learns to 
+predict them directly from a short audio recording, so a new speaker does not need to go through full training.
 
 ---
 
@@ -19,15 +21,16 @@ For a known speaker, these vectors come from two lookup tables trained over 4+ d
 Predicts both speaker embeddings from a mel spectrogram.
 
 ```
-mel spectrogram  (100 frequency bins × T time frames)
-  → 4 convolutional layers (kernel=5, 256 channels) + ReLU, masked
-  → average over time (ignoring padding)
-  → two linear projections → 96 numbers each
+mel spectrogram  (frequency bins × time frames)
+  → stack of convolutional layers + ReLU, masked
+  → mean + standard deviation over time (ignoring padding)
+  → two linear projections
         • encoder embedding   (for the text encoder)
         • duration embedding  (for the duration predictor)
 ```
 
-The conv stack extracts voice characteristics, averages everything into a single summary vector, then two linear heads project it into the two 96-number embeddings that Matcha's encoder and duration predictor expect.
+The conv stack extracts voice characteristics, summarizes them over time with both their average and their variability, 
+then two linear heads project that summary into the two embeddings that Matcha's encoder and duration predictor expect.
 
 ---
 
@@ -51,7 +54,8 @@ The Matcha checkpoint is frozen — none of its weights change. Only the StyleEn
    Total loss:    acoustic + rhythm
 ```
 
-The two losses teach the StyleEncoder to predict embeddings that make the encoder reproduce both the phoneme-to-mel mapping (acoustic) and the predicted durations (rhythm) it would have produced with the real embeddings.
+The two losses teach the StyleEncoder to predict embeddings that make the encoder reproduce both the phoneme-to-mel 
+mapping (acoustic) and the predicted durations (rhythm) it would have produced with the real embeddings.
 
 ---
 
@@ -68,17 +72,10 @@ The two losses teach the StyleEncoder to predict embeddings that make the encode
 
 ## Configuration
 
-`configs/model/style_encoder/default.yaml`:
-
-```yaml
-matcha_checkpoint_path: ???   # required — path to trained Matcha .ckpt
-
-n_feats: 100                  # must match Matcha data config
-spk_emb_dim: 96               # must match Matcha spk_emb_dim_enc
-
-ase_hidden_channels: 256
-ase_n_layers: 4
-```
+`configs/model/style_encoder/default.yaml` holds:
+- the path to the trained Matcha checkpoint to distill from
+- the mel feature count and speaker embedding dimension — both must match that checkpoint
+- the conv stack's width and depth
 
 All dimension values must match the Matcha checkpoint exactly.
 
@@ -139,25 +136,28 @@ The two predicted embeddings are passed to `matcha.encoder(...)` in place of the
 
 ## Improvement ideas
 
-Weakness 1 — pooling throws away everything but the mean
-masked_mean_pool collapses the time axis to a single average. Two cheap, well-established upgrades:
-•
-Stats pooling (mean + std): concatenate the masked mean and the masked standard deviation over time. Doubles the pooled width (so the linear heads' input goes hidden → 2*hidden), captures variability, and is what x-vector speaker encoders use. Minimal code, no new layers.
-•
-Attentive stats pooling: learn per-frame weights, then take weighted mean+std. Strictly more expressive (ECAPA-TDNN uses it), but adds a small attention layer. More moving parts.
-For minimal change with a real gain, I'd start with mean+std stats pooling.
-Weakness 2 — shallow conv stack, no normalization
-The current stack is 4 plain Conv1d+ReLU, ~17-frame receptive field, no normalization, no residuals. Two issues: receptive field too short to capture speaker character across longer spans, and no normalization makes a deeper stack harder to train. Fixes, in order of effort:
-•
-Add normalization + residuals to the existing conv blocks so you can deepen safely (your text_encoder.py already has LayerNorm and ConvSiluNorm — same idea, can mirror that style).
-•
-Widen the receptive field, either by going deeper or by dilations.
+Weakness: shallow conv stack, no normalization
+
+The current stack is plain Conv1d+ReLU, with a short receptive field, no normalization, no residuals. Two issues: receptive field too short to capture speaker character across longer spans, and no normalization makes a deeper stack harder to train. Fixes, in order of effort:
+• Add normalization + residuals to the existing conv blocks so you can deepen safely (your text_encoder.py already has LayerNorm and ConvSiluNorm — same idea, can mirror that style).
+• Widen the receptive field, either by going deeper or by dilations.
 The honest caveat I gave before still holds: these two fix timbre fidelity, which is already your good axis. They won't fix the accent — that's the entanglement/main-model story. So I'd treat them as a second, lower-priority workstream, not the headline.
+
+#### Reference: how StyleTTS2 builds its style encoder
+
+StyleTTS2's `StyleEncoder` is essentially the deeper, normalized version of this same idea, so it is a good blueprint for the fixes above:
+- It treats the mel as a **1-channel 2D image** and runs a stack of **residual blocks** (`ResBlk`), each halving **both** the frequency and time axes (`downsample='half'`) while doubling channels (up to a cap). Halving the time axis repeatedly is how it reaches a long effective receptive field with only a few blocks — an alternative to going deeper or using dilations.
+- Every conv is wrapped in **`spectral_norm`**, and the blocks optionally use **`InstanceNorm2d`** (the normalization our current stack lacks). Activation is `LeakyReLU`.
+- Each `ResBlk` adds a learned `_shortcut` and rescales the sum to keep unit variance — a cheap residual recipe worth copying if we deepen.
+- It finishes with a conv and **`AdaptiveAvgPool2d`** — i.e. a **mean-only** global pool. Our mean+std stats pooling is already more expressive than this, so on pooling we are ahead; the gap is purely the backbone.
+
+Two structural choices of theirs we deliberately do **not** copy:
+- StyleTTS2 uses **two completely separate encoder networks** (one acoustic, one prosodic). We use one shared conv backbone with two linear heads, which is cheaper but gives the two embedding spaces less independent capacity. If the duration/rhythm side stays weak after the backbone upgrade, splitting into two backbones is the next lever.
+- Their style encoder is trained **end-to-end** (adversarial + diffusion) and *co-defines* the style space. Ours is a **distiller** that regresses the frozen lookup-table embeddings, so our style space is capped by what those vectors already encode — a deliberate trade for a simpler, decoupled training setup that cannot destabilize the main model.
+
+The `InstanceNorm2d` + residual + variance-rescaling recipe maps cleanly onto our `text_encoder.py` style (`LayerNorm`, `ConvSiluNorm`), so we can mirror either source when we pick this up.
+
 That leaves us with potentially three coordinated changes:
-1.
-Main model: concat → FiLM/AdaLN in the Encoder (fixes the accent; the headline).
-2.
-Style Encoder pooling: mean → mean+std.
-3.
-Style Encoder backbone: add norm/residuals, widen receptive field.
-Before I write a plan I still need the one decision from earlier — shared FiLM vs per-layer AdaLN in the Encoder — and now also: do you want all three in one plan, or just the main-model change first (since that's the one that targets your actual complaint)? My recommendation: per-layer AdaLN, and do change #1 first on its own so you can confirm the accent improves before spending effort on #2/#3.
+1. ~~Main model: concat → FiLM/AdaLN in the Encoder (fixes the accent; the headline).~~ Done in v20.
+2. ~~Style Encoder pooling: mean → mean+std.~~ Done.
+3. Style Encoder backbone: add norm/residuals, widen receptive field.

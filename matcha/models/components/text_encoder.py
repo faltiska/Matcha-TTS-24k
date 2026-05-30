@@ -142,11 +142,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         idx_theta = torch.einsum("n,d->nd", seq_idx, theta)
         idx_theta2 = torch.cat([idx_theta, idx_theta], dim=1)
 
-        self.register_buffer('cos_cached', idx_theta2.cos()[:, None, None, :], persistent=False)
-        self.register_buffer('sin_cached', idx_theta2.sin()[:, None, None, :], persistent=False)
-
-    def _ensure_cache(self, seq_len: int):
-        assert seq_len <= self.max_seq_len, f"Phonetic representation too long {seq_len}, exceeds RoPE cache size {self.max_seq_len}"
+        self.register_buffer('cos_cached', idx_theta2.cos()[None, None, :, :], persistent=False)
+        self.register_buffer('sin_cached', idx_theta2.sin()[None, None, :, :], persistent=False)
 
     def _neg_half(self, x: torch.Tensor):
         # Rearranges x so the second half of the values comes first, negated:
@@ -158,9 +155,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         """
         * `x` is the Tensor at the head of a key or a query with shape `[batch_size, n_heads, seq_len, d]`
         """
-        x = rearrange(x, "b h t d -> t b h d")
-
-        seq_len = x.shape[0]
+        seq_len = x.shape[2]
         assert seq_len <= self.max_seq_len, f"Phonetic representation too long, exceeds RoPE cache size {self.max_seq_len}"
 
         # Split the embedding values: RoPE is applied only to the first d values, the rest are passed through unchanged.
@@ -168,9 +163,9 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         neg_half_x = self._neg_half(x_rope)
 
-        x_rope = (x_rope * self.cos_cached[: x.shape[0]]) + (neg_half_x * self.sin_cached[: x.shape[0]])
+        x_rope = (x_rope * self.cos_cached[:, :, :seq_len]) + (neg_half_x * self.sin_cached[:, :, :seq_len])
 
-        return rearrange(torch.cat((x_rope, x_pass), dim=-1), "t b h d -> b h t d")
+        return torch.cat((x_rope, x_pass), dim=-1)
 
 
 class MultiHeadAttention(nn.Module):
@@ -180,7 +175,6 @@ class MultiHeadAttention(nn.Module):
         out_channels,
         n_heads,
         p_dropout=0.0,
-        proximal_init=False,
     ):
         super().__init__()
         assert channels % n_heads == 0
@@ -191,26 +185,20 @@ class MultiHeadAttention(nn.Module):
         self.p_dropout = p_dropout
 
         self.k_channels = channels // n_heads
-        self.conv_q = torch.nn.Conv1d(channels, channels, 1)
-        self.conv_k = torch.nn.Conv1d(channels, channels, 1)
-        self.conv_v = torch.nn.Conv1d(channels, channels, 1)
+        # Fused query/key/value projection: one 1x1 conv produces all three, halving GEMM launches.
+        self.conv_qkv = torch.nn.Conv1d(channels, channels * 3, 1)
 
         # from https://nn.labml.ai/transformers/rope/index.html
         self.rope = RotaryPositionalEmbeddings(self.k_channels * 0.5)
 
         self.conv_o = torch.nn.Conv1d(channels, out_channels, 1)
 
-        torch.nn.init.xavier_uniform_(self.conv_q.weight)
-        torch.nn.init.xavier_uniform_(self.conv_k.weight)
-        if proximal_init:
-            self.conv_k.weight.data.copy_(self.conv_q.weight.data)
-            self.conv_k.bias.data.copy_(self.conv_q.bias.data)
-        torch.nn.init.xavier_uniform_(self.conv_v.weight)
+        # Init each q/k/v slice independently so xavier fan-in matches a per-projection conv.
+        for slice_start in range(0, channels * 3, channels):
+            torch.nn.init.xavier_uniform_(self.conv_qkv.weight[slice_start:slice_start + channels])
 
-    def forward(self, x, c, attn_mask=None):
-        q = self.conv_q(x)
-        k = self.conv_k(c)
-        v = self.conv_v(c)
+    def forward(self, x, attn_mask=None):
+        q, k, v = self.conv_qkv(x).chunk(3, dim=1)
 
         x = self.attention(q, k, v, mask=attn_mask)
 
@@ -226,8 +214,6 @@ class MultiHeadAttention(nn.Module):
         key = self.rope(key)
 
         attn_mask = mask.bool() if mask is not None else None
-        # Uses FlashAttention when possible: fused kernel that avoids materializing the full attention matrix,
-        # reducing memory from O(n²) to O(n) and running significantly faster on modern GPUs.
         output = torch.nn.functional.scaled_dot_product_attention(
             query, key, value,
             attn_mask=attn_mask,
@@ -331,7 +317,7 @@ class Encoder(nn.Module):
         for i in range(self.n_layers):
             gamma_1, beta_1, gamma_2, beta_2 = film[:, i].unbind(dim=1)
             x = x * x_mask
-            y = self.attn_layers[i](x, x, attn_mask)
+            y = self.attn_layers[i](x, attn_mask)
             y = self.drop(y)
             x = self.norm_layers_1[i](x + y)
             x = (x * gamma_1) + beta_1

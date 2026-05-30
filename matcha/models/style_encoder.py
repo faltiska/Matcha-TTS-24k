@@ -33,17 +33,25 @@ from matcha.utils.model import sequence_mask
 log = logging.getLogger(__name__)
 
 
-def masked_mean_pool(x, mask):
-    """Mean pool x (B, C, T) over time using mask (B, 1, T)."""
-    x = x * mask
-    return x.sum(dim=2) / mask.sum(dim=2).clamp(min=1)
+def masked_stats_pool(x, mask):
+    """Mean+std pool x (B, C, T) over time using mask (B, 1, T). Returns (B, 2C).
+
+    Concatenates the masked mean and the masked standard deviation over time, so each clip is
+    summarized by both its average voice characteristics and how much they vary within the clip.
+    """
+    n = mask.sum(dim=2).clamp(min=1)
+    x_masked = x * mask
+    mean = x_masked.sum(dim=2) / n
+    mean_sq = (x_masked * x).sum(dim=2) / n
+    std = (mean_sq - mean ** 2).clamp(min=1e-8).sqrt()
+    return torch.cat([mean, std], dim=1)
 
 
 class StyleEncoder(nn.Module):
     """Predicts speaker embedding from mel spectrogram.
 
     Takes mel (B, n_feats, T_mel) and produces a single vector (B, spk_emb_dim).
-    Architecture: stack of Conv1d+ReLU layers, masked mean pool, linear projection.
+    Architecture: stack of Conv1d+ReLU layers, masked mean+std pool, linear projection.
     """
 
     def __init__(self, n_feats, hidden_channels, n_layers, spk_emb_dim):
@@ -53,8 +61,8 @@ class StyleEncoder(nn.Module):
         for _ in range(n_layers):
             self.convs.append(nn.Conv1d(in_ch, hidden_channels, kernel_size=5, padding=2))
             in_ch = hidden_channels
-        self.proj_enc = nn.Linear(hidden_channels, spk_emb_dim)
-        self.proj_dur = nn.Linear(hidden_channels, spk_emb_dim)
+        self.proj_enc = nn.Linear(hidden_channels * 2, spk_emb_dim)
+        self.proj_dur = nn.Linear(hidden_channels * 2, spk_emb_dim)
 
     def forward(self, mel, mel_mask):
         """
@@ -68,7 +76,7 @@ class StyleEncoder(nn.Module):
         x = mel
         for conv in self.convs:
             x = torch.relu(conv(x * mel_mask))
-        pooled = masked_mean_pool(x, mel_mask)
+        pooled = masked_stats_pool(x, mel_mask)
         return self.proj_enc(pooled), self.proj_dur(pooled)
 
 
