@@ -125,9 +125,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        dur_loss = F.huber_loss(logw, logw_, delta=self.hparams.duration_loss_threshold, reduction='sum') / torch.sum(x_lengths)
-        # original code was: 
-        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
+        # I could use huber like in prior_loss:
+        # delta = self.hparams.duration_loss_threshold
+        # dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
+        # but original code was pure MSE: 
+        dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
 
         if self.batch_idx == 0:
             with torch.no_grad():
@@ -138,7 +140,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # The L2 loss was causing instability in early epochs, so I switched to Huber loss.
             # Since Huber has very small values, I am also scaling it (easier than implementing separate LRs).
             delta = self.hparams.prior_loss_threshold
             prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=delta, reduction='sum')
