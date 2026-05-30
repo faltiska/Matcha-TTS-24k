@@ -50,6 +50,14 @@ When writing code, think very carefully about performance:
 - Find the right balance between fast code and efficient memory allocations
 - Avoid moving data between CPU and GPU
 
+# Documentation rules
+We should not write documentation using variable names or entity names that require prior, or "tribal" knowledge.
+I am talking about standalone documents here, like requirements or architectural documents, not code comments.
+When writing documentation, if you want to use abbreviations or entity names, you should always do the following trick.
+The first time you mention the entity, you refer to it by its full name or full description, then put the acronym name
+in brackets right after it. From then on, you are free to use the short name, which will improve readability, as the 
+text will get shorter.
+
 # General rules
 1. Please do not answer using variable names, I am a human being, cannot remember the code by heart, I do not know what things like "logw_pred" represent.
 2. Keep your answers short and focused.
