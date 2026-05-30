@@ -34,11 +34,10 @@ model:
   # I logged the quantiles over 1200 epochs:
   #  p50: 0.02 - 0.04
   #  p75: 0.07 - 0.08
-  #  p90: 0.115 - 0.125
-  #  p95: 0.15 - 0.16
-  #  p99: 0.23 - 0.26
+  #  p90: 0.11 - 0.12
+  #  p95: 0.14 - 0.15
+  #  p99: 0.22 - 0.24
   #  p100: 1.0 - 1.5
-  # I would say the right Huber threshold is between 0.15 and 0.25 
   
   encoder:
     encoder_params:
