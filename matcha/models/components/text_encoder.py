@@ -365,9 +365,9 @@ class TextEncoder(nn.Module):
             encoder_params.n_layers,
             encoder_params.kernel_size,
             encoder_params.p_dropout,
-            spk_emb_dim=self.spk_emb_dim,
+            self.spk_emb_dim,
         )
-        # This is the largest encoder component I can compile for training. Even so, it has a big impact.
+        # This is the largest component I can compile for training. Even so, it has a big impact.
         self.encoder = torch.compile(self.encoder)
 
         self.proj_m = torch.nn.Sequential(
@@ -378,7 +378,7 @@ class TextEncoder(nn.Module):
         torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
-            self.n_channels + self.spk_emb_dim,
+            self.n_channels,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
@@ -414,7 +414,6 @@ class TextEncoder(nn.Module):
         x = self.encoder(x, x_mask, speaker_embedding_enc)
         mu = self.proj_m(x) * x_mask
 
-        x_for_dp = torch.cat([x, speaker_embedding_enc.unsqueeze(-1).expand(-1, -1, x.shape[-1])], dim=1).detach()
-        logw = self.proj_w(x_for_dp, x_mask, speaker_embedding_dur)
+        logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
 
         return mu, logw, x_mask
