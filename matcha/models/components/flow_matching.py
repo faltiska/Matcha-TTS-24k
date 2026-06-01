@@ -115,4 +115,5 @@ class CFM(BASECFM):
         )
 
         self.estimator = Decoder(in_channels=in_channels, out_channels=out_channel, **decoder_params)
+        self.estimator = torch.compile(self.estimator, dynamic=True)
 

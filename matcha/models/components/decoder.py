@@ -15,7 +15,6 @@ class SinusoidalPosEmb(torch.nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
-        assert self.dim % 2 == 0, "SinusoidalPosEmb requires dim to be even"
 
     def forward(self, x, scale=1000):
         if x.ndim < 1:
@@ -68,6 +67,7 @@ class Downsample1D(nn.Module):
         super().__init__()
         self.conv = torch.nn.Conv1d(dim, dim, 3, 2, 1)
 
+    @torch.compiler.disable
     def forward(self, x):
         return self.conv(x)
 
@@ -147,8 +147,8 @@ class Upsample1D(nn.Module):
         elif use_conv:
             self.conv = nn.Conv1d(self.channels, self.out_channels, 3, padding=1)
 
+    @torch.compiler.disable
     def forward(self, inputs):
-        assert inputs.shape[1] == self.channels
         if self.use_conv_transpose:
             return self.conv(inputs)
 
