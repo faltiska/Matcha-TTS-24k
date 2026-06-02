@@ -1,3 +1,5 @@
+Please keep your answers short and focused.
+
 # Architecture
 
 Please read the file ./documentation/components.md which describes the architecture of the model.
@@ -60,7 +62,8 @@ text will get shorter.
 
 # General rules
 1. Please do not answer using variable names, I am a human being, cannot remember the code by heart, I do not know what things like "logw_pred" represent.
-2. Keep your answers short and focused.
 3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
 4. When executing grep commands, always exclude the "logs" and ".venv" folders  
 5. You should never express any opinion about this project without having read the code first.
+
+Plase keep your answers short and focused.
