@@ -43,7 +43,7 @@ fi
 read -r -p "Normalize silence? [y/N] " NORMALIZE_SILENCE
 if [[ "$NORMALIZE_SILENCE" =~ ^[Yy]$ ]]; then
   echo "=== Step 2: Normalize leading and trailing silence ==="
-  python -m matcha.utils.normalize_silence -i "$DATA_CONFIG" --target_leading_silence 0.2 --target_trailing_silence 0.8
+  python -m matcha.utils.normalize_silence -i "$DATA_CONFIG" --target_leading_silence 0.1 --target_trailing_silence 0.4
 fi 
 
 echo "=== Step 3: Precompute mel spectrograms ==="
