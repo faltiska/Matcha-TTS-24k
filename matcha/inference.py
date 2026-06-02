@@ -124,8 +124,8 @@ class MatchaTTSInfer(nn.Module):
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
 
-        # I am doing -2 to compensate for the +2 added during training, see matcha_tts
-        phoneme_durations = (torch.exp(logw) - 2) * x_mask
+        # I am doing this to compensate for the value added during training, see the forward method in matcha_tts.py.
+        phoneme_durations = (torch.exp(logw) - 3) * x_mask
         phoneme_durations = phoneme_durations.squeeze(1)
         raw_phoneme_durations = phoneme_durations.clone()
 
