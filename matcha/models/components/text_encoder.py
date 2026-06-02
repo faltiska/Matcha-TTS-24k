@@ -2,9 +2,9 @@ import math
 
 import torch
 import torch.nn as nn
-from einops import rearrange
 
 from matcha.utils.model import sequence_mask
+from matcha.models.components.attention import MultiHeadAttention
 
 
 class LayerNorm(nn.Module):
@@ -62,12 +62,16 @@ class ConvSiluNorm(nn.Module):
         return x * x_mask
 
 class DurationPredictor(nn.Module):
-    """Predicts phoneme durations using stacked convolutional layers.
+    """Predicts phoneme durations using stacked convolutional layers followed by self-attention.
 
     Uses FiLM conditioning: the speaker embedding is projected to scale (gamma) and shift (beta)
     and applied after LayerNorm at every layer.
+
+    Self-attention after the conv stack lets each phoneme attend globally to all others,
+    capturing sentence-level prosody (phrase-final lengthening, speech rate, stress) that
+    the local convolutional receptive field cannot reach.
     """
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, spk_emb_dim=64):
+    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, n_layers=2, n_heads=2, spk_emb_dim=64):
         super().__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
@@ -96,6 +100,17 @@ class DurationPredictor(nn.Module):
             )
             self.norm_layers.append(LayerNorm(filter_channels))
 
+        # Self-attention over the full phoneme sequence, after local conv features are built.
+        # filter_channels must be divisible by n_heads.
+        self.attn = MultiHeadAttention(filter_channels, filter_channels, n_heads, p_dropout=p_dropout)
+        self.attn_norm = LayerNorm(filter_channels)
+
+        # Attention only routes a linear summary of context between phonemes. The FFN adds the
+        # per-position nonlinear compute that lets each phoneme reason about that gathered context,
+        # turning the attention step into a complete transformer block.
+        self.ffn = FFN(filter_channels, filter_channels, filter_channels, kernel_size, p_dropout=p_dropout)
+        self.ffn_norm = LayerNorm(filter_channels)
+
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
     def forward(self, x, x_mask, spk_emb):
@@ -103,124 +118,26 @@ class DurationPredictor(nn.Module):
         gamma, beta = torch.split(film_params, self.filter_channels, dim=1)
         for conv, norm in zip(self.conv_layers, self.norm_layers):
             x = conv(x * x_mask)
-            x = torch.relu(x)
             x = norm(x)
+            x = torch.relu(x)
             x = (x * gamma) + beta
             x = self.drop(x)
+
+        # Self-attention with residual connection and layer norm.
+        # The attention mask excludes padding positions from attention.
+        attn_mask = (x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)).bool()
+        x = self.attn_norm(x + self.attn(x * x_mask, attn_mask))
+        # Re-inject FiLM: LayerNorm strips the per-channel speaker scale/shift, so without this the
+        # speaker rhythm signal would be normalized away right before the duration projection.
+        x = (x * gamma) + beta
+
+        # FFN sublayer: nonlinear per-position compute over the context attention just gathered.
+        x = self.ffn_norm(x + self.ffn(x * x_mask, x_mask))
+        x = (x * gamma) + beta
 
         x = self.proj(x * x_mask)
         return x * x_mask
 
-class RotaryPositionalEmbeddings(nn.Module):
-    """
-    ## RoPE module
-
-    For each phoneme, treats consecutive pairs of values in its embedding as 2D vectors
-    and rotates them by an angle proportional to the phoneme's position.
-    This makes attention dot products sensitive to the relative distance between phonemes
-    rather than their absolute positions.
-    """
-
-    def __init__(self, d: int, base: int = 10_000):
-        """
-        * `d` is the number of embedding values to apply RoPE to (half the per-head embedding size)
-        * `base` is the constant used for calculating Theta
-        """
-        super().__init__()
-
-        self.base = base
-        self.d = int(d)
-
-        # The total phonetic representation, including annotations and separators must be shorter than this.
-        # The server should enforce a max text length that can fit into this. The client app too.
-        # With the (pre, phoneme, post) tokenization scheme, a 1000 symbols input text will be less than 3000 symbols 
-        # long after tokenization, but since some symbols are multibyte, I want some extra space, just inh case.
-        self.max_seq_len = 4000
-        # Pre-allocate and fill cos/sin caches
-        theta = 1.0 / (self.base ** (torch.arange(0, self.d, 2).float() / self.d))
-        seq_idx = torch.arange(self.max_seq_len).float()
-        idx_theta = torch.einsum("n,d->nd", seq_idx, theta)
-        idx_theta2 = torch.cat([idx_theta, idx_theta], dim=1)
-
-        self.register_buffer('cos_cached', idx_theta2.cos()[None, None, :, :], persistent=False)
-        self.register_buffer('sin_cached', idx_theta2.sin()[None, None, :, :], persistent=False)
-
-    def _neg_half(self, x: torch.Tensor):
-        # Rearranges x so the second half of the values comes first, negated:
-        # [-x[d/2:], x[:d/2]]
-        d_2 = self.d // 2
-        return torch.cat([-x[:, :, :, d_2:], x[:, :, :, :d_2]], dim=-1)
-
-    def forward(self, x: torch.Tensor):
-        """
-        * `x` is the Tensor at the head of a key or a query with shape `[batch_size, n_heads, seq_len, d]`
-        """
-        seq_len = x.shape[2]
-        assert seq_len <= self.max_seq_len, f"Phonetic representation too long, exceeds RoPE cache size {self.max_seq_len}"
-
-        # Split the embedding values: RoPE is applied only to the first d values, the rest are passed through unchanged.
-        x_rope, x_pass = x[..., : self.d], x[..., self.d :]
-
-        neg_half_x = self._neg_half(x_rope)
-
-        x_rope = (x_rope * self.cos_cached[:, :, :seq_len]) + (neg_half_x * self.sin_cached[:, :, :seq_len])
-
-        return torch.cat((x_rope, x_pass), dim=-1)
-
-
-class MultiHeadAttention(nn.Module):
-    def __init__(
-            self,
-            channels,
-            out_channels,
-            n_heads,
-            p_dropout=0.0,
-    ):
-        super().__init__()
-        assert channels % n_heads == 0
-
-        self.channels = channels
-        self.out_channels = out_channels
-        self.n_heads = n_heads
-        self.p_dropout = p_dropout
-
-        self.k_channels = channels // n_heads
-        # Fused query/key/value projection: one 1x1 conv produces all three, halving GEMM launches.
-        self.conv_qkv = torch.nn.Conv1d(channels, channels * 3, 1)
-
-        # from https://nn.labml.ai/transformers/rope/index.html
-        self.rope = RotaryPositionalEmbeddings(self.k_channels * 0.5)
-
-        self.conv_o = torch.nn.Conv1d(channels, out_channels, 1)
-
-        # Init each q/k/v slice independently so xavier fan-in matches a per-projection conv.
-        for slice_start in range(0, channels * 3, channels):
-            torch.nn.init.xavier_uniform_(self.conv_qkv.weight[slice_start:slice_start + channels])
-
-    def forward(self, x, attn_mask=None):
-        q, k, v = self.conv_qkv(x).chunk(3, dim=1)
-
-        x = self.attention(q, k, v, mask=attn_mask)
-
-        x = self.conv_o(x)
-        return x
-
-    def attention(self, query, key, value, mask=None):
-        query = rearrange(query, "b (h c) t-> b h t c", h=self.n_heads)
-        key = rearrange(key, "b (h c) t-> b h t c", h=self.n_heads)
-        value = rearrange(value, "b (h c) t-> b h t c", h=self.n_heads)
-
-        query = self.rope(query)
-        key = self.rope(key)
-
-        attn_mask = mask.bool() if mask is not None else None
-        output = torch.nn.functional.scaled_dot_product_attention(
-            query, key, value,
-            attn_mask=attn_mask,
-            dropout_p=self.p_dropout if self.training else 0.0,
-        )
-        output = rearrange(output, "b h t c -> b (h c) t")
-        return output
 
 
 class FFN(nn.Module):
@@ -367,9 +284,8 @@ class TextEncoder(nn.Module):
             encoder_params.p_dropout,
             self.spk_emb_dim,
         )
-        # This is the largest component I can compile for training. Even so, it has a big impact.
         self.encoder = torch.compile(self.encoder)
-
+        
         self.proj_m = torch.nn.Sequential(
             torch.nn.Conv1d(self.n_channels, self.n_channels, 1),
             torch.nn.SiLU(),
@@ -378,13 +294,15 @@ class TextEncoder(nn.Module):
         torch.nn.init.xavier_uniform_(self.proj_m[2].weight)
 
         self.proj_w = DurationPredictor(
-            self.n_channels,
+            encoder_params.n_channels,
             duration_predictor_params.filter_channels_dp,
             duration_predictor_params.kernel_size,
             duration_predictor_params.p_dropout,
             n_layers=duration_predictor_params.n_layers,
+            n_heads=duration_predictor_params.n_heads,
             spk_emb_dim=self.spk_emb_dim,
         )
+        self.proj_w = torch.compile(self.proj_w)
 
     def forward(self, x, x_lengths, speaker_embedding_enc, speaker_embedding_dur):
         """Run forward pass to the transformer based encoder and duration predictor
@@ -411,9 +329,10 @@ class TextEncoder(nn.Module):
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.shape[2]), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
+
         x = self.encoder(x, x_mask, speaker_embedding_enc)
         mu = self.proj_m(x) * x_mask
-
+        
         logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
 
         return mu, logw, x_mask

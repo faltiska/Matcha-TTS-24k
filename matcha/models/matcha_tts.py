@@ -110,11 +110,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # valid tokens, preventing attention to padding.
         mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
         
-        # I am adding a 2 to make the log-space values greater than 1, because MSE is more forgiving with sub-unitary
-        # losses, and more punishing with supra-unitary losses.
-        # E.g. 0.6 ** 2 < 0.6, but 1.6 ** 2 > 1.6  
-        # This helps Duration Predictor A LOT. We have to compensate for the +2 before synthesis, see inference.py.  
-        logw_ = torch.log(2 + mas_durations.unsqueeze(1)) * x_mask
+        # At small x values, the log curve steeps down dramatically. 
+        # If MAS made an error finding 2 frames instead of 1, the log function jumps by a lot. 
+        # If duration from mas is 7 instead of 8, the log jumps much less.  
+        # Considering the phonemization scheme and the fact that we use 5.3ms frames, many durations found by MAS are 
+        # small numbers, and the log function reacts too much to them. By adding an offset, we move into the more linear
+        # part of the log curve. Inference subtracts the same value, so the real durations are unchanged.
+        # This helps the Duration Predictor learn, by a lot. 
+        logw_ = torch.log(4 + mas_durations.unsqueeze(1)) * x_mask
 
         # Original code was: 
         #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
