@@ -50,22 +50,6 @@ for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"
 # Happens in other languages too, https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/es_list, 
 # https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/fr_list, so on. 
 
-
-# Number of space symbols injected at each end of every utterance, after eSpeak has run, so the model
-# always sees a stable silence anchor before and after the spoken content.
-# The wavs have been normalized to 200ms leading and 800ms trailing silence (see normalize_silence.py),
-# so each injected space ends up owning ~50ms of mel frames after MAS. That ~50ms also matches the
-# typical word-boundary pause the space symbol already represents in mid-sentence usage, keeping its
-# duration distribution consistent.
-# I hope this will help the model with short utterances like "I" or "Me.", which were not sounding great.
-LEADING_SILENCE_SPACES = 4
-TRAILING_SILENCE_SPACES = 16
-
-# Up to v19, I was adding a single leading space, no trailing: 
-# LEADING_SILENCE_SPACES = 1
-# TRAILING_SILENCE_SPACES = 0
-
-
 def cleanup_text(text):
     text = re.sub('[\"„“”«»¡¿]', '', text)
     text = re.sub(r'\s*[,<>()[\]{}—–…]\s*', ', ', text)
@@ -107,10 +91,14 @@ def multilingual_phonemizer(text, language):
 
     text = cleanup_text(text)
 
-    # Inject silence padding around the eSpeak output. Done after phonemize() because eSpeak
-    # collapses leading and trailing whitespace, so we cannot pre-pad the input text.
-    # See LEADING_SILENCE_SPACES / TRAILING_SILENCE_SPACES at the top of this file for the rationale.
-    phonemes = " " * LEADING_SILENCE_SPACES + phonemizer.phonemize([text])[0].rstrip() + " " * TRAILING_SILENCE_SPACES
+    # I tried to add some padding symbols to match the silence in the audio files, but it broke duration predciton. 
+    # I had 200 ms leading silence and 800ms trailing, to which I matched 4 leading spaces and 16 trailing spaces.
+    # It broke duration prediction, I could not fix it no matter what. Then I tried with a different symbol instead  
+    # of space, but did not help. Then I tried with 2 leading symbols, 8 trailing, but it did not help either. 
+    # I finally went back this version, that has a single leading space. This fixed duration prediction.
+    # I also changed the audio silence a bit, 100ms leading, 400ms trailing, but I am confident the leading / trailing
+    # symbols is what fixed it, not the amount of silence, because that is what I had in v19, when worked fine. 
+    phonemes = " " + phonemizer.phonemize([text])[0].rstrip()
 
     # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
     # the sound of the new one and at the end, where the phoneme morphs into the next one.   
