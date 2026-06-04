@@ -152,8 +152,7 @@ Compared to the original MatchaTTS, I did the following:
   but f_max was set to 8KHz for all of them.  
 - Increased the decoder model capacity
   I hope it will make room for the extra frequencies that came with using Vocos 24K.
-- Increased the spk_emb_dim in the encoder model
-  I hope it will capture the differences between speakers better
+- Increased the spk_emb_dim; I hope it will capture the differences between speakers better
 - Switched to an AdamW optimizer
 - Implemented a mel precomputation script
   Originally, the mels were computed during training, on the fly.
@@ -163,9 +162,18 @@ Compared to the original MatchaTTS, I did the following:
 - Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
 - Found a series of other performance improvements
 - Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
-- Made changes to get the model to compile ofr training, but since using the dynamic data loader, it does not help
+- Made changes to get the model to compile for training, it speeds up training by 20%  
 - Made changes to get the model to compile for inference, it improves synthesis time 3x
-- Added two smarter Duration Predictor models
+- Made the Duration Predictor model smarter; changed the input to the Predictor to be just 
+the phoneme embeddings (not the Encoder output)
+- Introduced a revolutionary method of phonemization, which helped the Encoder represent coarticulation 
+sounds much, much better than the blunt "separators everywhere" scheme. 
+- Introduced a revolutionary method of running the Encoder and MAS in high resolution
+while the Decoder and the vocoder still run at the normal resolution; this improved MAS a LOT.
+- Changed the loss computation function for prior and duration to Huber which reduced the 
+train-to-validate gap; added an offset to the durations before duration loss computation to
+shift the value into the more linear part of the log graph, which improved Duration Predictor's 
+ability to learn by a LOT.
 
 # PyTorch stuff
 
@@ -173,10 +181,7 @@ When compiling models, pytorch stores some information to be reused at later run
 You could delete the folders to clear the cache:
 ```
 rm -rf ~/.triton/cache/
-rm -rf ~/.cache/torch/
 rm -rf /tmp/torchinductor_$USER/
-rm -rf ~/.nv/ComputeCache/
-rm -rf ~/.cache/torch_extensions/ 
 ```
 
 # nVidia drivers

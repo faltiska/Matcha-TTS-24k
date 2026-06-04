@@ -13,20 +13,6 @@ Usage:
     python -m matcha.utils.mcd_validate --checkpoint your.ckpt
     python -m matcha.utils.mcd_validate --checkpoint your.ckpt
 
-                  v6/89     v6/144   v6/189   v6/299   V6/414   v6/519   v6/629   v6/684   v6/874   v6/949 
-speaker_000 MCD:  5.33 dB   5.16 dB  4.93 dB  4.82 dB  4.67 dB  4.75 dB  4.72 dB  4.55 dB  4.57 dB  4.49 dB
-speaker_001 MCD:  3.97 dB   3.75 dB  3.51 dB  3.41 dB  3.29 dB  3.29 dB  3.22 dB  3.19 dB  3.17 dB  3.16 dB
-speaker_002 MCD:  4.06 dB   3.91 dB  3.72 dB  3.63 dB  3.58 dB  3.56 dB  3.50 dB  3.44 dB  3.43 dB  3.40 dB
-speaker_003 MCD:  3.32 dB   3.16 dB  2.94 dB  2.83 dB  2.78 dB  2.73 dB  2.68 dB  2.60 dB  2.60 dB  2.58 dB
-speaker_004 MCD:  5.51 dB   5.32 dB  5.19 dB  4.92 dB  4.92 dB  4.79 dB  4.77 dB  4.68 dB  4.64 dB  4.64 dB
-speaker_005 MCD:  4.15 dB   4.03 dB  3.96 dB  3.80 dB  3.79 dB  3.77 dB  3.73 dB  3.66 dB  3.66 dB  3.64 dB
-speaker_006 MCD:  4.20 dB   3.99 dB  3.92 dB  3.83 dB  3.75 dB  3.69 dB  3.66 dB  3.65 dB  3.64 dB  3.63 dB
-speaker_007 MCD:  5.51 dB   5.29 dB  5.08 dB  4.92 dB  4.90 dB  4.83 dB  4.81 dB  4.68 dB  4.70 dB  4.69 dB
-speaker_008 MCD:  5.38 dB   5.23 dB  5.05 dB  4.89 dB  4.88 dB  4.79 dB  4.77 dB  4.69 dB  4.70 dB  4.67 dB
-speaker_009 MCD:  4.82 dB   4.62 dB  4.51 dB  4.42 dB  4.39 dB  4.36 dB  4.28 dB  4.24 dB  4.24 dB  4.22 dB
------------------------------------------------------------------------------------------------------------
-Average MCD:      4.63 dB   4.45 dB  4.28 dB  4.15 dB  4.09 dB  4.06 dB  4.02 dB  3.94 dB  3.94 dB  3.91 dB
-
                   v17/044  v17/064  v17/094  v17/164  v17/224  v17/264  v17/369  v17/424  v17/494  v17/579  v17/599  v17/603
 speaker_000 MCD:  5.87 dB  5.44 dB  5.17 dB  4.89 dB  4.85 dB  4.71 dB  4.60 dB  4.57 dB  4.60 dB  4.56 dB  4.60 dB  4.44 dB
 speaker_001 MCD:  4.62 dB  4.10 dB  3.81 dB  3.52 dB  3.44 dB  3.29 dB  3.24 dB  3.15 dB  3.10 dB  3.17 dB  3.15 dB  3.05 dB
@@ -99,34 +85,35 @@ speaker_014 MCD:     5.37 dB  5.37 dB  5.30 dB  5.28 dB  5.26 dB     5.34 dB  5.
 -------------------------------------------------------------------------------------------------------------------------------------------------  -------
 Average MCD:         4.06 dB  4.06 dB  3.99 dB  3.97 dB  3.94 dB     4.03 dB  3.99 dB  3.97 dB  3.94 dB     3.99 dB  3.97 dB  3.94 dB     3.97 dB  3.94 dB
 
-
-speaker_000                              MCD:  4.31 dB   duration ratio: 1.05
-speaker_001                              MCD:  2.82 dB   duration ratio: 1.03
-speaker_002                              MCD:  3.12 dB   duration ratio: 1.03
-speaker_003                              MCD:  2.34 dB   duration ratio: 1.01
-speaker_004                              MCD:  4.14 dB   duration ratio: 1.05
-speaker_005                              MCD:  3.46 dB   duration ratio: 1.05
-speaker_006                              MCD:  3.56 dB   duration ratio: 1.02
-speaker_007                              MCD:  4.47 dB   duration ratio: 1.04
-speaker_008                              MCD:  4.41 dB   duration ratio: 1.02
-speaker_009                              MCD:  3.99 dB   duration ratio: 1.01
-speaker_010                              MCD:  3.81 dB   duration ratio: 1.03
-speaker_011                              MCD:  4.87 dB   duration ratio: 1.05
-speaker_012                              MCD:  3.62 dB   duration ratio: 1.02
-speaker_013                              MCD:  5.35 dB   duration ratio: 1.03
-speaker_014                              MCD:  5.28 dB   duration ratio: 1.03
-----------------------------------------------------------------------
-Average                                  MCD:  3.97 dB
-
 The results were a surprise, but in hindsight they make sense.
 What happens is the trajectory found by the Decoder is always so straight, it makes not sense to use a larger order ODE solver.
 And, probably because the Decoder starts from prior + noise, not pure noise, the number of steps required is very small. 
 Since all ODE solvers show the same results with 6, 5 and 4 steps, I should choose euler, as it is the fastest.
  
 I also did subjective tests, and I think hear a slight metallic resonance with euler, which I do not hear with midpoint.  
-I think the mcd tool may have its limitations. Or I am imagining it.
+I think the mcd tool may have its limitations. To be safe, I decided to use midpoint with 4 steps. 
 
-To be safe, I decided to use midpoint with 4 steps. 
+V20       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
+speaker_000 MCD   5.20 dB  
+speaker_001 MCD   3.84 dB  
+speaker_002 MCD   3.99 dB  
+speaker_003 MCD   3.19 dB  
+speaker_004 MCD   5.53 dB  
+speaker_005 MCD   4.16 dB  
+speaker_006 MCD   4.11 dB  
+speaker_007 MCD   5.37 dB  
+speaker_008 MCD   5.24 dB  
+speaker_009 MCD   4.81 dB  
+speaker_010 MCD   4.45 dB  
+speaker_011 MCD   5.17 dB  
+speaker_012 MCD   4.29 dB  
+speaker_013 MCD   6.00 dB  
+speaker_014 MCD   5.80 dB  
+----------------- ----------------------------------------------------------------------------------------------------------
+Average MCD:      4.74 dB     
+
+All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
+The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
 
 """
 

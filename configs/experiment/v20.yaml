@@ -25,7 +25,7 @@ model:
   prior_loss: true
   # A larger value increases the gap between train and validation loss, so I think it affects generalization.
   prior_loss_threshold: 0.08
-  duration_loss_threshold: 0.22
+  duration_loss_threshold: 0.19
   
   encoder:
     encoder_params:
