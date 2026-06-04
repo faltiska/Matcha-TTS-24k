@@ -341,7 +341,7 @@ class Decoder(nn.Module):
     def initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv1d):
-                nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+                nn.init.xavier_uniform_(m.weight)
 
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
@@ -351,7 +351,7 @@ class Decoder(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+                nn.init.xavier_uniform_(m.weight)
 
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
