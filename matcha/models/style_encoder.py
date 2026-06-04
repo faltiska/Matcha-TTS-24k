@@ -51,7 +51,7 @@ class StyleEncoder(nn.Module):
     """Predicts speaker embedding from mel spectrogram.
 
     Takes mel (B, n_feats, T_mel) and produces a single vector (B, spk_emb_dim).
-    Architecture: stack of Conv1d+ReLU layers, masked mean+std pool, linear projection.
+    Architecture: stack of Conv1d+SiLU layers, masked mean+std pool, linear projection.
     """
 
     def __init__(self, n_feats, hidden_channels, n_layers, spk_emb_dim):
@@ -75,7 +75,7 @@ class StyleEncoder(nn.Module):
         """
         x = mel
         for conv in self.convs:
-            x = torch.relu(conv(x * mel_mask))
+            x = F.silu(conv(x * mel_mask))
         pooled = masked_stats_pool(x, mel_mask)
         return self.proj_enc(pooled), self.proj_dur(pooled)
 
@@ -117,8 +117,10 @@ class StyleEncoderLightningModule(LightningModule):
         for param in matcha.parameters():
             param.requires_grad = False
         self.matcha = matcha
-        self.matcha.encoder = torch.compile(self.matcha.encoder)
-        self.style_encoder = torch.compile(self.style_encoder)
+        print("[🍵] Compiling the model...")
+        self.matcha.encoder = torch.compile(self.matcha.encoder, dynamic=True)
+        self.matcha.decoder.estimator = torch.compile(self.matcha.decoder.estimator, dynamic=True)
+        self.style_encoder = torch.compile(self.style_encoder, dynamic=True)
         self.register_buffer("_quantile_probs", torch.tensor([0.25, 0.5, 0.75, 0.9]), persistent=False)
 
     def configure_optimizers(self):
