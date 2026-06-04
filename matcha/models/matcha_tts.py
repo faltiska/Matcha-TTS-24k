@@ -12,6 +12,7 @@ from super_monotonic_align import maximum_path as maximum_path_gpu
 log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
+LOG_DURATION_OFFSET = 4
 
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
@@ -58,6 +59,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             decoder_params=decoder,
         )
 
+        self.encoder = torch.compile(self.encoder, dynamic=True)
+        self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
+
         self.update_data_statistics(data_statistics)
         self.batch_idx = 0
 
@@ -94,30 +98,30 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
 
-        with torch.autocast(device_type="cuda", enabled=False):
-            # I want these 2 in fp32 because they are involved in matmul operations down below
-            # I think bf16 doesn't have enough precision to distinguish between two competing alignment paths whose 
-            # scores are very close, and MAS suddenly finds a different path at some point, after some 100 epochs.
-            # Prior loss shoots up by 1% which may be fine, but duration loss shoots up by 60%. 
-            # I always saw prior loss shooting up at som point, but the duration loos effect is new, probably related 
-            # to introducing the super-resolution mechanism. 
-            mu_x = mu_x.float()
-            y_fine = y_fine.float() 
-            attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
+        # with torch.autocast(device_type="cuda", enabled=False):
+        #     # I want these 2 in fp32 because they are involved in matmul operations down below
+        #     # I think bf16 doesn't have enough precision to distinguish between two competing alignment paths whose 
+        #     # scores are very close, and MAS suddenly finds a different path at some point, after some 100 epochs.
+        #     # Prior loss shoots up by 1% which may be fine, but duration loss shoots up by 60%. 
+        #     # I always saw prior loss shooting up at som point, but the duration loos effect is new, probably related 
+        #     # to introducing the super-resolution mechanism. 
+        #     mu_x = mu_x.float()
+        #     y_fine = y_fine.float() 
+        attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
 
         # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
         # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
         # valid tokens, preventing attention to padding.
         mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
         
-        # At small x values, the log curve steeps down dramatically. 
+        # At small x values, the log curve is very steep. 
         # If MAS made an error finding 2 frames instead of 1, the log function jumps by a lot. 
         # If duration from mas is 7 instead of 8, the log jumps much less.  
         # Considering the phonemization scheme and the fact that we use 5.3ms frames, many durations found by MAS are 
         # small numbers, and the log function reacts too much to them. By adding an offset, we move into the more linear
         # part of the log curve. Inference subtracts the same value, so the real durations are unchanged.
         # This helps the Duration Predictor learn, by a lot. 
-        logw_ = torch.log(4 + mas_durations.unsqueeze(1)) * x_mask
+        logw_ = torch.log(LOG_DURATION_OFFSET + mas_durations.unsqueeze(1)) * x_mask
 
         # Original code was: 
         #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
@@ -129,10 +133,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
         # I could use huber like in prior_loss:
-        # delta = self.hparams.duration_loss_threshold
-        # dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
+        delta = self.hparams.duration_loss_threshold
+        dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
         # but original code was pure MSE: 
-        dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
+        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
 
         if self.batch_idx == 0:
             with torch.no_grad():

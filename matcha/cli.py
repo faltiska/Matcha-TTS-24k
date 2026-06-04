@@ -9,6 +9,7 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 
 import soundfile as sf
 import torch
+torch._inductor.config.fx_graph_cache = True
 
 from matcha.inference import (load_matcha, load_vocoder, pipeline, convert_to_mp3, SAMPLE_RATE, HIGH_RES_HOP_LENGTH, 
                               DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, VOICES)

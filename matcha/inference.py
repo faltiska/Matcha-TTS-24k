@@ -3,6 +3,7 @@ import re
 import time
 import torch
 import torch.nn as nn
+from matcha.models.matcha_tts import LOG_DURATION_OFFSET
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, downsample, fix_len_compatibility, generate_path, sequence_mask
@@ -29,7 +30,6 @@ VOICES = [
     {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction":  1.03},
     {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction":  1.07},
     {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction":  1.07},
-    {"id": "15", "lang": "ro",    "gender": "male",   "name": "Bogdan",   "scale_correction":  1.07},
 ]
 
 SAMPLE_RATE = 24000
@@ -48,9 +48,14 @@ class MatchaTTSInfer(nn.Module):
         self.speaker_embeddings_enc = nn.Embedding(n_spks, spk_emb_dim)
         self.speaker_embeddings_dur = nn.Embedding(n_spks, spk_emb_dim)
         n_vocab = N_VOCAB
-        self.encoder = TextEncoder(encoder.encoder_params,
-                                   encoder.duration_predictor_params, n_vocab, spk_emb_dim)
+        self.encoder = TextEncoder(encoder.encoder_params, encoder.duration_predictor_params, n_vocab, spk_emb_dim)
         self.decoder = CFM(in_channels=2 * n_feats, out_channel=n_feats, cfm_params=cfm, decoder_params=decoder)
+
+        print("[🍵] Compiling the model...")
+        # Don't use mode "reduce-overhead", it triggers recompilation during inference, depending on input length 
+        self.encoder = torch.compile(self.encoder, dynamic=True)
+        self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
+
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
         self.register_buffer("mel_std", torch.tensor(stats.get("mel_std", 1.0)))
@@ -125,7 +130,7 @@ class MatchaTTSInfer(nn.Module):
         mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
 
         # I am doing this to compensate for the value added during training, see the forward method in matcha_tts.py.
-        phoneme_durations = (torch.exp(logw) - 3) * x_mask
+        phoneme_durations = (torch.exp(logw) - LOG_DURATION_OFFSET) * x_mask
         phoneme_durations = phoneme_durations.squeeze(1)
         raw_phoneme_durations = phoneme_durations.clone()
 
@@ -192,7 +197,7 @@ def load_matcha(model_name, checkpoint_path):
     hparams.pop("scheduler", None)
     sd = ckpt["state_dict"]
     model = MatchaTTSInfer(**hparams).to(DEVICE)
-    model.load_state_dict(sd, strict=False)
+    model.load_state_dict(sd, strict=True)
     model.eval()
     print(f"[+] {model_name} loaded!")
     return model

@@ -215,9 +215,6 @@ class BasicTransformerBlock(nn.Module):
         self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
         self.ff = FeedForward(dim, dropout=dropout, final_dropout=final_dropout)
 
-        # This is the largest decoder component I can compile for training. Even so, it has a big impact.
-        self.ff = torch.compile(self.ff)
-
         # let chunk size default to None
         self._chunk_size = None
         self._chunk_dim = 0

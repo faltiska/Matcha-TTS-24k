@@ -42,9 +42,7 @@ async def lifespan(app: FastAPI):
     model = load_matcha("custom_model", CHECKPOINT_PATH)
     model.decoder.solver = DEFAULT_ODE_SOLVER
     vocoder = load_vocoder("vocos")
-    print("[🍵] Compiling the model...")
-    # Don't use mode "reduce-overhead", it triggers recompilation leading to long inference times 
-    model.decoder.estimator = torch.compile(model.decoder.estimator, mode="default", dynamic=True)
+
     warmup_text = "This is a short text for triggering the model compilation."
     for i in range(3):
         t = time.perf_counter()
@@ -52,6 +50,7 @@ async def lifespan(app: FastAPI):
         elapsed = time.perf_counter() - t
         audio_duration = waveform.shape[-1] / SAMPLE_RATE
         print(f"[🍵] Total time: {elapsed:.2f}s | RTF: {elapsed / audio_duration:.4f}")
+
     torch.cuda.synchronize()
     print("[🍵] Model loaded.")
     yield
