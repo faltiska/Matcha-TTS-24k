@@ -99,25 +99,6 @@ speaker_014 MCD:     5.37 dB  5.37 dB  5.30 dB  5.28 dB  5.26 dB     5.34 dB  5.
 -------------------------------------------------------------------------------------------------------------------------------------------------  -------
 Average MCD:         4.06 dB  4.06 dB  3.99 dB  3.97 dB  3.94 dB     4.03 dB  3.99 dB  3.97 dB  3.94 dB     3.99 dB  3.97 dB  3.94 dB     3.97 dB  3.94 dB
 
-
-speaker_000                              MCD:  4.31 dB   duration ratio: 1.05
-speaker_001                              MCD:  2.82 dB   duration ratio: 1.03
-speaker_002                              MCD:  3.12 dB   duration ratio: 1.03
-speaker_003                              MCD:  2.34 dB   duration ratio: 1.01
-speaker_004                              MCD:  4.14 dB   duration ratio: 1.05
-speaker_005                              MCD:  3.46 dB   duration ratio: 1.05
-speaker_006                              MCD:  3.56 dB   duration ratio: 1.02
-speaker_007                              MCD:  4.47 dB   duration ratio: 1.04
-speaker_008                              MCD:  4.41 dB   duration ratio: 1.02
-speaker_009                              MCD:  3.99 dB   duration ratio: 1.01
-speaker_010                              MCD:  3.81 dB   duration ratio: 1.03
-speaker_011                              MCD:  4.87 dB   duration ratio: 1.05
-speaker_012                              MCD:  3.62 dB   duration ratio: 1.02
-speaker_013                              MCD:  5.35 dB   duration ratio: 1.03
-speaker_014                              MCD:  5.28 dB   duration ratio: 1.03
-----------------------------------------------------------------------
-Average                                  MCD:  3.97 dB
-
 The results were a surprise, but in hindsight they make sense.
 What happens is the trajectory found by the Decoder is always so straight, it makes not sense to use a larger order ODE solver.
 And, probably because the Decoder starts from prior + noise, not pure noise, the number of steps required is very small. 
@@ -127,6 +108,28 @@ I also did subjective tests, and I think hear a slight metallic resonance with e
 I think the mcd tool may have its limitations. Or I am imagining it.
 
 To be safe, I decided to use midpoint with 4 steps. 
+
+V20       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
+speaker_000 MCD   5.20 dB  
+speaker_001 MCD   3.84 dB  
+speaker_002 MCD   3.99 dB  
+speaker_003 MCD   3.19 dB  
+speaker_004 MCD   5.53 dB  
+speaker_005 MCD   4.16 dB  
+speaker_006 MCD   4.11 dB  
+speaker_007 MCD   5.37 dB  
+speaker_008 MCD   5.24 dB  
+speaker_009 MCD   4.81 dB  
+speaker_010 MCD   4.45 dB  
+speaker_011 MCD   5.17 dB  
+speaker_012 MCD   4.29 dB  
+speaker_013 MCD   6.00 dB  
+speaker_014 MCD   5.80 dB  
+----------------- ----------------------------------------------------------------------------------------------------------
+Average MCD:      4.74 dB     
+
+All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
+The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
 
 """
 
