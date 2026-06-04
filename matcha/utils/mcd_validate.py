@@ -115,6 +115,28 @@ Average MCD:      4.74 dB
 All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
 The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
 
+V20       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
+speaker_000 MCD   5.20 dB  
+speaker_001 MCD   3.84 dB  
+speaker_002 MCD   3.99 dB  
+speaker_003 MCD   3.19 dB  
+speaker_004 MCD   5.53 dB  
+speaker_005 MCD   4.16 dB  
+speaker_006 MCD   4.11 dB  
+speaker_007 MCD   5.37 dB  
+speaker_008 MCD   5.24 dB  
+speaker_009 MCD   4.81 dB  
+speaker_010 MCD   4.45 dB  
+speaker_011 MCD   5.17 dB  
+speaker_012 MCD   4.29 dB  
+speaker_013 MCD   6.00 dB  
+speaker_014 MCD   5.80 dB  
+----------------- ----------------------------------------------------------------------------------------------------------
+Average MCD:      4.74 dB     
+
+All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
+The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
+
 """
 
 import warnings
