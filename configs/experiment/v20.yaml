@@ -1,7 +1,13 @@
 # @package _global_
 #
-# Leading silence normalization and extra padding with spaces both leading and trailing. 
-# More data for speakers 13 and 14, added speaker 15.
+# More data for speakers 13 and 14.
+# Added FiLM / AdaLN for speaker embeddings in Encoder.
+# Added an Attention and an FFN layer for the Duration Predictor.
+# Duration Predictor input is now the raw embeddings detached, instead of the Encoder output.
+# All 3 changes are in text_encoder.py.
+# Incremented the offset in Duration loss calculation from 2 to 4 (see matcha_tts.py). 
+# Duration loss uses Huber instead of MSE, added duration_loss_threshold config.
+# I've also changed activations from ReLU to SiLU, everywhere.
 
 run_name: v20
 
@@ -10,29 +16,24 @@ defaults:
 
 data:
   num_workers: 8
-  max_frames_per_batch: 40000
+  max_frames_per_batch: 30000
 
 ckpt_path: null
 
 model:
-  spk_emb_dim: 96
+  spk_emb_dim: 128
   prior_loss: true
-  # I decided to select the p90 upper value for threshold.
   # A larger value increases the gap between train and validation loss, so I think it affects generalization.
-  # Schedule:
-  # Epoch 0:
-  #  prior_loss_threshold: 0.15
-  #  duration_loss_threshold: 0.5
-  prior_loss_threshold: 0.15
-  duration_loss_threshold: 0.5
+  prior_loss_threshold: 0.08
+  duration_loss_threshold: 0.22
   
   encoder:
     encoder_params:
       # Speaker embedding is no longer concatenated; it conditions the encoder via per-layer FiLM,
-      # so the backbone runs at n_channels (192), not n_channels + spk_emb_dim.
-      # 192 / 6 = 32, divisible by 8
-      n_channels: 192
-      # 192 * 6 = 1152
+      # so the backbone runs at n_channels, not n_channels + spk_emb_dim.
+      # Head dim: n_channels / n_heads = 64, divisible by 8
+      n_channels: 384
+      # 384 * 3 = 1152
       filter_channels: 1152
       n_heads: 6
       n_layers: 4
@@ -45,9 +46,11 @@ model:
       prenet_kernel_size: 3
     
     duration_predictor_params:
-      filter_channels_dp: 96
-      kernel_size: 5
+      # head dim is filter_channels_dp / n_heads = 64, divisible by 8
+      filter_channels_dp: 384
+      n_heads: 6
       n_layers: 4
+      kernel_size: 3
       p_dropout: 0.05
   
   decoder:
