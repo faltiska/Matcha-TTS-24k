@@ -270,6 +270,28 @@ docker container prune
 docker image prune -a
 ```
 
+## Instance Backup
+
+The fastest way to start a new EC2 instance if the primary fails, is to take AMI snapshot from the running instance. 
+You can use it to start a new one later:
+```
+aws ec2 create-image --region eu-west-1 --instance-id i-0042769afe2833111 --name "Primary-Instance-Backup-$(date +%Y%m%d)" --no-reboot --description "Backup AMI created on $(date)"
+```
+Monitor progress: https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#Images:visibility=owned-by-me
+
+The new instance will not have:
+    Security Groups - These are external to the instance
+    IAM Roles - Must be reattached during launch
+    Network settings (VPC, subnet, IP addresses)
+so you must use a Launch Template, created from the primary instance.
+
+When launching, you can override the AMI, with the one you created above:
+1. Go to your instance details page: https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1#LaunchTemplates:
+2. Actions → Images and templates → "Launch more like this"
+3. Change the AMI to your custom AMI
+4. Launch
+
+
 ## Monitoring and Management
 
 ```bash
