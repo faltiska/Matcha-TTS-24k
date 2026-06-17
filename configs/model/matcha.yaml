@@ -15,5 +15,5 @@ spk_emb_dim: 96
 n_feats: ${data.n_feats}
 data_statistics: ${data.data_statistics}
 prior_loss: true
-prior_loss_threshold: 0.03
-duration_loss_threshold: 1.0
+prior_loss_threshold: 0.08
+duration_loss_threshold: 0.15

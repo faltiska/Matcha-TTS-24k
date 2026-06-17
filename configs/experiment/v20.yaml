@@ -6,8 +6,14 @@
 # Duration Predictor input is now the raw embeddings detached, instead of the Encoder output.
 # All 3 changes are in text_encoder.py.
 # Incremented the offset in Duration loss calculation from 2 to 4 (see matcha_tts.py). 
-# Duration loss uses Huber instead of MSE, added duration_loss_threshold config.
+# Duration loss uses Huber instead of MSE, added duration_loss_threshold in config.
 # I've also changed activations from ReLU to SiLU, everywhere.
+# I've started using Huber instead of MSE for Duration Loss.
+# Made changes to compile the Decoder too.
+# I have added conditioning on the timestep for the Decoder, using FiLM / AdaLN.
+# The new TimestepConditionedTransformerBlock increased the model size significantly but without 
+# slowing down training by much. Model is now 93M params, but since the Decoder is compiled now, the VRAM memory used 
+# is still low, at around 12.5GB with the rather large max_frames_per_batch I am using.
 
 run_name: v20
 
@@ -17,15 +23,20 @@ defaults:
 data:
   num_workers: 8
   max_frames_per_batch: 30000
-
+  
 ckpt_path: null
 
 model:
   spk_emb_dim: 128
   prior_loss: true
-  # A larger value increases the gap between train and validation loss, so I think it affects generalization.
+
+  # About choosing the right Delta for Huber. 
+  # I found by trail and error that the upper thresholds I see in the 75 quantile are the right values.
+  # Do not choose those from the 99, 95 or even 90 percentile.
+  # Larger values increase the gap between train and validation loss.
+  # Also, with a large delta for the duration predictor loss, the model makes rare but egregious mistakes.
   prior_loss_threshold: 0.08
-  duration_loss_threshold: 0.19
+  duration_loss_threshold: 0.15
   
   encoder:
     encoder_params:
@@ -54,10 +65,11 @@ model:
       p_dropout: 0.05
   
   decoder:
-    # other figures that could work
+    # Other figures that could work
     # 384 = 6 * 64
     # 360 = 5 * 72
     # 336 = 6 * 56
+    # The rule for divisibility by num_heads applies to the second figure only
     channels: [384, 384]
     attention_head_dim: 64
     num_heads: 6
@@ -67,15 +79,12 @@ model:
     use_mu_prior: true
 
   optimizer:
-    # Schedule:
-    # Epoch 0:
-    #  lr: 1e-4
-    #  weight_decay: 1e-3
-    # Epoch 239:
-    #  lr: 8e-5
-    #  weight_decay: 8e-4
+    # Schedule (480 steps / epoch):
+    #   0: 1e-4 / 3e-4
+    #   250: 8e-5 / 2e-4
+    #   450: 4e-5 / 1e-4
     lr: 1e-4
-    weight_decay: 1e-3
+    weight_decay: 3e-4
     
 callbacks:
   model_checkpoint:

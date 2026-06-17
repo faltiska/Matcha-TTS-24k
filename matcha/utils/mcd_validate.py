@@ -89,50 +89,28 @@ The results were a surprise, but in hindsight they make sense.
 What happens is the trajectory found by the Decoder is always so straight, it makes not sense to use a larger order ODE solver.
 And, probably because the Decoder starts from prior + noise, not pure noise, the number of steps required is very small. 
 Since all ODE solvers show the same results with 6, 5 and 4 steps, I should choose euler, as it is the fastest.
- 
-I also did subjective tests, and I think hear a slight metallic resonance with euler, which I do not hear with midpoint.  
+But I also did subjective tests, and I think hear a slight metallic resonance with euler, which I do not hear with midpoint.  
 I think the mcd tool may have its limitations. To be safe, I decided to use midpoint with 4 steps. 
 
-V20       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
-speaker_000 MCD   5.20 dB  
-speaker_001 MCD   3.84 dB  
-speaker_002 MCD   3.99 dB  
-speaker_003 MCD   3.19 dB  
-speaker_004 MCD   5.53 dB  
-speaker_005 MCD   4.16 dB  
-speaker_006 MCD   4.11 dB  
-speaker_007 MCD   5.37 dB  
-speaker_008 MCD   5.24 dB  
-speaker_009 MCD   4.81 dB  
-speaker_010 MCD   4.45 dB  
-speaker_011 MCD   5.17 dB  
-speaker_012 MCD   4.29 dB  
-speaker_013 MCD   6.00 dB  
-speaker_014 MCD   5.80 dB  
------------------ ----------------------------------------------------------------------------------------------------------
-Average MCD:      4.74 dB     
+V20       epoch       044      064      094      124      234      354      479      584      834     1014     1274     1281
+speaker_000 MCD   5.23 dB  5.09 dB  4.85 dB  4.79 dB  4.53 dB  4.46 dB  4.38 dB  4.32 dB                                    
+speaker_001 MCD   3.74 dB  3.60 dB  3.35 dB  3.34 dB  3.15 dB  2.99 dB  2.97 dB  2.89 dB                                    
+speaker_002 MCD   3.99 dB  3.82 dB  3.58 dB  3.53 dB  3.41 dB  3.28 dB  3.17 dB  3.15 dB                                    
+speaker_003 MCD   3.23 dB  2.93 dB  2.78 dB  2.71 dB  2.58 dB  2.53 dB  2.44 dB  2.42 dB                                    
+speaker_004 MCD   5.53 dB  5.30 dB  5.00 dB  4.81 dB  4.51 dB  4.42 dB  4.20 dB  4.09 dB                                    
+speaker_005 MCD   4.20 dB  4.02 dB  3.76 dB  3.79 dB  3.68 dB  3.51 dB  3.56 dB  3.49 dB                                    
+speaker_006 MCD   4.07 dB  3.94 dB  3.79 dB  3.78 dB  3.70 dB  3.56 dB  3.55 dB  3.52 dB                                    
+speaker_007 MCD   5.29 dB  5.11 dB  4.87 dB  4.80 dB  4.65 dB  4.61 dB  4.50 dB  4.51 dB                                    
+speaker_008 MCD   5.14 dB  4.95 dB  4.72 dB  4.73 dB  4.57 dB  4.54 dB  4.49 dB  4.45 dB                                    
+speaker_009 MCD   4.87 dB  4.62 dB  4.43 dB  4.37 dB  4.22 dB  4.10 dB  4.12 dB  4.05 dB                                    
+speaker_010 MCD   4.34 dB  4.34 dB  4.12 dB  4.04 dB  3.96 dB  3.91 dB  3.86 dB  3.86 dB                                    
+speaker_011 MCD   5.23 dB  5.17 dB  4.97 dB  4.95 dB  4.92 dB  4.81 dB  4.82 dB  4.83 dB                                    
+speaker_012 MCD   4.31 dB  4.07 dB  3.96 dB  3.93 dB  3.78 dB  3.77 dB  3.63 dB  3.63 dB                                    
+speaker_013 MCD   5.97 dB  5.85 dB  5.59 dB  5.53 dB  5.34 dB  5.31 dB  5.24 dB  5.25 dB                                    
+speaker_014 MCD   5.63 dB  5.63 dB  5.38 dB  5.36 dB  5.31 dB  5.23 dB  5.20 dB  5.19 dB                                    
+----------------------------------------------------------------------------------------------------------------------------
+Average MCD:      4.72 dB  4.56 dB  4.34 dB  4.30 dB  4.15 dB  4.07 dB  4.01 dB  3.98 dB                                    
 
-All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
-The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
-
-V20       epoch       044      064      094      164      264      379      484      574      804     1014     1274     1281
-speaker_000 MCD   5.20 dB  
-speaker_001 MCD   3.84 dB  
-speaker_002 MCD   3.99 dB  
-speaker_003 MCD   3.19 dB  
-speaker_004 MCD   5.53 dB  
-speaker_005 MCD   4.16 dB  
-speaker_006 MCD   4.11 dB  
-speaker_007 MCD   5.37 dB  
-speaker_008 MCD   5.24 dB  
-speaker_009 MCD   4.81 dB  
-speaker_010 MCD   4.45 dB  
-speaker_011 MCD   5.17 dB  
-speaker_012 MCD   4.29 dB  
-speaker_013 MCD   6.00 dB  
-speaker_014 MCD   5.80 dB  
------------------ ----------------------------------------------------------------------------------------------------------
-Average MCD:      4.74 dB     
 
 All measurements until since V10 were taken with ODE solver midpoint, 4 steps.
 The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 

@@ -3,12 +3,12 @@
 ```bash
 uv venv .venv --python 3.13
 source .venv/bin/activate
-uv pip install torch torchcodec --index-url https://download.pytorch.org/whl/cu132 --upgrade
-uv pip install torchaudio --index-url https://download.pytorch.org/whl/test/cu132 --upgrade
 uv pip install -r requirements.txt --upgrade
 uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
 uv pip install -e .
 ```
+
+Note: torch, torchaudio and torchcodec are listed in `requirements.txt` and their CUDA index is configured in `pyproject.toml` via `[tool.uv.sources]`, so they are installed from the correct PyTorch CUDA index automatically.
 
 ## A note on running inference and training at the same time
 Sometimes I need to test a checkpoint while training still runs. 

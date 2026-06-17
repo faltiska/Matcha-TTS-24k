@@ -8,7 +8,7 @@ from conformer import ConformerBlock
 from diffusers.models.activations import get_activation
 from einops import pack, rearrange
 
-from matcha.models.components.transformer import BasicTransformerBlock
+from matcha.models.components.transformer import TimestepConditionedTransformerBlock
 
 
 class SinusoidalPosEmb(torch.nn.Module):
@@ -32,8 +32,6 @@ class Block1D(torch.nn.Module):
     def __init__(self, dim, dim_out, groups=8):
         super().__init__()
         self.block = torch.nn.Sequential(
-            # According to https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html
-            # I should add bias=False to optimize performance
             torch.nn.Conv1d(dim, dim_out, 3, padding=1), 
             torch.nn.GroupNorm(groups, dim_out),
             nn.Mish(),
@@ -161,7 +159,7 @@ class Upsample1D(nn.Module):
 
 
 class ConformerWrapper(ConformerBlock):
-    def __init__(  # pylint: disable=useless-super-delegation
+    def __init__(
         self,
         *,
         dim,
@@ -245,6 +243,7 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
+                        time_embed_dim,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -268,6 +267,7 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
+                        time_embed_dim,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -294,6 +294,7 @@ class Decoder(nn.Module):
                         attention_head_dim,
                         num_heads,
                         dropout,
+                        time_embed_dim,
                     )
                     for _ in range(n_blocks)
                 ]
@@ -313,7 +314,7 @@ class Decoder(nn.Module):
         # nn.init.normal_(self.final_proj.weight)
 
     @staticmethod
-    def get_block(block_type, dim, attention_head_dim, num_heads, dropout):
+    def get_block(block_type, dim, attention_head_dim, num_heads, dropout, time_embed_dim):
         if block_type == "conformer":
             block = ConformerWrapper(
                 dim=dim,
@@ -327,10 +328,11 @@ class Decoder(nn.Module):
                 conv_kernel_size=31,
             )
         elif block_type == "transformer":
-            block = BasicTransformerBlock(
+            block = TimestepConditionedTransformerBlock(
                 dim=dim,
                 num_attention_heads=num_heads,
                 attention_head_dim=attention_head_dim,
+                time_embed_dim=time_embed_dim,
                 dropout=dropout,
             )
         else:
@@ -369,6 +371,13 @@ class Decoder(nn.Module):
         t = self.time_mlp(t)
 
         x = pack([x, mu], "b * t")[0]
+        
+        # I found that the Decoder is doing fine without speaker embeddings.
+        # I concluded that it is because the Encoder generates a mel so close to the original, that it already
+        # contains all speaker characteristics, acoustic and rhythmic and the decoder just has to polish 
+        # small things, like maybe  co-articulations. 
+        # Later I also tested with using FiLM / AdaLN for speaker embedding in the ResNet blocks only as other TTS 
+        # models do, and I saw no improvement. 
 
         hiddens = []
         masks = [mask]

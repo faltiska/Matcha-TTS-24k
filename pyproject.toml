@@ -6,6 +6,21 @@ build-backend = "setuptools.build_meta"
 name = "matcha-tts"
 version = "0.1.0"
 
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-test-cu132"
+url = "https://download.pytorch.org/whl/test/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu132" }]
+torchcodec = [{ index = "pytorch-cu132" }]
+torchaudio = [{ index = "pytorch-test-cu132" }]
+
 [tool.setuptools.packages.find]
 include = ["matcha*"]
 

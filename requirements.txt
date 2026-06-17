@@ -1,7 +1,13 @@
-lightning>=2.6.0
-torchmetrics>=1.8.2
-torchdiffeq>=0.2.5
-torch-ema>=0.3
+torch
+torchaudio
+torchcodec
+nvidia-nccl-cu12
+nvidia-cudnn-cu12
+triton
+lightning
+torchmetrics
+torchdiffeq
+torch-ema
 phonemizer
 nemo_text_processing
 vocos
@@ -21,6 +27,7 @@ scipy
 conformer
 diffusers
 parse
+setuptools
 pymcd
 fastapi
 uvicorn[standard]

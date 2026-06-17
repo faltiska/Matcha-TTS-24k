@@ -89,17 +89,28 @@ Also, the Duration Predictor loss is calculated by comparing its output to the d
 It is also a Huber loss.
 
 ### Decoder
-This is a generative model trained with Conditional Flow Matching, a sort of diffusion model. 
-It is larger and slower than the rest of the components. It takes the spectrogram assembled as described above. 
-It learns the path for taking each value in that spectrogram into the corresponding value in the ground 
-truth spectrogram. Receives only the assembled mel and the ground truth mel. 
-At a random timestep, it interpolates between noise and ground truth to get a noisy sample, then learns to predict the 
+This is a generative model trained with Conditional Flow Matching, a sort of diffusion model.
+It is larger and slower than the rest of the components. It takes the spectrogram assembled as described above.
+It learns the path for taking each value in that spectrogram into the corresponding value in the ground
+truth spectrogram. Receives only the assembled mel and the ground truth mel.
+At any random timestep, it interpolates between noise and ground truth to get a noisy sample, then learns to predict the
 velocity field (direction) from noise toward ground truth.
 
-Architecturally it is a small U-Net: each down/mid/up stage is a convolutional residual block (ResNet), followed by a stack 
-of attention blocks. I have 2 types of attention blocks, Transformer and Conformer, configurable, but I trained with 
-Transformer so far.
-The diffusion timestep is injected via a sinusoidal positional embedding + MLP, broadcast into every ResNet block.
+But the amount noise is different at each timestep. At the start of the trajectory the signal is mostly noise and the
+correction should be large; near the end it is almost clean and only fine details need adjusting. To help the model
+decide how much noise is still in the signal, and how aggressively to correct the mel we add the timestep as a 
+conditioning signal.
+
+Architecturally it is a small U-Net: each down/mid/up stage is a convolutional residual block (ResNet), followed by a stack
+of attention blocks. I have 2 types of attention blocks, Transformer and Conformer, configurable, but I trained 
+with Transformer so far.
+
+The diffusion timestep is injected via a sinusoidal positional embedding + MLP. It reaches the model in two ways:
+- The ResNet blocks add it directly to the activations, shifting the feature map at that point in time.
+- The Transformer attention blocks use it via Adaptive Layer Norm Zero (adaLN-Zero): the timestep embedding is projected
+  into 6 modulation parameters — a scale and shift applied to the hidden states before attention, a gate on the attention
+  output, and the same triplet for the feed-forward sub-layer. The gates are initialised to zero, so early in training
+  the block behaves as a plain residual transformer; the timestep conditioning activates gradually as the model learns to use it.
 
 ODE starts from the assembled mel plus noise as input, both during training and inference.
 This was described in the original Matcha paper, but it is not what is implemented ikn their github code.

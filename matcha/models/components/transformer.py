@@ -121,180 +121,64 @@ class FeedForward(nn.Module):
 
 
 @maybe_allow_in_graph
-class BasicTransformerBlock(nn.Module):
-    r"""
-    A basic Transformer block.
+class TimestepConditionedTransformerBlock(nn.Module):
+    """
+    Transformer block (self-attention + feed-forward) where both sub-layers are conditioned on
+    the diffusion timestep embedding via Adaptive Layer Norm Zero (adaLN-Zero).
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used.
-        double_self_attention (`bool`, *optional*):
-            Whether to use two self-attention layers. In this case no cross attention layers are used.
-        num_embeds_ada_norm (:
-            obj: `int`, *optional*): The number of diffusion steps used during training. See `Transformer2DModel`.
-        attention_bias (:
-            obj: `bool`, *optional*, defaults to `False`): Configure if the attentions should contain a bias parameter.
+    adaLN-Zero produces 6 modulation parameters from the timestep embedding:
+      - shift and scale applied to the hidden states before attention (via norm1)
+      - a gate that scales the attention output before the residual add
+      - shift, scale, and gate for the feed-forward sub-layer (applied via norm3)
+
+    All gates are initialised to zero, so the block starts as a plain residual transformer
+    and the timestep conditioning is gradually activated during training.
+
+    Args:
+        dim: Hidden dimension (must equal num_attention_heads * attention_head_dim).
+        num_attention_heads: Number of self-attention heads.
+        attention_head_dim: Dimension per attention head.
+        time_embed_dim: Dimension of the pre-computed timestep embedding fed in as `timestep`.
+        dropout: Dropout probability applied in attention and feed-forward.
     """
 
-    def __init__(
-        self,
-        dim: int,
-        num_attention_heads: int,
-        attention_head_dim: int,
-        dropout=0.0,
-        cross_attention_dim: Optional[int] = None,
-        num_embeds_ada_norm: Optional[int] = None,
-        attention_bias: bool = False,
-        only_cross_attention: bool = False,
-        double_self_attention: bool = False,
-        upcast_attention: bool = False,
-        norm_elementwise_affine: bool = True,
-        norm_type: str = "layer_norm",
-        final_dropout: bool = False,
-    ):
+    def __init__(self, dim: int, num_attention_heads: int, attention_head_dim: int, time_embed_dim: int, dropout: float = 0.0):
         super().__init__()
-        self.only_cross_attention = only_cross_attention
 
-        self.use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
-        self.use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
+        # adaLN-Zero norm for the self-attention sub-layer.
+        # num_embeddings=None means it expects a pre-computed embedding via the `emb` kwarg,
+        # rather than looking up a discrete timestep index.
+        self.norm1 = AdaLayerNormZero(embedding_dim=dim, num_embeddings=None)
 
-        if norm_type in ("ada_norm", "ada_norm_zero") and num_embeds_ada_norm is None:
-            raise ValueError(
-                f"`norm_type` is set to {norm_type}, but `num_embeds_ada_norm` is not defined. Please make sure to"
-                f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
-            )
+        # Projects the timestep embedding into the dimension adaLN-Zero expects.
+        self.time_proj = nn.Linear(time_embed_dim, dim)
 
-        # Define 3 blocks. Each block has its own normalization layer.
-        # 1. Self-Attn
-        if self.use_ada_layer_norm:
-            self.norm1 = AdaLayerNorm(dim, num_embeds_ada_norm)
-        elif self.use_ada_layer_norm_zero:
-            self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
-        else:
-            self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-        self.attn1 = Attention(
+        self.attn = Attention(
             query_dim=dim,
             heads=num_attention_heads,
             dim_head=attention_head_dim,
             dropout=dropout,
-            bias=attention_bias,
-            cross_attention_dim=cross_attention_dim if only_cross_attention else None,
-            upcast_attention=upcast_attention,
         )
 
-        # 2. Cross-Attn
-        if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
-            # the second cross attention block.
-            self.norm2 = (
-                AdaLayerNorm(dim, num_embeds_ada_norm)
-                if self.use_ada_layer_norm
-                else nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-            )
-            self.attn2 = Attention(
-                query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                upcast_attention=upcast_attention,
-                # scale_qk=False, # uncomment this to not to use flash attention
-            )  # is self-attn if encoder_hidden_states is none
-        else:
-            self.norm2 = None
-            self.attn2 = None
+        # adaLN-Zero norm for the feed-forward sub-layer.
+        self.norm3 = AdaLayerNormZero(embedding_dim=dim, num_embeddings=None)
 
-        # 3. Feed-forward
-        self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-        self.ff = FeedForward(dim, dropout=dropout, final_dropout=final_dropout)
+        self.ff = FeedForward(dim, dropout=dropout)
 
-        # let chunk size default to None
-        self._chunk_size = None
-        self._chunk_dim = 0
+    def forward(self, hidden_states: torch.FloatTensor, attention_mask=None, timestep=None, **kwargs):
+        # Project timestep embedding to match the block's hidden dimension.
+        time_emb = self.time_proj(timestep)
 
-    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
-        # Sets chunk feed-forward
-        self._chunk_size = chunk_size
-        self._chunk_dim = dim
+        # --- Self-attention sub-layer ---
+        # norm1 returns normalised states + 4 modulation tensors (gate_msa used here, rest for FFN)
+        normed, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=time_emb)
+        attn_output = self.attn(normed, attention_mask=attention_mask)
+        hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_output
 
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        timestep: Optional[torch.LongTensor] = None,
-        cross_attention_kwargs: Dict[str, Any] = None,
-        class_labels: Optional[torch.LongTensor] = None,
-    ):
-        # Notice that normalization is always applied before the real computation in the following blocks.
-        # 1. Self-Attention
-        if self.use_ada_layer_norm:
-            norm_hidden_states = self.norm1(hidden_states, timestep)
-        elif self.use_ada_layer_norm_zero:
-            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
-                hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
-            )
-        else:
-            norm_hidden_states = self.norm1(hidden_states)
-
-        cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
-
-        attn_output = self.attn1(
-            norm_hidden_states,
-            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
-            attention_mask=encoder_attention_mask if self.only_cross_attention else attention_mask,
-            **cross_attention_kwargs,
-        )
-        if self.use_ada_layer_norm_zero:
-            attn_output = gate_msa.unsqueeze(1) * attn_output
-        hidden_states = attn_output + hidden_states
-
-        # 2. Cross-Attention
-        if self.attn2 is not None:
-            norm_hidden_states = (
-                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
-            )
-
-            attn_output = self.attn2(
-                norm_hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                **cross_attention_kwargs,
-            )
-            hidden_states = attn_output + hidden_states
-
-        # 3. Feed-forward
-        norm_hidden_states = self.norm3(hidden_states)
-
-        if self.use_ada_layer_norm_zero:
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-
-        if self._chunk_size is not None:
-            # "feed_forward_chunk_size" can be used to save memory
-            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
-                raise ValueError(
-                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
-                )
-
-            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
-            ff_output = torch.cat(
-                [self.ff(hid_slice) for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)],
-                dim=self._chunk_dim,
-            )
-        else:
-            ff_output = self.ff(norm_hidden_states)
-
-        if self.use_ada_layer_norm_zero:
-            ff_output = gate_mlp.unsqueeze(1) * ff_output
-
-        hidden_states = ff_output + hidden_states
+        # --- Feed-forward sub-layer ---
+        normed, gate_msa_ff, shift_mlp_ff, scale_mlp_ff, gate_mlp_ff = self.norm3(hidden_states, emb=time_emb)
+        normed = normed * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+        ff_output = self.ff(normed)
+        hidden_states = hidden_states + gate_mlp.unsqueeze(1) * ff_output
 
         return hidden_states

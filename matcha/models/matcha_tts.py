@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
 LOG_DURATION_OFFSET = 4
+DIAGNOSTICS_LOG_INTERVAL = 20  # Log error quantile diagnostics every N training batches
 
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
@@ -27,8 +28,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
-        prior_loss_threshold=0.04,
-        duration_loss_threshold=1.0,
+        prior_loss_threshold=0.08,
+        duration_loss_threshold=0.15,
         plot_mel_on_validation_end=False,
     ):
         super().__init__()
@@ -132,13 +133,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        # I could use huber like in prior_loss:
         delta = self.hparams.duration_loss_threshold
         dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
-        # but original code was pure MSE: 
+        # Original code was pure MSE: 
         # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
 
-        if self.batch_idx == 0:
+        if self.batch_idx % DIAGNOSTICS_LOG_INTERVAL == 0:
             with torch.no_grad():
                 self._log_duration_loss_diagnostics(logw, logw_, x_mask)
 
@@ -147,13 +147,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            # Since Huber has very small values, I am also scaling it (easier than implementing separate LRs).
             delta = self.hparams.prior_loss_threshold
             prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=delta, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
 
             # This helps pick a good beta value: Watch the percentiles.
-            if self.batch_idx == 0:
+            if self.batch_idx % DIAGNOSTICS_LOG_INTERVAL == 0:
                 with torch.no_grad():
                     self._log_prior_loss_diagnostics(y, y_fine, mu_y_fine, y_fine_mask)
         else:
