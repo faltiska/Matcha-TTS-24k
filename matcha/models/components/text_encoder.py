@@ -331,22 +331,26 @@ class TextEncoder(nn.Module):
         x = torch.transpose(x, 1, -1)
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.shape[2]), 1).to(x.dtype)
 
-        mu = self.prenet(x, x_mask)
-        mu = self.encoder(mu, x_mask, speaker_embedding_enc)
-        mu = self.proj_m(mu) * x_mask
+        x = self.prenet(x, x_mask)
+        x = self.encoder(x, x_mask, speaker_embedding_enc)
+        mu = self.proj_m(x) * x_mask
         
         # The author was feeding the encoder output into the Duration Predictor, undetached.   
-        # Because the encoder output is too biased towards the acoustic meaning of the phonemes, it does not make for 
-        # a good input into duration prediction. But if we don't do that, we'd lose what the Encoder attention layers
-        # added, so I decided to add an attention and an FFN layer to the duration predictor.
-        # Also, because the predictor already has its own conv layers, I see no reason to use the prenet output either.
-        # The predictor with 4 conv layers + attn + ffn + a final projection is as good at predicting durations as it
-        # was in the original paper / git repo.
-        # On top of that, no matter what input I use, I must detach it.
+        # But I thought the encoder output is too biased towards the acoustic meaning of the phonemes to make for 
+        # a good input into duration prediction. I wanted to try feeding the raw phoneme embeddings instead, but we'd 
+        # lose what the Encoder attention layers added to x, so I decided to add an attention and an FFN layer to the 
+        # duration predictor. 
+        # The predictor has 4 conv layers + attn + ffn + a final projection now, and is almost as good at predicting
+        # durations as it was in the original paper / git repo, with some very weird exceptions.
+        # After a lot of painful tests I found the duration predictor made some very egregious mistakes, albeit rare.
+        # Speaker 6 has a very distinct pattern and the test sequence you see in debug.sh results in pronounced 
+        # stuttering at the S in "time ssslipping" and the Fs in "fffar too fffrequent". Mosy of the durations are 
+        # just fine, and the MCD improved, but I cannot get rid of those mistake even after 800 epochs.
+        # As a result, I went back to using the Encoder output as input into Duration Prediction.
+        # On the other hand, no matter what input I use, I must detach it.
         # I don't want the predictor pulling on anything Encoder related, because small prior changes destabilize 
         # MAS quickly. I have seen the prior loss spiking up, then never recovering because MAS tries to follow which
         # pulls prior further away which makes MAS follow and so on, never recovering.
-        # I have tested and validating all the above claims in training.  
         logw = self.proj_w(x.detach(), x_mask, speaker_embedding_dur)
 
         return mu, logw, x_mask
