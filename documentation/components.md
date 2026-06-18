@@ -16,6 +16,18 @@ The Decoder generated mel is compared to the ground truth mel to compute the Dec
 A Duration Prediction model is trained to predict phoneme durations from phonemes. 
 The predicted durations are compared to the durations detected by MAS to compute the Duration Predictr loss. 
 
+### The three losses are summed, but they do not influence one another
+
+The training step computes three losses — the Prior loss (also called encoder loss), the Duration Predictor loss,
+and the Decoder loss (also called flow matching loss) — and adds them into a single number for the optimizer.
+
+Adding them does NOT mean they interact. Each loss trains only its own submodel, and only its own submodel,
+because the tensors that connect the submodels are detached at every boundary.
+
+The Mel Predictor reads an undetached Encoder output but then:
+- The Duration Predictor reads a _detached_ copy of the Encoder output.
+- The Decoder reads a _detached_ copy of the assembled mel.
+
 ## What Each Module Does During Training
 
 ### Phonemizer
