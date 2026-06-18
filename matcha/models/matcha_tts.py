@@ -137,6 +137,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
         # Original code was pure MSE: 
         # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
+        # but it leads to a huge gap between the validation and the train losses.         
 
         if self.batch_idx % DIAGNOSTICS_LOG_INTERVAL == 0:
             with torch.no_grad():
