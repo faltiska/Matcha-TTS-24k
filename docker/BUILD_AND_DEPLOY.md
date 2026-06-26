@@ -53,7 +53,7 @@ docker image prune -a
 ## Prerequisites
 
 ```bash
-sudo apt install unzip
+sudo dnf install unzip
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 sudo ./aws/install
@@ -64,18 +64,26 @@ aws configure
 ```
 
 
-### Local development
+### Local development (Ubuntu)
 ```
 sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo apt install docker.io
 sudo systemctl restart docker
 ```
-Install buildx from Docker's official repo (not in Ubuntu's default apt)
+Install buildx from Docker's official repo (not in Ubuntu's default apt):
 ```
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker.gpg
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
 sudo apt update && sudo apt install docker-buildx-plugin
+```
+
+### EC2 instance (Amazon Linux 2023)
+Note: EC2 does not need buildx — it only pulls and runs pre-built images from ECR.
+```
+sudo dnf install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
 ```
 
 ### In AWS
@@ -197,8 +205,8 @@ sudo systemctl restart docker.service
 
 4. **Configure AWS and initialize Swarm:**
 ```bash
-sudo yum update -y
-sudo yum clean all
+sudo dnf update -y
+sudo dnf clean all
 aws configure
 docker swarm init
 ```
@@ -221,7 +229,7 @@ Both in EC2 VPC, with their own security group allowing:
 Log into the remote EC2 machine:
 ```bash
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $REGISTRY
-ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-247-83-140.eu-west-1.compute.amazonaws.com
+ssh -i ~/.ssh/ec2-connect-key-ireland.pem ec2-user@ec2-34-251-240-148.eu-west-1.compute.amazonaws.com
 ```
 
 Create the service (only needs to be done once):
@@ -290,6 +298,40 @@ When launching, you can override the AMI, with the one you created above:
 2. Actions → Images and templates → "Launch more like this"
 3. Change the AMI to your custom AMI
 4. Launch
+5. Connect via ssh and start the services (both Kokoro and Matcha)
+6. 128.127.123.203
+
+### Register the new instance in the Load Balancer
+
+After launching the new instance, swap it into both target groups (replace `<new-instance-id>` with the new instance ID):
+```bash
+# Deregister the old instance
+aws elbv2 deregister-targets --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/matcha/010b4dc9a1845e2f \
+    --targets Id=<old-instance-id>,Port=8881
+
+aws elbv2 deregister-targets --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/kokoro/d2c2f4b80fd80ff1 \
+    --targets Id=<old-instance-id>,Port=8880
+
+# Register the new instance
+aws elbv2 register-targets --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/matcha/010b4dc9a1845e2f \
+    --targets Id=<new-instance-id>,Port=8881
+
+aws elbv2 register-targets --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/kokoro/d2c2f4b80fd80ff1 \
+    --targets Id=<new-instance-id>,Port=8880
+```
+
+Monitor health (needs 5 consecutive successes, ~2.5 minutes):
+```bash
+aws elbv2 describe-target-health --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/matcha/010b4dc9a1845e2f
+
+aws elbv2 describe-target-health --region eu-west-1 \
+    --target-group-arn arn:aws:elasticloadbalancing:eu-west-1:678811077621:targetgroup/kokoro/d2c2f4b80fd80ff1
+```
 
 
 ## Monitoring and Management
