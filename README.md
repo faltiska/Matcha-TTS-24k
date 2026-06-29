@@ -209,6 +209,26 @@ Clean up unused libraries from UV cache
 uv cache clean && uv cache prune
 ```
 
+# Running training in the background with tmux
+
+To keep training running even if you close the terminal window, use `tmux`:
+```bash
+tmux new -s train
+python -m matcha.train
+```
+
+Detach from the session at any time with `Ctrl+B, D`. The process keeps running in the background.
+
+Reconnect later with:
+```bash
+tmux attach -t train
+```
+
+List active sessions with:
+```bash
+tmux ls
+```
+
 # Misc
 
 See original [readme](ORIGINAL-README.md) too.
