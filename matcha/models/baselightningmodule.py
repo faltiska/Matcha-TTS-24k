@@ -58,7 +58,7 @@ class BaseLightningClass(LightningModule, ABC):
             {"params": no_decay_params, "weight_decay": 0.0},
         ])
 
-    def get_losses(self, batch):
+    def get_losses(self, batch, is_training_step):
         x, x_lengths = batch["x"], batch["x_lengths"]
         y, y_lengths = batch["y"], batch["y_lengths"]
         y_fine, y_fine_lengths = batch["y_fine"], batch["y_fine_lengths"]
@@ -74,6 +74,7 @@ class BaseLightningClass(LightningModule, ABC):
             y_fine=y_fine,
             y_fine_lengths=y_fine_lengths,
             spks=spks,
+            is_training_step=is_training_step,
         )
 
         return diff_loss, dur_loss, prior_loss
@@ -130,6 +131,52 @@ class BaseLightningClass(LightningModule, ABC):
 
                 log.info(f"Added {new_n_spks - old_n_spks} more speaker(s) to the model.")
 
+    METRIC_PRIOR = "prior"
+    METRIC_DURATION = "duration"
+    MAE_TRAIN_KEY = "mae/train_{}"
+    MAE_VAL_KEY = "mae/val_{}"
+
+    def _log_diagnostics(self, predictions, targets, mask, metric_name, is_training_step):
+        """
+        Logs diagnostic metrics for a loss term to help monitor training health and tune hyperparameters.
+
+        During training, logs the Mean Absolute Error (MAE) and absolute error quantiles on the epoch
+        before each validation epoch. The quantiles are useful for understanding the error distribution
+        and for comparing against validation errors to assess generalization.
+        Computing on the full epoch (rather than a subset of batches) gives a representative picture
+        of the training error distribution. On all other training epochs, does nothing to avoid
+        unnecessary computation.
+
+        During validation, logs the MAE over the validation data. Combined with the training MAE
+        logged on the preceding epoch, this allows computing the train-to-validation gap, which
+        indicates how well the model generalizes.
+        """
+        if is_training_step:
+            is_epoch_before_validation = (self.current_epoch + 1) % self.trainer.check_val_every_n_epoch == 0
+            if not is_epoch_before_validation:
+                return
+
+            batch_size = predictions.shape[0]
+            train_abs_error = torch.abs(predictions - targets)[mask.bool()]
+            self.log(self.MAE_TRAIN_KEY.format(metric_name), train_abs_error.mean(), on_step=False, on_epoch=True, batch_size=batch_size)
+
+            quantiles = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
+            quantiles_tensor = torch.tensor(quantiles, device=predictions.device)
+            q = torch.quantile(train_abs_error, quantiles_tensor)
+            for i, p in enumerate(quantiles):
+                self.log(f"abs_error_quantiles/{metric_name}_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
+        else:
+            batch_size = predictions.shape[0]
+            valid_abs_error = torch.abs(predictions - targets)[mask.bool()]
+            self.log(self.MAE_VAL_KEY.format(metric_name), valid_abs_error.mean(), on_step=False, on_epoch=True, batch_size=batch_size)
+
+    def log_mae_gap(self, metrics, metric_name):
+        train_mae = metrics.get(self.MAE_TRAIN_KEY.format(metric_name))
+        val_mae = metrics.get(self.MAE_VAL_KEY.format(metric_name))
+        if train_mae is not None and val_mae is not None:
+            gap_pct = (val_mae - train_mae) / train_mae * 100.0
+            self.log(f"mae/gap_{metric_name}", gap_pct)
+
     def on_train_epoch_start(self):
         sampler = self.trainer.train_dataloader.batch_sampler
         if hasattr(sampler, 'create_batches'):
@@ -139,9 +186,20 @@ class BaseLightningClass(LightningModule, ABC):
             if old_len != new_len:
                 log.error(f"Batch count changed from {old_len} to {new_len} at epoch {self.current_epoch}, this will cause Lightning to stop running validation.")
 
+        # We log gap metrics at the start of the next training epoch after validation, because the callback_metrics are 
+        # not yet available during on_validation_epoch_end or on_train_epoch_end.
+        was_validation_epoch = self.current_epoch > 0 and self.current_epoch % self.trainer.check_val_every_n_epoch == 0
+        if not was_validation_epoch:
+            return
+
+        # The gap metric says how much higher is the validation error compared to the training error, in percents.
+        # A value of 25 means the validation loss is 25% worse than the training loss.
+        metrics = self.trainer.callback_metrics
+        self.log_mae_gap(metrics, self.METRIC_PRIOR)
+        self.log_mae_gap(metrics, self.METRIC_DURATION)
+
     def training_step(self, batch: Any, batch_idx: int):
-        self.batch_idx = batch_idx
-        diff_loss, dur_loss, prior_loss = self.get_losses(batch)
+        diff_loss, dur_loss, prior_loss = self.get_losses(batch, is_training_step=True)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
@@ -156,7 +214,7 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int):
-        diff_loss, dur_loss, prior_loss = self.get_losses(batch)
+        diff_loss, dur_loss, prior_loss = self.get_losses(batch, is_training_step=False)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
@@ -170,29 +228,33 @@ class BaseLightningClass(LightningModule, ABC):
 
         return total_loss
 
-    # def on_before_optimizer_step(self, optimizer):
-    #     # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
-    #     submodules = {
-    #         "speaker_embeddings": self.speaker_embeddings,
-    #         "encoder":            self.encoder,
-    #         "decoder":            self.decoder,
-    #         "phoneme_embeddings": self.encoder.emb,
-    #         "enc_prenet":         self.encoder.prenet,
-    #         "enc_transformer":    self.encoder.encoder._orig_mod,
-    #         "enc_proj_m":         self.encoder.proj_m,
-    #     }
-    #     for name, module in submodules.items():
-    #         # Param norm helps me check if the weight decay value from Adam / AdamW is too large.
-    #         # If param_norm stays flat or slightly increases: weight decay is just fine.
-    #         # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
-    #         #
-    #         # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
-    #         # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
-    #         param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
-    #         self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
-    # 
-    #         params_with_grad = [p for p in module.parameters() if p.grad is not None]
-    #         if params_with_grad:
-    #             grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])
-    #             self.log(f"grad_norm/{name}", torch.linalg.vector_norm(grad_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
+    def on_before_optimizer_step(self, optimizer):
+        # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
+        # self.encoder is torch.compile()'d, so its original submodules are accessed via _orig_mod.
+        enc = self.encoder._orig_mod
+        submodules = {
+            "speaker_embeddings_enc": self.speaker_embeddings_enc,
+            "speaker_embeddings_dur": self.speaker_embeddings_dur,
+            "encoder":            self.encoder,
+            "decoder":            self.decoder,
+            "phoneme_embeddings": enc.emb,
+            "enc_prenet":         enc.prenet,
+            "enc_transformer":    enc.encoder,
+            "enc_proj_m":         enc.proj_m,
+            "enc_proj_w":         enc.proj_w,
+        }
+        for name, module in submodules.items():
+            # Param norm helps me check if the weight decay value from Adam / AdamW is too large.
+            # If param_norm stays flat or slightly increases: weight decay is just fine.
+            # If param_norm is slowly sinking: weight decay is too big; it's slowly "erasing" the model.
+            #
+            # It also reveals which regularizer is doing the work when both weight decay and dropout are active.
+            # If param_norm grows freely while overfitting stays under control, it means dropout is the dominant regularizer.
+            param_norms = torch.stack([p.detach().norm() for p in module.parameters()])
+            self.log(f"param_norm/{name}", torch.linalg.vector_norm(param_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
+
+            params_with_grad = [p for p in module.parameters() if p.grad is not None]
+            if params_with_grad:
+                grad_norms = torch.stack([p.grad.norm() for p in params_with_grad])
+                self.log(f"grad_norm/{name}", torch.linalg.vector_norm(grad_norms), on_step=False, on_epoch=True, logger=True, batch_size=1)
 

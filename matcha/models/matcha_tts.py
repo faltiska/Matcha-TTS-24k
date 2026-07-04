@@ -13,7 +13,20 @@ log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
 LOG_DURATION_OFFSET = 4
-DIAGNOSTICS_LOG_INTERVAL = 20  # Log error quantile diagnostics every N training batches
+
+
+def log_cosh_loss(predictions, targets, mask):
+    """
+    Numerically stable log-cosh loss: log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2).
+    Plain log(cosh(x)) overflows in float32 for |x| > ~88; this form never does.
+    Behaves like MSE for small errors and like MAE for large ones, with no threshold hyperparameter.
+    Only valid (masked) elements contribute. The sum is divided by the number of masked elements.
+    """
+    error = (predictions - targets) * mask
+    abs_error = torch.abs(error)
+    element_wise_loss = abs_error + torch.log1p(torch.exp(-2 * abs_error)) - math.log(2)
+    return element_wise_loss.sum() / mask.sum()
+
 
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
@@ -41,6 +54,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.n_feats = n_feats
         self.prior_loss = prior_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
+        self._train_mae_accumulator = {}  # metric_name -> [sum_of_abs_errors, count]
 
         if n_spks > 1:
             self.speaker_embeddings_enc = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -64,9 +78,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
 
         self.update_data_statistics(data_statistics)
-        self.batch_idx = 0
 
-    def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks):
+    def forward(self, x, x_lengths, y, y_lengths, y_fine, y_fine_lengths, spks, is_training_step):
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -133,29 +146,38 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        delta = self.hparams.duration_loss_threshold
-        dur_loss = F.huber_loss(logw, logw_, delta=delta, reduction='sum') / torch.sum(x_lengths)
+        #
+        # I was using Huber or SmoothL1 until I learned about log_cosh:  
+        # threshold = self.hparams.duration_loss_threshold
+        # dur_loss = F.huber_loss(logw, logw_, delta=threshold, reduction='sum') / torch.sum(x_mask)
+        # dur_loss = F.smooth_l1_loss(logw, logw_, beta=threshold, reduction='sum') / torch.sum(x_mask)
+        #
+        # Log-Cosh has the advantage of not requiring a threshold, which proved to be very hard to find.
+        dur_loss = log_cosh_loss(logw, logw_, x_mask)
         # Original code was pure MSE: 
-        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
+        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_mask)
         # but it leads to a huge gap between the validation and the train losses.         
 
-        if self.batch_idx % DIAGNOSTICS_LOG_INTERVAL == 0:
-            with torch.no_grad():
-                self._log_duration_loss_diagnostics(logw, logw_, x_mask)
+        with torch.no_grad():
+            self._log_diagnostics(logw, logw_, x_mask, self.METRIC_DURATION, is_training_step)
 
         if self.prior_loss:
             # Original code was: 
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            delta = self.hparams.prior_loss_threshold
-            prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=delta, reduction='sum')
-            prior_loss = prior_loss / torch.sum(y_fine_mask)
+            #
+            # I was using Huber or SmoothL1 until I learned about log_cosh:  
+            # threshold = self.hparams.prior_loss_threshold
+            # prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=threshold, reduction='sum')
+            # prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=threshold, reduction='sum')
+            # prior_loss = prior_loss / torch.sum(y_fine_mask)
+            #
+            # Log-Cosh has the advantage of not requiring a threshold, which proved to be very hard to find.
+            prior_loss = log_cosh_loss(y_fine, mu_y_fine, y_fine_mask)
 
-            # This helps pick a good beta value: Watch the percentiles.
-            if self.batch_idx % DIAGNOSTICS_LOG_INTERVAL == 0:
-                with torch.no_grad():
-                    self._log_prior_loss_diagnostics(y, y_fine, mu_y_fine, y_fine_mask)
+            with torch.no_grad():
+                self._log_diagnostics(y_fine, mu_y_fine, y_fine_mask.expand_as(y_fine), self.METRIC_PRIOR, is_training_step)
         else:
             prior_loss = 0
 
@@ -170,24 +192,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
 
         return diff_loss, dur_loss, prior_loss
-
-    def _log_prior_loss_diagnostics(self, y, y_fine, mu_y_fine, y_fine_mask):
-        quantiles = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
-        quantiles_tensor = torch.tensor(quantiles, device=y_fine.device)
-        valid_abs_error = torch.abs(y_fine - mu_y_fine)[y_fine_mask.expand_as(y_fine).bool()]
-        q = torch.quantile(valid_abs_error, quantiles_tensor)
-        batch_size = y.shape[0]
-        for i, p in enumerate(quantiles):
-            self.log(f"abs_error_quantiles/prior_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
-
-    def _log_duration_loss_diagnostics(self, logw, logw_, x_mask):
-        quantiles = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
-        quantiles_tensor = torch.tensor(quantiles, device=logw.device)
-        valid_abs_error = torch.abs(logw - logw_)[x_mask.bool()]
-        q = torch.quantile(valid_abs_error, quantiles_tensor)
-        batch_size = logw.shape[0]
-        for i, p in enumerate(quantiles):
-            self.log(f"abs_error_quantiles/duration_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
 
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
