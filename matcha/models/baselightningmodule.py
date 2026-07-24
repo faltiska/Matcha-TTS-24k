@@ -162,7 +162,10 @@ class BaseLightningClass(LightningModule, ABC):
 
             quantiles = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
             quantiles_tensor = torch.tensor(quantiles, device=predictions.device)
-            q = torch.quantile(train_abs_error, quantiles_tensor)
+            sorted_errors = torch.sort(train_abs_error).values
+            n = sorted_errors.numel()
+            indices = (quantiles_tensor * (n - 1)).long().clamp(0, n - 1)
+            q = sorted_errors[indices]
             for i, p in enumerate(quantiles):
                 self.log(f"abs_error_quantiles/{metric_name}_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
         else:
