@@ -1,0 +1,119 @@
+# @package _global_
+#
+# In v20 I heard the model making some egregious albeit rare mistakes, maybe suggesting a too low Huber threshold, 
+# that allows the model to ignore some of the outliers. I decided to test with different methods of computing the loss.
+#
+# I tested with both Huber and SmoothL1 for Prior and duration losses, with various thresholds. 
+# I could not find the right values, so I decided to test with log_cosh. After about 900 epochs, I decided to go back to Huber.  
+# I used the values I saw in the 100% chart at the end of the training with log_cosh as Delta for Huber.
+# The values are much larger than what I used in v20. I used Huber for the rest of v21.
+#
+# I also tested with an additional Cepstral loss, summed with the prior loss, but found that at some point, after 500 epochs, 
+# the losses start to drop abruptly, but the MCD measurements get worse. I think the prior and the cepstral loss were engaged
+# in a tug of war of sorts. I decided to drop Cepstral, and try to weight the prior loss using a perceptual spectral shape.
+# I used the spectral shape for the rest of the training.
+#
+# I added 2 new metrics, mae/gap_dur and mae/gap_prior, so I can have a clear view of whether a larger Huber / Smooth L1 
+# thresholds really produce larger gaps. I thought a larger gap shows there's an overfitting problem, affecting generalization.
+# It looks like the threshold does not really affect the gap. I don't have solid evidence.  
+# See matcha_tts.py for details on how I calculate the "mae" metrics.
+
+run_name: v21
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  num_workers: 8
+  max_frames_per_batch: 40000
+  
+ckpt_path: logs/train/v21/checkpoint_epoch=1485-2.ckpt
+
+model:
+  spk_emb_dim: 128
+  prior_loss: false
+
+  # I have created a script that visualizes the gradients for SmoothL1, Huber, MAE, MSE and log_cosh.
+  # python plot_loss_gradients.py
+  # Good tool for choosing the right loss function.
+  # One thing it shows is that the theresholds I chose for the test with SmoothL1 were bad. 
+  # I decided to use the values I saw in the 100% chart at the end of the training with log_cosh as Delta for Huber.
+ 
+  prior_loss_threshold: 0.95
+  # The distribution of abs errors at epoch 1000: 
+  # 50% prior errors are below 0.04 after 500 epochs
+  # 75% prior errors are below 0.08 after 500 epochs
+  # 90% prior errors are below 0.12 after 500 epochs
+  # 95% prior errors are below 0.15 after 500 epochs
+  # 99% prior errors are below 0.22 after 500 epochs
+  # All prior errors are below 0.95 after 500 epochs
+  
+  duration_loss_threshold: 1.1
+  # The distribution of abs errors at epoch 1000: 
+  # 50% duration errors are below 0.07 after 500 epochs
+  # 75% duration errors are below 0.13 after 500 epochs
+  # 90% duration errors are below 0.20 after 500 epochs
+  # 95% duration errors are below 0.26 after 500 epochs
+  # 99% duration errors are below 0.41 after 500 epochs
+  # All duration errors are below 0.96 after 500 epochs
+  
+  encoder:
+    encoder_params:
+      # Speaker embedding is no longer concatenated; it conditions the encoder via per-layer FiLM,
+      # so the backbone runs at n_channels, not n_channels + spk_emb_dim.
+      # Head dim: n_channels / n_heads = 64, divisible by 8
+      n_channels: 384
+      # 384 * 3 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      # changed from 0.05 at epoch 1299
+      p_dropout: 0
+      
+      prenet: true
+      # should not go over 3, it affects prior loss
+      # 5 is slightly worse, 7 is considerably worse 
+      prenet_kernel_size: 3
+    
+    # I should try to reduce the capacity to see if the mae/gap_dur reduces too (pointing to an overfit) 
+    duration_predictor_params:
+      # head dim is filter_channels_dp / n_heads = 64, divisible by 8
+      filter_channels_dp: 384
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 3
+      p_dropout: 0.1
+  
+  decoder:
+    # The rule for divisibility by num_heads applies to the second figure only
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    num_mid_blocks: 2 # I could try with 4 next time
+    dropout: 0.05
+  
+  cfm:
+    use_mu_prior: true
+
+  optimizer:
+    # Schedule (360 steps / epoch):
+    #     0: 1e-4 / 2e-4
+    #   864: 8e-5 / 2e-4
+    #  1159: 4e-5 / 1e-4
+    #  1299: 4e-5 / 1e-4, Encoder frozen, dropout 0 
+    #  1306: 1e-5 / 0, Encoder frozen, dropout 0 
+    #  stopped at checkpoint 1313 with an MCD of 3.86
+    #
+    # Second try: resumed from 1299 so I can train until Decoder validation cycles to a trough
+    #  1299: 2e-5 / 5e-5 
+    #  1471: 2e-5 / 5e-5, Encoder frozen, dropout 0
+    lr: 2e-5
+    weight_decay: 5e-5
+    
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 1
+
+trainer:
+  check_val_every_n_epoch: 1

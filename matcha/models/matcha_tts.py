@@ -7,25 +7,13 @@ from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import sequence_mask, downsample
+from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
 log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
 LOG_DURATION_OFFSET = 4
-
-
-def log_cosh_loss(predictions, targets, mask):
-    """
-    Numerically stable log-cosh loss: log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2).
-    Plain log(cosh(x)) overflows in float32 for |x| > ~88; this form never does.
-    Behaves like MSE for small errors and like MAE for large ones, with no threshold hyperparameter.
-    Only valid (masked) elements contribute. The sum is divided by the number of masked elements.
-    """
-    error = (predictions - targets) * mask
-    abs_error = torch.abs(error)
-    element_wise_loss = abs_error + torch.log1p(torch.exp(-2 * abs_error)) - math.log(2)
-    return element_wise_loss.sum() / mask.sum()
 
 
 class MatchaTTS(BaseLightningClass):  # 🍵
@@ -44,6 +32,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         prior_loss_threshold=0.08,
         duration_loss_threshold=0.15,
         plot_mel_on_validation_end=False,
+        sample_rate=None,
+        f_min=None,
+        f_max=None,
     ):
         super().__init__()
 
@@ -54,7 +45,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.n_feats = n_feats
         self.prior_loss = prior_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
-        self._train_mae_accumulator = {}  # metric_name -> [sum_of_abs_errors, count]
+
+        # Fixed, per-mel-bin weight that biases the prior loss towards the frequency range where human
+        # hearing is most sensitive (see build_perceptual_mel_weights). Shaped (1, n_feats, 1) so it
+        # broadcasts directly over (batch, n_feats, time) mels. The leading dimension of size 1 stands in
+        # for a future per-speaker dimension (n_spks, n_feats, 1), selected by speaker id, once per-speaker
+        # weights are precomputed from each speaker's own data.
+        perceptual_mel_weights = build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max)
+        self.register_buffer("perceptual_mel_weights", perceptual_mel_weights.view(1, n_feats, 1), persistent=False)
 
         if n_spks > 1:
             self.speaker_embeddings_enc = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -146,14 +144,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         # logw - log-scaled durations from the Duration Predictor
         # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        #
-        # I was using Huber or SmoothL1 until I learned about log_cosh:  
-        # threshold = self.hparams.duration_loss_threshold
-        # dur_loss = F.huber_loss(logw, logw_, delta=threshold, reduction='sum') / torch.sum(x_mask)
-        # dur_loss = F.smooth_l1_loss(logw, logw_, beta=threshold, reduction='sum') / torch.sum(x_mask)
-        #
-        # Log-Cosh has the advantage of not requiring a threshold, which proved to be very hard to find.
-        dur_loss = log_cosh_loss(logw, logw_, x_mask)
+        threshold = self.hparams.duration_loss_threshold
+        dur_loss = F.huber_loss(logw, logw_, delta=threshold, reduction='sum') / torch.sum(x_mask)
         # Original code was pure MSE: 
         # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_mask)
         # but it leads to a huge gap between the validation and the train losses.         
@@ -166,30 +158,27 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             #   prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
-            #
-            # I was using Huber or SmoothL1 until I learned about log_cosh:  
-            # threshold = self.hparams.prior_loss_threshold
-            # prior_loss = F.huber_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, delta=threshold, reduction='sum')
-            # prior_loss = F.smooth_l1_loss(y_fine * y_fine_mask, mu_y_fine * y_fine_mask, beta=threshold, reduction='sum')
-            # prior_loss = prior_loss / torch.sum(y_fine_mask)
-            #
-            # Log-Cosh has the advantage of not requiring a threshold, which proved to be very hard to find.
-            prior_loss = log_cosh_loss(y_fine, mu_y_fine, y_fine_mask)
+            threshold = self.hparams.prior_loss_threshold
+            # perceptual_mel_weights biases the loss towards the mel bins the human ear is most sensitive
+            # to, without adding a second competing loss term (see build_perceptual_mel_weights).
+            y_fine_weighted = y_fine * y_fine_mask * self.perceptual_mel_weights
+            mu_y_fine_weighted = mu_y_fine * y_fine_mask * self.perceptual_mel_weights
+            prior_loss = F.huber_loss(y_fine_weighted, mu_y_fine_weighted, delta=threshold, reduction='sum')
+            prior_loss = prior_loss / torch.sum(y_fine_mask)
 
             with torch.no_grad():
                 self._log_diagnostics(y_fine, mu_y_fine, y_fine_mask.expand_as(y_fine), self.METRIC_PRIOR, is_training_step)
         else:
             prior_loss = 0
 
-        mu_y_coarse = downsample(mu_y_fine)
+        mu_y = downsample(mu_y_fine)
+        y_max_length = y.shape[-1]
+        y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
 
         # Detach mu_y to prevent Decoder gradients from flowing back to the Encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. 
         # We want the Encoder to learn how to produce mels that match the ground truth.
-        detached_mu_y_coarse = mu_y_coarse.detach()
-        y_max_length = y.shape[-1]
-        y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
-        diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=detached_mu_y_coarse)
+        diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y.detach())
 
         return diff_loss, dur_loss, prior_loss
 

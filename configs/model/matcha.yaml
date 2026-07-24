@@ -13,6 +13,9 @@ spk_emb_dim: 96
 # Shared speaker embedding size for the encoder and duration predictor.
 # The decoder has its own spk_emb_dim defined in configs/model/decoder/default.yaml.
 n_feats: ${data.n_feats}
+sample_rate: ${data.sample_rate}
+f_min: ${data.f_min}
+f_max: ${data.f_max}
 data_statistics: ${data.data_statistics}
 prior_loss: true
 prior_loss_threshold: 0.08
