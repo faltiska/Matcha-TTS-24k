@@ -89,7 +89,7 @@ You can compare the reconstituted files to the original input wav, to assess the
 
 ### Train
 ```
-python -m matcha.train
+python -m matcha.train +experiment=v21
 ```   
 
 Monitor training with: 
@@ -214,7 +214,7 @@ uv cache clean && uv cache prune
 To keep training running even if you close the terminal window, use `tmux`:
 ```bash
 tmux new -s train
-python -m matcha.train
+python -m matcha.train +experiment=v21
 ```
 
 Detach from the session at any time with `Ctrl+B, D`. The process keeps running in the background.

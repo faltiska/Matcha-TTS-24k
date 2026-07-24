@@ -7,3 +7,4 @@
 docker/checkpoint.ckpt
 /.cache/
 /matcha_tts.egg-info/
+/aws/

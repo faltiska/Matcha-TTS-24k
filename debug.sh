@@ -1,8 +1,8 @@
-CHECKPOINT=logs/train/v20/checkpoint_epoch=054.ckpt
+CHECKPOINT=logs/train/v21/checkpoint_epoch=1109.ckpt
 
 python -m matcha.cli \
 --checkpoint_path $CHECKPOINT \
---text "The rain continued its relentless assault against the windowpane, each drop a tiny, percussive reminder of the time slipping through his fingers. Plus, there was always Bubba’s drinking-and-driving problem, which Tommy was having to handle far too frequently lately." \
+--text "The rain continued its relentless assault against the windowpane, each drop a tiny, percussive reminder of the time slipping forward." \
 --spk "0,1,2,3,4,5,6,10,11,12" \
 --debug 
 
