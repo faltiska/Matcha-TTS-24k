@@ -3,8 +3,6 @@
 # More data for speakers 13 and 14.
 # Added FiLM / AdaLN for speaker embeddings in Encoder.
 # Added an Attention and an FFN layer for the Duration Predictor.
-# Duration Predictor input is now the raw embeddings detached, instead of the Encoder output.
-# All 3 changes are in text_encoder.py.
 # Incremented the offset in Duration loss calculation from 2 to 4 (see matcha_tts.py). 
 # Duration loss uses Huber instead of MSE, added duration_loss_threshold in config.
 # I've also changed activations from ReLU to SiLU, everywhere.
@@ -24,19 +22,37 @@ data:
   num_workers: 8
   max_frames_per_batch: 30000
   
-ckpt_path: null
+ckpt_path: logs/train/v20/checkpoint_epoch=1904.ckpt
 
 model:
   spk_emb_dim: 128
   prior_loss: true
 
   # About choosing the right Delta for Huber. 
-  # I found by trail and error that the upper thresholds I see in the 75 quantile are the right values.
-  # Do not choose those from the 99, 95 or even 90 percentile.
-  # Larger values increase the gap between train and validation loss.
-  # Also, with a large delta for the duration predictor loss, the model makes rare but egregious mistakes.
-  prior_loss_threshold: 0.08
-  duration_loss_threshold: 0.15
+  # Smaller prior loss values like 0.1 or below, combined with large LR like 1e-4 make the Encoder training unstable. 
+  # I get huge steps in the loss, which may correct after some 5-10 epochs or may not correct at all, shooting up and
+  # never dropping back. It must be because of the MAS error positive feedback loop: MAS depends on the Encoder to 
+  # find good alignment but the Encoder loss depends on MAS predicting good durations.
+
+  # 50% prior errors are below 0.04 after 500 epochs
+  # 75% prior errors are below 0.07 after 500 epochs
+  # 90% prior errors are below 0.12 after 500 epochs
+  # 95% prior errors are below 0.15 after 500 epochs
+  # 99% prior errors are below 0.24 after 500 epochs *
+  # All prior errors are below 1.3 after 500 epochs
+  # Changed from 0.12 to 0.23 at epoch 1689 as an experiment
+  # Changed to 0.07 at epoch 1904
+  prior_loss_threshold: 0.07
+  
+  # 50% duration errors are below 0.08 after 500 epochs
+  # 75% duration errors are below 0.14 after 500 epochs
+  # 90% duration errors are below 0.22 after 500 epochs
+  # 95% duration errors are below 0.29 after 500 epochs
+  # 99% duration errors are below 0.47 after 500 epochs *
+  # All duration errors are below 2.6 after 500 epochs
+  # Changed from 0.25 to 0.41 at epoch 1689 as an experiment
+  # Changed 0.14 at epoch 1904 
+  duration_loss_threshold: 0.14
   
   encoder:
     encoder_params:
@@ -73,6 +89,7 @@ model:
     channels: [384, 384]
     attention_head_dim: 64
     num_heads: 6
+    num_mid_blocks: 2 # could be worth increasing this for in v21
     dropout: 0.05
   
   cfm:
@@ -80,11 +97,12 @@ model:
 
   optimizer:
     # Schedule (480 steps / epoch):
-    #   0: 1e-4 / 3e-4
-    #   250: 8e-5 / 2e-4
-    #   450: 4e-5 / 1e-4
-    lr: 1e-4
-    weight_decay: 3e-4
+    #     0: 8e-5 / 2e-4
+    #  1129: 4e-5 / 1e-4
+    #  1449: 2e-5 / 5e-5
+    #  1898: 1e-5 / 2e-5
+    lr: 1e-5
+    weight_decay: 2e-5
     
 callbacks:
   model_checkpoint:
