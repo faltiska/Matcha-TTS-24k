@@ -340,13 +340,12 @@ class TextEncoder(nn.Module):
         # a good input into duration prediction. I wanted to try feeding the raw phoneme embeddings instead, but we'd 
         # lose what the Encoder attention layers added to x, so I decided to add an attention and an FFN layer to the 
         # duration predictor. 
-        # The predictor has 4 conv layers + attn + ffn + a final projection now, and is almost as good at predicting
-        # durations as it was in the original paper / git repo, with some very weird exceptions.
+        # The predictor has 4 conv layers + attn + ffn + a final projection now.
         # After a lot of painful tests I found the duration predictor made some very egregious mistakes, albeit rare.
         # Speaker 6 has a very distinct pattern and the test sequence you see in debug.sh results in pronounced 
-        # stuttering at the S in "time ssslipping" and the Fs in "fffar too fffrequent". Mosy of the durations are 
+        # stuttering at the S in "time ssslipping" and the Fs in "fffar too fffrequent". Most of the durations are 
         # just fine, and the MCD improved, but I cannot get rid of those mistake even after 800 epochs.
-        # As a result, I went back to using the Encoder output as input into Duration Prediction.
+        # As a result, I went back to using the Encoder output as input into Duration Prediction. That fixed the problem.
         # On the other hand, no matter what input I use, I must detach it.
         # I don't want the predictor pulling on anything Encoder related, because small prior changes destabilize 
         # MAS quickly. I have seen the prior loss spiking up, then never recovering because MAS tries to follow which
