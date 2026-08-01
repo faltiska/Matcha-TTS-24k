@@ -134,6 +134,27 @@ speaker_014 MCD   6.58 dB  6.37 dB  6.11 dB  6.08 dB  6.01 dB  5.96 dB  5.90 dB 
 Average MCD v2:   5.37 dB  5.10 dB  4.90 dB  4.81 dB  4.69 dB  4.60 dB  4.56 dB  4.55 dB  4.50 dB  4.45 dB  4.43 dB  4.42 dB  4.36 dB  
 Average MCD v1:   4.85 dB  4.59 dB  4.38 dB  4.28 dB  4.16 dB  4.08 dB  4.04 dB  4.02 dB  3.98 dB  3.93 dB  3.91 dB  3.89 dB  3.84 dB 
 
+V22       epoch   ...       459      719      869     904     1299     1313
+speaker_000 MCD   ...   4.69 dB  4.64 dB  4.65 dB  4.61 dB                                               
+speaker_001 MCD   ...   3.28 dB  3.22 dB  3.17 dB  3.17 dB                                               
+speaker_002 MCD   ...   3.62 dB  3.61 dB  3.53 dB  3.54 dB                                               
+speaker_003 MCD   ...   2.69 dB  2.71 dB  2.68 dB  2.64 dB                                               
+speaker_004 MCD   ...   4.55 dB  4.47 dB  4.47 dB  4.48 dB                                               
+speaker_005 MCD   ...   3.84 dB  3.77 dB  3.82 dB  3.73 dB                                               
+speaker_006 MCD   ...   4.03 dB  4.02 dB  3.99 dB  3.97 dB                                               
+speaker_007 MCD   ...   5.11 dB  5.12 dB  5.08 dB  5.11 dB                                               
+speaker_008 MCD   ...   5.00 dB  4.98 dB  4.95 dB  4.96 dB                                               
+speaker_009 MCD   ...   4.79 dB  4.74 dB  4.76 dB  4.74 dB                                               
+speaker_010 MCD   ...   4.12 dB  4.08 dB  4.10 dB  4.04 dB                                               
+speaker_011 MCD   ...   4.98 dB  5.00 dB  4.97 dB  4.99 dB                                               
+speaker_012 MCD   ...   4.12 dB  4.08 dB  4.08 dB  4.07 dB                                               
+speaker_013 MCD   ...   6.02 dB  5.99 dB  5.93 dB  5.97 dB                                               
+speaker_014 MCD   ...   5.79 dB  5.84 dB  5.81 dB  5.86 dB                                               
+--------------------------------------------------------------------------------
+Average MCD v2:   ...   4.44 dB  4.42 dB  4.40 dB  4.39 dB                                               
+Average MCD v1:   ...   3.92 dB  3.90 dB  3.89 dB  3.88 dB                                            
+
+
 """
 
 import warnings

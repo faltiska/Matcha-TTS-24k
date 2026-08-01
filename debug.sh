@@ -1,4 +1,4 @@
-CHECKPOINT=logs/train/v21/checkpoint_epoch=1109.ckpt
+CHECKPOINT=logs/train/v22/runs/2026-07-26_11-51-35/checkpoints/checkpoint_epoch=029.ckpt
 
 python -m matcha.cli \
 --checkpoint_path $CHECKPOINT \
