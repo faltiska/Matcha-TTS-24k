@@ -68,3 +68,15 @@ def downsample(mu_y_fine):
     mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
 
     return mu_y
+
+
+def triangular_downsample(mu_y_fine):
+    """
+    Halves the time resolution using a centered [1, 2, 1] / 4 triangular filter.
+    Replicated boundaries preserve the first and last mel frames instead of blending them with zero padding.
+    More accurate than the downsample() method above. I tested by comparing the output of both to the original mel.
+    Both MAE and MSE errors are lower when using this new method.
+    """
+    padded_mu_y_fine = F.pad(mu_y_fine, (1, 1), mode="replicate")
+    adjacent_frame_averages = F.avg_pool1d(padded_mu_y_fine, kernel_size=2, stride=1)
+    return F.avg_pool1d(adjacent_frame_averages, kernel_size=2, stride=2)

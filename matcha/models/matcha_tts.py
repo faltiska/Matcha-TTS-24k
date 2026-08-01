@@ -6,7 +6,7 @@ from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import sequence_mask, downsample, LOG_DURATION_OFFSET
+from matcha.utils.model import sequence_mask, triangular_downsample, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
@@ -161,7 +161,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        mu_y = downsample(mu_y_fine)
+        mu_y = triangular_downsample(mu_y_fine)
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
 

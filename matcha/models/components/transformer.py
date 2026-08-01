@@ -7,16 +7,17 @@ from diffusers.models.attention import (
     AdaLayerNormZero,
 )
 from diffusers.models.attention_processor import Attention
-from diffusers.models.lora import LoRACompatibleLinear
 from diffusers.utils.torch_utils import maybe_allow_in_graph
 
 
 class SnakeBeta(nn.Module):
     """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    It fuses the feed-forward input projection into the activation, so the periodic parameters are
+    per output channel and the activation runs on the last dimension.
     Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
+        - Input: (B, T, in_features)
+        - Output: (B, T, out_features)
     Parameters:
         - alpha - trainable parameter that controls frequency
         - beta - trainable parameter that controls magnitude
@@ -24,8 +25,8 @@ class SnakeBeta(nn.Module):
         - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
         https://arxiv.org/abs/2006.08195
     Examples:
-        a1 = SnakeBeta(256)
-        x = torch.randn(256)
+        a1 = SnakeBeta(256, 1024)
+        x = torch.randn(1, 100, 256)
         x = a1(x)
     """
 
@@ -42,7 +43,7 @@ class SnakeBeta(nn.Module):
         """
         super().__init__()
         self.in_features = out_features if isinstance(out_features, list) else [out_features]
-        self.proj = LoRACompatibleLinear(in_features, out_features)
+        self.proj = nn.Linear(in_features, out_features)
 
         # initialize alpha
         self.alpha_logscale = alpha_logscale
@@ -109,7 +110,7 @@ class FeedForward(nn.Module):
         # project dropout
         self.net.append(nn.Dropout(dropout))
         # project out
-        self.net.append(LoRACompatibleLinear(inner_dim, dim_out))
+        self.net.append(nn.Linear(inner_dim, dim_out))
         # FF as used in Vision Transformer, MLP-Mixer, etc. have a final dropout
         if final_dropout:
             self.net.append(nn.Dropout(dropout))
@@ -126,13 +127,16 @@ class TimestepConditionedTransformerBlock(nn.Module):
     Transformer block (self-attention + feed-forward) where both sub-layers are conditioned on
     the diffusion timestep embedding via Adaptive Layer Norm Zero (adaLN-Zero).
 
-    adaLN-Zero produces 6 modulation parameters from the timestep embedding:
-      - shift and scale applied to the hidden states before attention (via norm1)
+    A single adaLN-Zero projection (norm1) produces all 6 modulation parameters from the
+    timestep embedding:
+      - shift and scale applied to the hidden states before attention (inside norm1)
       - a gate that scales the attention output before the residual add
-      - shift, scale, and gate for the feed-forward sub-layer (applied via norm3)
+      - shift, scale, and gate for the feed-forward sub-layer, applied on top of norm3,
+        which is a plain non-affine layer norm
 
-    All gates are initialised to zero, so the block starts as a plain residual transformer
-    and the timestep conditioning is gradually activated during training.
+    Both gates are initialised to zero by zero_initialize_timestep_modulation, which the
+    decoder calls after its global weight initialisation. The block therefore starts as an
+    identity function and the timestep conditioning is gradually activated during training.
 
     Args:
         dim: Hidden dimension (must equal num_attention_heads * attention_head_dim).
@@ -148,6 +152,7 @@ class TimestepConditionedTransformerBlock(nn.Module):
         # adaLN-Zero norm for the self-attention sub-layer.
         # num_embeddings=None means it expects a pre-computed embedding via the `emb` kwarg,
         # rather than looking up a discrete timestep index.
+        # It also produces the shift, scale and gate used by the feed-forward sub-layer below.
         self.norm1 = AdaLayerNormZero(embedding_dim=dim, num_embeddings=None)
 
         # Projects the timestep embedding into the dimension adaLN-Zero expects.
@@ -160,14 +165,31 @@ class TimestepConditionedTransformerBlock(nn.Module):
             dropout=dropout,
         )
 
-        # adaLN-Zero norm for the feed-forward sub-layer.
-        self.norm3 = AdaLayerNormZero(embedding_dim=dim, num_embeddings=None)
+        # Plain norm for the feed-forward sub-layer. It carries no learnable affine of its own
+        # because the shift and scale are supplied by norm1's modulation parameters.
+        self.norm3 = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
 
         self.ff = FeedForward(dim, dropout=dropout)
+
+    def zero_initialize_timestep_modulation(self):
+        """
+        Restores adaLN-Zero behaviour after the decoder's global weight initialisation,
+        which applies Xavier initialisation to every linear layer including this one.
+        Zeroing the modulation projection makes both gates start at zero, so the block
+        starts as an identity function.
+        """
+        nn.init.zeros_(self.norm1.linear.weight)
+        nn.init.zeros_(self.norm1.linear.bias)
 
     def forward(self, hidden_states: torch.FloatTensor, attention_mask=None, timestep=None, **kwargs):
         # Project timestep embedding to match the block's hidden dimension.
         time_emb = self.time_proj(timestep)
+
+        # The decoder supplies a 0.0 / 1.0 float mask, which scaled dot product attention would treat
+        # as values to add to the attention logits, leaving padded frames visible to the valid ones.
+        # A boolean mask selects the path where padded keys are genuinely excluded.
+        if attention_mask is not None:
+            attention_mask = attention_mask.bool()
 
         # --- Self-attention sub-layer ---
         # norm1 returns normalised states + 4 modulation tensors (gate_msa used here, rest for FFN)
@@ -176,8 +198,7 @@ class TimestepConditionedTransformerBlock(nn.Module):
         hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_output
 
         # --- Feed-forward sub-layer ---
-        normed, gate_msa_ff, shift_mlp_ff, scale_mlp_ff, gate_mlp_ff = self.norm3(hidden_states, emb=time_emb)
-        normed = normed * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+        normed = self.norm3(hidden_states) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
         ff_output = self.ff(normed)
         hidden_states = hidden_states + gate_mlp.unsqueeze(1) * ff_output
 

@@ -14,8 +14,8 @@
 #  -o logs/train/v22/full_encoder_blank_decoder_and_duration_predictor.ckpt
 #
 # Then I will train starting from full_encoder_blank_decoder_and_duration_predictor.ckpt
-# I also decided to reduce the Duration Predictor size, which overfits significantly and to increase the 
-# Decoder size, I think there's room to improve there.  
+# I also decided to reduce the Duration Predictor size, which overfits significantly and to increase Decoder's 
+# num_mid_blocks from 2 to 4.
 
 run_name: v22
 
@@ -28,7 +28,7 @@ data:
 
 #ckpt_path: null
 #ckpt_path: logs/train/v22/full_encoder_blank_decoder_and_duration_predictor.ckpt
-ckpt_path: logs/train/v22/checkpoint_epoch=874.ckpt
+ckpt_path: logs/train/v22/runs/2026-08-01_10-06-38/checkpoints/checkpoint_epoch=024.ckpt
 
 model:
   spk_emb_dim: 128
@@ -63,25 +63,19 @@ model:
   
   decoder:
     # The rule for divisibility by num_heads applies to the second figure only
-    channels: [432, 432]
-    attention_head_dim: 72
+    channels: [384, 384]
+    attention_head_dim: 64
     num_heads: 6
     num_mid_blocks: 4
-    dropout: 0.05
+    dropout: 0.05 # I should try with a larget dropout
   
   cfm:
     use_mu_prior: true
 
   optimizer:
     # Epoch 0  
-    # lr: 8e-5
-    # weight_decay: 1e-4
-    # Epoch 774  
-    # lr: 4e-5
-    # weight_decay: 5e-5
-    # Epoch 874  
-    lr: 2e-5
-    weight_decay: 2e-5
+    lr: 8e-5
+    weight_decay: 1e-4
     
 callbacks:
   model_checkpoint:

@@ -358,6 +358,13 @@ class Decoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
+        # This pass must run after the loop above, not inside it: modules() yields a parent
+        # before its children, so the Xavier branch would overwrite the zeroed modulation
+        # projection when it later reaches the linear layer nested inside the block.
+        for m in self.modules():
+            if isinstance(m, TimestepConditionedTransformerBlock):
+                m.zero_initialize_timestep_modulation()
+
     def forward(self, x, mask, mu, t):
         """Forward pass of the UNet1DConditional model.
 
