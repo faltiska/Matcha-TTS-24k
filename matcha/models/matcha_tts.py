@@ -109,15 +109,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
 
-        # with torch.autocast(device_type="cuda", enabled=False):
-        #     # I want these 2 in fp32 because they are involved in matmul operations down below
-        #     # I think bf16 doesn't have enough precision to distinguish between two competing alignment paths whose 
-        #     # scores are very close, and MAS suddenly finds a different path at some point, after some 100 epochs.
-        #     # Prior loss shoots up by 1% which may be fine, but duration loss shoots up by 60%. 
-        #     # I always saw prior loss shooting up at som point, but the duration loos effect is new, probably related 
-        #     # to introducing the super-resolution mechanism. 
-        #     mu_x = mu_x.float()
-        #     y_fine = y_fine.float() 
         attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
 
         # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
