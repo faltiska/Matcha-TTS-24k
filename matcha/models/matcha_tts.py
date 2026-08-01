@@ -6,14 +6,13 @@ from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import sequence_mask, downsample
+from matcha.utils.model import sequence_mask, downsample, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
 log = logging.getLogger(__name__)
 
 LOG_2_PI = math.log(2 * math.pi)
-LOG_DURATION_OFFSET = 4
 
 
 class MatchaTTS(BaseLightningClass):  # 🍵

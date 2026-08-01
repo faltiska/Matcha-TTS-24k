@@ -3,10 +3,9 @@ import re
 import time
 import torch
 import torch.nn as nn
-from matcha.models.matcha_tts import LOG_DURATION_OFFSET
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import denormalize, downsample, fix_len_compatibility, generate_path, sequence_mask
+from matcha.utils.model import denormalize, downsample, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
 from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos

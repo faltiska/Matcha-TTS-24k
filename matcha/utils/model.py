@@ -3,6 +3,8 @@
 import torch
 import torch.nn.functional as F
 
+LOG_DURATION_OFFSET = 4
+
 
 def sequence_mask(length, max_length):
     x = torch.arange(max_length, dtype=length.dtype, device=length.device)
