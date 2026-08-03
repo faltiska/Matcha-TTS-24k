@@ -73,8 +73,8 @@ It uses Rotary Positional Embeddings (RoPE) applied to half of each head's embed
 
 The encoder output is fed into a Mel Predictor that outputs one mel frame per phoneme. The Mel Predictor is a simple 
 sequence of Conv → SiLU → Conv.
-The Encoder input is concatenated with speaker embeddings that encode the acoustic characteristics of each speaker.
-The Mel Predictor input is the Encoder output (which still has the embeddings).  
+The Encoder uses feature-wise linear modulation (FiLM) to incorporate speaker embeddings that encode the acoustic characteristics of each speaker. For every Transformer layer, the speaker embedding is projected into two scale-and-shift pairs: one is applied after the attention normalization and the other after the feed-forward normalization. The projection is initialized as a no-op (scale = 1, shift = 0), allowing speaker conditioning to be learned gradually.
+The Mel Predictor input is the speaker-conditioned Encoder output.
 The gradients from the Mel Predictor flow back into the Encoder too.
 
 The Encoder output is also fed into a Duration Predictor that guesses the duration per phoneme.
@@ -146,8 +146,8 @@ and the best one I found was trained on 24KHz mels, with 100 bins and a hop of 2
 faster than the amazing BigVGAN from nVidia.
 
 ### Speaker Embeddings
-Two separate embedding tables: one for the encoder, one for the duration predictor.
-The Encoder concatenates the speaker embedding to its input.
+Two separate embedding tables: one for the Encoder, one for the Duration Predictor.
+The Encoder applies its embedding through FiLM conditioning after both normalization steps in every Transformer layer.
 The Duration Predictor uses embeddings for FiLM conditioning.
 The Decoder has no speaker conditioning.
 
