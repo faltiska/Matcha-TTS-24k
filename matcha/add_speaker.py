@@ -1,11 +1,11 @@
 """
 Add a new speaker to a Matcha checkpoint using a trained Style Encoder.
 
-For each recording in the CSV, loads the precomputed mel, runs ASE and RSE to predict
-the speaker embeddings. Averages predictions across all recordings and writes the new
-speaker's embeddings into an expanded copy of the Matcha checkpoint.
+For each recording in the CSV, loads the precomputed fine-resolution mel and runs both Style Encoder
+networks to predict the two speaker embeddings. Averages each set of predictions across all recordings
+and writes the new speaker's embeddings into an expanded copy of the Matcha checkpoint.
 
-Mel files are expected at <csv_dir>/mels/<rel_base>.npy, as produced by precompute_mels.py.
+Mel files are expected at <csv_dir>/mels/<rel_base>.fine.npy, as produced by precompute_mels.py.
 
 Usage:
     python -m matcha.add_speaker \

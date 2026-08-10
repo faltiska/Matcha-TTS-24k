@@ -1,7 +1,6 @@
 # @package _global_
 
 defaults:
-  - _self_
   - data: corpus-24k
   - model: style_encoder/default
   - callbacks: default
@@ -10,22 +9,29 @@ defaults:
   - paths: default
   - extras: default
   - hydra: default
+  - _self_
 
 task_name: "train_style_encoder"
-run_name: style_encoder_v2
-tags: ["style_encoder"]
+run_name: style_encoder_v23
+tags: ["style_encoder", "v23"]
 
 train: True
 test: False
-limit_val_batches: 0
+limit_val_batches: 1.0
 
 data:
   num_workers: 2
 
 seed: 1234
 
-# Style encoder path from which to resume training 
-ckpt_path: logs/train_style_encoder/style_encoder_v2/runs/2026-05-24_10-28-30/checkpoints/checkpoint_epoch=144.ckpt
+# The previous 96-dimensional style encoder cannot be resumed for v23's 128-dimensional speaker embeddings.
+ckpt_path: null
+
+callbacks:
+  model_checkpoint:
+    monitor: val/style_loss
+    mode: min
+    save_on_train_epoch_end: false
 
 model:
   optimizer:
