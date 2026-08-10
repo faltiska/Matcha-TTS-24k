@@ -1,21 +1,17 @@
 # @package _global_
 #
-# Run with prior loss = false, but Encoder and Duration Predictor zeroed out.
-# I want to have them trained from scratch on the fully trained Encoder from v21 and see if that reduces
-# overfitting. Or if it is a good idea to train in 2 steps, first the Encoder alone, then the other 2 components 
-# with a frozen Encoder.
-#
-# I intend to run 1 epoch to get an empty ckpt with a Decoder and Duration Predictor.
-# Then I will use reset_decoder_and_duration.py to combine them with the fully trained encoder from v21.
-#
-#  python -m matcha.utils.reset_decoder_and_duration \
+# Introduced a triangular_downsample method, see model.py, which produces sharper mels.
+# Fixed 2 bugs in the Decoder, which makes it incompatible with the v21 checkpoint.
+# I had to use the reset tool to create a ckpt with a fully trained Encoder and Duration Predictor, but an empty Decoder:
+# python -m matcha.utils.reset_decoder \
 #  logs/train/v21-prod/checkpoint_epoch=1313-final.ckpt \
 #  logs/train/v22/checkpoint_epoch=004.ckpt \
-#  -o logs/train/v22/full_encoder_blank_decoder_and_duration_predictor.ckpt
-#
-# Then I will train starting from full_encoder_blank_decoder_and_duration_predictor.ckpt
-# I also decided to reduce the Duration Predictor size, which overfits significantly and to increase Decoder's 
-# num_mid_blocks from 2 to 4.
+#  -o logs/train/v22/empty-decoder.ckpt
+# The triangular downsample is more precise, the generated speech feels sharper and brighter.
+# But that makes it bring up all the Encoder errors, making them more audible.
+# The old one was blurring more, and the Decoder had an easier job closing the gap between the Encoder   
+# output and the ground truth.
+# I decided to go back to the old downsample for now.
 
 run_name: v22
 
@@ -27,12 +23,15 @@ data:
   max_frames_per_batch: 30000
 
 #ckpt_path: null
-#ckpt_path: logs/train/v22/full_encoder_blank_decoder_and_duration_predictor.ckpt
-ckpt_path: logs/train/v22/runs/2026-08-01_10-06-38/checkpoints/checkpoint_epoch=024.ckpt
+#ckpt_path: logs/train/v22/empty-decoder.ckpt
+ckpt_path: logs/train/v22/checkpoint_epoch=2214.ckpt
 
 model:
   spk_emb_dim: 128
   prior_loss: false
+  duration_loss: false
+  log_diagnostics: false
+  log_norms: false
 
   prior_loss_threshold: 0.96
   duration_loss_threshold: 0.96
@@ -55,27 +54,37 @@ model:
     
     duration_predictor_params:
       # head dim is filter_channels_dp / n_heads = 64, divisible by 8
-      filter_channels_dp: 256
-      n_heads: 4
-      n_layers: 3
+      # I should try with 256 / 4 / 3
+      filter_channels_dp: 384
+      n_heads: 6
+      n_layers: 4
       kernel_size: 3
-      p_dropout: 0.15
+      p_dropout: 0.1
   
   decoder:
     # The rule for divisibility by num_heads applies to the second figure only
     channels: [384, 384]
     attention_head_dim: 64
     num_heads: 6
-    num_mid_blocks: 4
-    dropout: 0.05 # I should try with a larget dropout
+    num_mid_blocks: 2
+    dropout: 0.05
   
   cfm:
     use_mu_prior: true
 
   optimizer:
-    # Epoch 0  
-    lr: 8e-5
-    weight_decay: 1e-4
+    # Epoch 0
+    # lr: 1e-4
+    # weight_decay: 2e-4
+    # Epoch 1184
+    # lr: 6e-5
+    # weight_decay: 1e-4
+    # Epoch 1724
+    # lr: 2e-5
+    # weight_decay: 5e-5
+    # Epoch 2214
+    lr: 1e-5
+    weight_decay: 2e-5
     
 callbacks:
   model_checkpoint:

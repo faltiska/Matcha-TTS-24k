@@ -60,10 +60,11 @@ def downsample(mu_y_fine):
     """
     Halves the time resolution of a mel spectrogram by averaging pairs of adjacent frames.
     If the original had a hop length of 128, the result will have a hop of 256.
+    The result is a bit blurred, great for speakers like Nicole or Aria. 
     """
     # Normally I could just do: 
     #   mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
-    # but it averages frames in pairs and does nto average cross pairs: 1+2, 3+4, 5+6, so on
+    # but it averages frames in pairs and does not average cross pairs: 1+2, 3+4, 5+6, so on
     # This does more averaging, 1+2+3, 3+4+5, 6+7+8, but it sounds great:
     mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
 
@@ -72,10 +73,13 @@ def downsample(mu_y_fine):
 
 def triangular_downsample(mu_y_fine):
     """
-    Halves the time resolution using a centered [1, 2, 1] / 4 triangular filter.
+    Halves the time resolution of a mel spectrogram using a centered [1, 2, 1] / 4 triangular filter.
+    If the original had a hop length of 128, the result will have a hop of 256.
     Replicated boundaries preserve the first and last mel frames instead of blending them with zero padding.
-    More accurate than the downsample() method above. I tested by comparing the output of both to the original mel.
-    Both MAE and MSE errors are lower when using this new method.
+    More accurate than the downsample() method above. 
+    I tested by calling this method with the fine res mel from my corpus then comparing the output to the standard mel 
+    from my corpus. Both MAE and MSE errors are lower when using this version.
+    The result is sharper, great for speakers like Kai or Brian.
     """
     padded_mu_y_fine = F.pad(mu_y_fine, (1, 1), mode="replicate")
     adjacent_frame_averages = F.avg_pool1d(padded_mu_y_fine, kernel_size=2, stride=1)
