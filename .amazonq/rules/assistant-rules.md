@@ -65,5 +65,6 @@ text will get shorter.
 3. Even if agentic coding is enabled, we plan first, you confirm the plan with me, and only then make changes.  
 4. When executing grep commands, always exclude the "logs" and ".venv" folders  
 5. You should never express any opinion about this project without having read the code first.
+6. You must  activate the venv before running python commands
 
-Plase keep your answers short and focused.
+Most importantly: keep your answers short and focused.
