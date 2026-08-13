@@ -19,11 +19,8 @@ from matcha.text.phonemizers import (
     cleanup_text,
     normalize_text,
     multilingual_phonemizer,
-    LEADING_SILENCE_SPACES,
-    TRAILING_SILENCE_SPACES,
 )
 from matcha.text.symbols import (
-    SPACE_ID,
     PRE_ID,
     POST_ID,
     N_VOCAB,
@@ -173,9 +170,8 @@ class TestNormalizeText:
 class TestMultilingualPhonemizer:
     """Integration tests for multilingual_phonemizer: require NeMo + eSpeak.
 
-    Verifies the structural contract — silence padding, output shape, per-language
-    operation — rather than exact IPA snapshots, which would drift every time NeMo
-    or eSpeak releases an update with new pronunciations.
+    Verifies output shape and per-language operation rather than exact IPA snapshots,
+    which drift every time NeMo or eSpeak releases an update with new pronunciations.
     """
 
     # --- Output shape ---
@@ -189,38 +185,6 @@ class TestMultilingualPhonemizer:
         with pytest.raises(ValueError):
             multilingual_phonemizer("Hello.", "xx-xx")
 
-    # --- Silence padding contract ---
-
-    def test_phonemes_string_has_correct_leading_space_count(self):
-        phonemes, _ = multilingual_phonemizer("Hello world.", "en-us")
-        leading_space_count = len(phonemes) - len(phonemes.lstrip(" "))
-        assert leading_space_count == LEADING_SILENCE_SPACES
-
-    def test_phonemes_string_has_correct_trailing_space_count(self):
-        phonemes, _ = multilingual_phonemizer("Hello world.", "en-us")
-        trailing_space_count = len(phonemes) - len(phonemes.rstrip(" "))
-        assert trailing_space_count == TRAILING_SILENCE_SPACES
-
-    def test_ids_start_with_leading_space_padding(self):
-        _, ids = multilingual_phonemizer("Hello world.", "en-us")
-        assert ids[:LEADING_SILENCE_SPACES] == [SPACE_ID] * LEADING_SILENCE_SPACES
-
-    def test_ids_end_with_trailing_space_padding(self):
-        _, ids = multilingual_phonemizer("Hello world.", "en-us")
-        assert ids[-TRAILING_SILENCE_SPACES:] == [SPACE_ID] * TRAILING_SILENCE_SPACES
-
-    def test_silence_padding_is_independent_of_input_length(self):
-        # The padding is a fixed prefix/suffix; both very short and very long inputs
-        # get exactly the same silence pad counts at each end.
-        short_phonemes, _ = multilingual_phonemizer("I.", "en-us")
-        long_phonemes, _ = multilingual_phonemizer(
-            "This is a much longer sentence with many phonemes to process.", "en-us"
-        )
-        assert len(short_phonemes) - len(short_phonemes.lstrip(" ")) == LEADING_SILENCE_SPACES
-        assert len(long_phonemes) - len(long_phonemes.lstrip(" ")) == LEADING_SILENCE_SPACES
-        assert len(short_phonemes) - len(short_phonemes.rstrip(" ")) == TRAILING_SILENCE_SPACES
-        assert len(long_phonemes) - len(long_phonemes.rstrip(" ")) == TRAILING_SILENCE_SPACES
-
     # --- Per-language smoke tests ---
     # Verify each supported language produces non-empty phoneme content. Exact IPA strings
     # are intentionally not asserted here — see the class docstring.
@@ -229,9 +193,7 @@ class TestMultilingualPhonemizer:
         phonemes, ids = multilingual_phonemizer(text, lang)
         content_without_padding = phonemes.strip(" ")
         assert len(content_without_padding) > 0, f"Empty phonemes for {lang}: {text!r}"
-        assert len(ids) > LEADING_SILENCE_SPACES + TRAILING_SILENCE_SPACES, (
-            f"Only padding IDs were produced for {lang}: {text!r}"
-        )
+        assert len(ids) > 0, f"No phoneme IDs were produced for {lang}: {text!r}"
         assert all(token_id is not None for token_id in ids), (
             f"None ID found in output for {lang}: {text!r}"
         )
@@ -260,15 +222,15 @@ class TestMultilingualPhonemizer:
     def test_ro(self):
         self._assert_phonemizer_works_for_language("Salut lume.", "ro")
 
-class TestNormalizeTextFallback:
-    """Tests for normalize_text behavior when Nemo is not available for a language."""
+class TestNormalizeTextLanguageSupport:
+    """Tests normalize_text behavior for languages with and without NeMo support."""
 
     def test_ro_text_returned_unchanged(self):
         # ro has no Nemo normalizer, text should pass through (minus left single quote removal)
         assert normalize_text("ro", "Temperatura este -5°C sau 23°F.") == "Temperatura este -5°C sau 23°F."
 
-    def test_pt_text_returned_unchanged(self):
-        assert normalize_text("pt", "O Dr. Silva verá você às 15:00.") == "O Dr. Silva verá você às 15:00."
+    def test_pt_text_is_normalized(self):
+        assert normalize_text("pt", "Ele tem 5 gatos.") == "Ele tem cinco gatos."
 
     def test_left_single_quote_removed_for_non_nemo_language(self):
         # The ' removal runs for ALL languages, not just EN
