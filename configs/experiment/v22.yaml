@@ -31,7 +31,6 @@ model:
   prior_loss: false
   duration_loss: false
   log_diagnostics: false
-  log_norms: false
 
   prior_loss_threshold: 0.96
   duration_loss_threshold: 0.96
