@@ -6,7 +6,7 @@ from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import sequence_mask, triangular_downsample, LOG_DURATION_OFFSET
+from matcha.utils.model import box_downsample, sequence_mask, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
@@ -28,6 +28,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         optimizer=None, # parameter required by BaseLightningClass
         scheduler=None, # parameter required by BaseLightningClass
         prior_loss=True,
+        duration_loss=True,
+        log_diagnostics=True,
         prior_loss_threshold=0.08,
         duration_loss_threshold=0.15,
         plot_mel_on_validation_end=False,
@@ -43,6 +45,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.spk_emb_dim = spk_emb_dim
         self.n_feats = n_feats
         self.prior_loss = prior_loss
+        self.duration_loss = duration_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
 
         # Fixed, per-mel-bin weight that biases the prior loss towards the frequency range where human
@@ -102,28 +105,49 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         speaker_embedding_enc = self.speaker_embeddings_enc(spks)
         speaker_embedding_dur = self.speaker_embeddings_dur(spks)
 
-        # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
-        mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
-        y_fine_max_length = y_fine.shape[-1]
+        # Skip building the backward graph for the encoder when prior_loss and duration_loss are set to false; it speeds
+        # up the forward pass.
+        with torch.set_grad_enabled(self.prior_loss or self.duration_loss):
+            # Get encoder_outputs `mu_x` and log-scaled token durations `logw`.
+            mu_x, logw, x_mask = self.encoder(x, x_lengths, speaker_embedding_enc, speaker_embedding_dur)
 
+        y_fine_max_length = y_fine.shape[-1]
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length).unsqueeze(1).to(x_mask)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
 
         attn_fine = self.find_alignment(attn_mask_fine, mu_x, y_fine)
 
-        # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
-        # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
-        # valid tokens, preventing attention to padding.
-        mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
-        
-        # At small x values, the log curve is very steep. 
-        # If MAS made an error finding 2 frames instead of 1, the log function jumps by a lot. 
-        # If duration from mas is 7 instead of 8, the log jumps much less.  
-        # Considering the phonemization scheme and the fact that we use 5.3ms frames, many durations found by MAS are 
-        # small numbers, and the log function reacts too much to them. By adding an offset, we move into the more linear
-        # part of the log curve. Inference subtracts the same value, so the real durations are unchanged.
-        # This helps the Duration Predictor learn, by a lot. 
-        logw_ = torch.log(LOG_DURATION_OFFSET + mas_durations.unsqueeze(1)) * x_mask
+        if self.duration_loss:
+            # torch.sum(attn.unsqueeze(1), -1)) says how many mel frames each text token aligns to
+            # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on 
+            # valid tokens, preventing attention to padding.
+            mas_durations = torch.sum(attn_fine.unsqueeze(1), -1).squeeze(1)  # (B, T_text)
+            
+            # x_mask has 1s for valid text tokens, 0s for padding positions, to ensure loss is only calculated on
+            # valid tokens, preventing attention to padding.
+
+            # At small x values, the log curve is very steep.
+            # If MAS made an error finding 2 frames instead of 1, the log function jumps by a lot.
+            # If duration from mas is 7 instead of 8, the log jumps much less.
+            # Considering the phonemization scheme and the fact that we use 5.3ms frames, many durations found by MAS are
+            # small numbers, and the log function reacts too much to them. By adding an offset, we move into the more linear
+            # part of the log curve. Inference subtracts the same value, so the real durations are unchanged.
+            # This helps the Duration Predictor learn, by a lot.
+            logw_ = torch.log(LOG_DURATION_OFFSET + mas_durations.unsqueeze(1)) * x_mask
+
+            # logw - log-scaled durations from the Duration Predictor
+            # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
+            threshold = self.hparams.duration_loss_threshold
+            dur_loss = F.huber_loss(logw, logw_, delta=threshold, reduction='sum') / torch.sum(x_mask)
+            # Original code was pure MSE:
+            # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_mask)
+            # but it leads to a huge gap between the validation and the train losses.
+
+            if self.hparams.log_diagnostics:
+                with torch.no_grad():
+                    self._log_diagnostics(logw, logw_, x_mask, self.METRIC_DURATION, is_training_step)
+        else:
+            dur_loss = 0
 
         # Original code was: 
         #   mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
@@ -131,17 +155,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # but that can be simplified as:
         #   mu_y = torch.matmul(mu_x, attn.squeeze(1))
         mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
-
-        # logw - log-scaled durations from the Duration Predictor
-        # logw_ - log-scaled durations calculated by the Monotonic Alignment Search algorithm.
-        threshold = self.hparams.duration_loss_threshold
-        dur_loss = F.huber_loss(logw, logw_, delta=threshold, reduction='sum') / torch.sum(x_mask)
-        # Original code was pure MSE: 
-        # dur_loss = torch.sum((logw - logw_) ** 2) / torch.sum(x_mask)
-        # but it leads to a huge gap between the validation and the train losses.         
-
-        with torch.no_grad():
-            self._log_diagnostics(logw, logw_, x_mask, self.METRIC_DURATION, is_training_step)
 
         if self.prior_loss:
             # Original code was: 
@@ -156,12 +169,14 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             prior_loss = F.huber_loss(y_fine_weighted, mu_y_fine_weighted, delta=threshold, reduction='sum')
             prior_loss = prior_loss / torch.sum(y_fine_mask)
 
-            with torch.no_grad():
-                self._log_diagnostics(y_fine, mu_y_fine, y_fine_mask.expand_as(y_fine), self.METRIC_PRIOR, is_training_step)
+            if self.hparams.log_diagnostics:
+                with torch.no_grad():
+                    self._log_diagnostics(y_fine, mu_y_fine, y_fine_mask.expand_as(y_fine), self.METRIC_PRIOR, is_training_step)
         else:
             prior_loss = 0
 
-        mu_y = triangular_downsample(mu_y_fine)
+        # noinspection PyCallingNonCallable
+        mu_y = box_downsample(mu_y_fine)
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
 

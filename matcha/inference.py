@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import denormalize, triangular_downsample, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
+from matcha.utils.model import denormalize, box_downsample, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
 from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
@@ -19,12 +19,12 @@ VOICES = [
     {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction": 0.99},
     {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction": 0.97},
     {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction": 0.98},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction": 1.00},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction": 1.01},
     {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction": 0.97},
     {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",     "scale_correction": 1.00},
     {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction": 0.98},
     {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction": 0.97},
-    {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction": 0.97},
+    {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction": 0.98},
     {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction": 0.99},
     {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction": 0.98},
     {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction": 1.00},
@@ -156,15 +156,16 @@ class MatchaTTSInfer(nn.Module):
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)
         attn_fine = generate_path(phoneme_durations, attn_mask_fine.squeeze(1)).unsqueeze(1)
 
-        # Matmul in bf16 causes some precision problems in training, so I thought I would use fp32 here too
-        with torch.autocast(device_type="cuda", enabled=False):
-            # Original code was 
-            # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
-            # mu_y = mu_y.transpose(1, 2)
-            # but that can be simplified as:
-            mu_y_fine = torch.matmul(mu_x.float(), attn_fine.float().squeeze(1))
+        # Original code was 
+        # mu_y = torch.matmul(attn.squeeze(1).transpose(1, 2), mu_x.transpose(1, 2))
+        # mu_y = mu_y.transpose(1, 2)
+        # but that can be simplified as:
+        mu_y_fine = torch.matmul(mu_x, attn_fine.squeeze(1))
 
-        mu_y = triangular_downsample(mu_y_fine)
+        # The assembled mel is the ODE solver's starting point, and the solver takes its state dtype from it, so
+        # keeping it in fp32 keeps the whole integration in fp32 while the Decoder itself still runs under autocast.
+        # It is also what the vocoder expects, as it runs outside the autocast region.
+        mu_y = box_downsample(mu_y_fine).float()
 
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)

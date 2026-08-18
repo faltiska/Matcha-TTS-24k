@@ -4,13 +4,38 @@ defaults:
 
 _target_: matcha.models.style_encoder.StyleEncoderLightningModule
 
-# Path to a trained Matcha checkpoint
-matcha_checkpoint_path: logs/train/v19-prod/checkpoint_epoch=1281.ckpt
+# Path to the Matcha checkpoint whose speaker conditioning will be reproduced.
+matcha_checkpoint_path: logs/train/v21-prod/checkpoint_epoch=1313-final.ckpt
 
-# Must match the Matcha checkpoint's data config
-n_feats: 100
-spk_emb_dim: 96
+# n_feats and spk_emb_dim are inferred from the Matcha checkpoint so the Style Encoder
+# cannot silently diverge from the model it is meant to condition.
 
-# StyleEncoder architecture
+# StyleEncoder architecture. The same width and depth are used for both of its two independent networks,
+# one predicting the encoder embedding and one the duration predictor embedding.
 ase_hidden_channels: 256
 ase_n_layers: 4
+
+# Huber transition points: the error size above which each loss switches from quadratic to linear,
+# so larger errors stop dominating the gradient.
+#
+# Tuning criterion, the same one used for the main model's prior_loss_threshold and
+# duration_loss_threshold: set the threshold to the largest absolute error still present at the end of
+# training, which is the error_quantiles/*_p100 chart. Placed there, the linear region only ever engages
+# early in training while errors are still large, and the loss is purely quadratic once the model has
+# converged. Lower values were tested on the main model and all performed worse.
+#
+# The numbers below cannot simply be copied from the main model, for two reasons:
+#  - Different quantity. The main model measures its predicted mel against a ground truth mel. These two
+#    losses measure only the drift caused by swapping a real speaker embedding for a predicted one, which
+#    is far smaller. In the v22 run the prior error reached p90 = 0.12, while the Style Encoder's converged
+#    acoustic error reached only p90 = 0.0039.
+#  - Different loss function. The main model calls torch huber_loss(delta), this module calls
+#    smooth_l1_loss(beta), and huber_loss(delta=d) equals d * smooth_l1_loss(beta=d). The same number
+#    therefore means a different loss scale in each place.
+#
+# The values below are the ones the Style Encoder was previously trained with, kept unchanged because the
+# earlier run only recorded percentiles up to p90 (acoustic p90 = 0.0039, rhythm p90 = 0.0039), so there is
+# no converged maximum to tune against yet. p100 is now logged, so read it off the next run and raise both
+# thresholds to the converged maximum.
+acoustic_loss_threshold: 0.002
+rhythm_loss_threshold: 0.004

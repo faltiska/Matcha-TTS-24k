@@ -60,9 +60,9 @@ def effective_embedding_error(embedding_error, speaker_projection):
 
     A speaker embedding reaches the main model through exactly one linear layer, which turns it into the
     scale and shift values applied inside the encoder or the duration predictor. That layer responds
-    strongly to a handful of embedding directions and barely at all to the rest. In the v23 checkpoint,
+    strongly to a handful of embedding directions and barely at all to the rest. In a v22 checkpoint,
     113 of the duration predictor's 128 input directions carry under 5% of the effect of the strongest
-    one, and 101 of 128 do so in the text encoder.
+    one, and 101 of 128 do so in the text encoder. We should measure the effect again on a production grade ckpt.
 
     Measuring the plain distance between two embeddings therefore overstates any error sitting in a
     direction the model ignores, and a large plain distance can leave the model's output untouched. That

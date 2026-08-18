@@ -23,7 +23,7 @@ torch._inductor.config.fx_graph_cache = True
 from matcha.inference import (load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, 
                               DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, VOICES)
 
-CHECKPOINT_PATH = "logs/train/v21/checkpoint_epoch=1313-final.ckpt"
+CHECKPOINT_PATH = "logs/train/v22/runs/2026-08-17_19-17-36/checkpoints/checkpoint_epoch=169.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None
@@ -38,6 +38,7 @@ LENGTH_SCALE_MAX      = 2.0   # slowest (client speed=0.1)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model, vocoder
+
     print(f"[🍵] Loading model from {CHECKPOINT_PATH}...")
     model = load_matcha("custom_model", CHECKPOINT_PATH)
     model.decoder.solver = DEFAULT_ODE_SOLVER

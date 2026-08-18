@@ -1,3 +1,4 @@
+import math
 from abc import ABC
 
 import torch
@@ -7,6 +8,26 @@ from torchdiffeq import odeint
 from matcha.models.components.decoder import Decoder
 from .ode_solver_wrapper import OdeSolverWrapper
 
+# Controls the distribution of training timesteps along the noise-to-mel trajectory, so the model spends 
+# more time training in the middle of the trajectory.
+# The velocity target is hardest to predict in the middle of the trajectory, because near either end
+# the best possible prediction is simply the mean of the noise or the mean of the target mels.
+# This  logit-normal density, was described by Esser et al. 2024 in "Scaling Rectified Flow Transformers".
+# They found to be the best of 61 formulations, both overall and when sampling with as few steps as I use in inference.
+# Location 0.0 keeps the density symmetric around the middle, so the direction in which the
+# trajectory runs does not matter. Negative values move sampling towards the start, positive values towards destination.
+TIMESTEP_SAMPLING_LOCATION = 0.0
+# Larger scale widens the density towards both ends, and a smaller scale # concentrates it more tightly in the middle. 
+# Scale: 1.0 middle focused, 1.4 wider hump, 1.8 as uniform as it gets with this formula.
+TIMESTEP_SAMPLING_SCALE = 1.4
+
+# Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
+# trajectory and longer ones near the destination. This was described in "Sway Sampling", by Chen et al. 2024, F5-TTS.
+# The coarse structure of the speech is formed during the early steps, so giving the solver more
+# resolution there was reported to improve quality at a low number of steps, at no extra cost.
+# 0.0 produces an evenly spaced grid. Negative values move steps towards the noise end,
+# positive values towards the mel end. The mapping stays monotonic between -1.0 and 2 / (pi - 2).
+SWAY_SAMPLING_COEFFICIENT = -1.0
 
 class BASECFM(torch.nn.Module, ABC):
     def __init__(
@@ -54,8 +75,28 @@ class BASECFM(torch.nn.Module, ABC):
         else:
             z = torch.randn_like(mu, generator=generator)
         
-        t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
+        t_span = self.build_step_grid(n_timesteps, mu.device)
         return self.solve(z, t_span=t_span, mu=mu, mask=mask)
+
+    def build_step_grid(self, n_timesteps, device):
+        """Builds the sequence of trajectory positions that delimit the ODE solver's steps.
+
+        Both ends are always 0 and 1; only the spacing in between changes.
+        See SWAY_SAMPLING_COEFFICIENT for what the spacing does and why.
+
+        Args:
+            n_timesteps (int): number of solver steps, so the grid holds n_timesteps + 1 positions
+            device (torch.device): device the grid is built on
+        Returns:
+            step_grid: increasing positions from 0 to 1
+                shape: (n_timesteps + 1,)
+        """
+        evenly_spaced_grid = torch.linspace(0, 1, n_timesteps + 1, device=device)
+        if SWAY_SAMPLING_COEFFICIENT == 0.0:
+            return evenly_spaced_grid
+
+        sway_offset = torch.cos(0.5 * math.pi * evenly_spaced_grid) - 1.0 + evenly_spaced_grid
+        return evenly_spaced_grid + SWAY_SAMPLING_COEFFICIENT * sway_offset
 
     def solve(self, x, t_span, mu, mask):
         ode_func = OdeSolverWrapper(self.estimator, mask, mu)
@@ -80,8 +121,9 @@ class BASECFM(torch.nn.Module, ABC):
         """
         b = mu.shape[0]
 
-        # random timestep
-        t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
+        # Random timestep, concentrated in the middle of the trajectory (see the constants on top)
+        normal_sample = torch.randn([b, 1, 1], device=mu.device, dtype=mu.dtype)
+        t = torch.sigmoid(normal_sample * TIMESTEP_SAMPLING_SCALE + TIMESTEP_SAMPLING_LOCATION)
         # Start from mu + noise or pure noise depending on use_mu_prior (see cfm yaml), must match inference.
         if self.use_mu_prior:
             x0 = mu + torch.randn_like(x1)

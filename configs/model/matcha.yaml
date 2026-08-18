@@ -18,5 +18,7 @@ f_min: ${data.f_min}
 f_max: ${data.f_max}
 data_statistics: ${data.data_statistics}
 prior_loss: true
+duration_loss: true
+log_diagnostics: true
 prior_loss_threshold: 0.08
 duration_loss_threshold: 0.15

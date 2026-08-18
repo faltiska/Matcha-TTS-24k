@@ -56,31 +56,19 @@ def denormalize(data, mean, std):
     return data * std + mean
 
 
-def downsample(mu_y_fine):
+def box_downsample(mu_y_fine):
     """
-    Halves the time resolution of a mel spectrogram by averaging pairs of adjacent frames.
+    Halves the time resolution of a mel spectrogram using an [1, 1, 1] / 3 filter.
     If the original had a hop length of 128, the result will have a hop of 256.
-    The result is a bit blurred, great for speakers like Nicole or Aria. 
-    """
-    # Normally I could just do: 
-    #   mu_y = F.avg_pool1d(mu_y_fine, kernel_size=2, stride=2)
-    # but it averages frames in pairs and does not average cross pairs: 1+2, 3+4, 5+6, so on
-    # This does more averaging, 1+2+3, 3+4+5, 6+7+8, but it sounds great:
-    mu_y = F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
 
-    return mu_y
+    The result is a bit blurred, and that is on purpose. Since both mel resolutions are extracted with
+    the same analysis window, mu_y_fine[:, :, ::2] would already reproduce the standard mel exactly, so
+    the smoothing is the only thing this function actually adds. The Decoder learns a correction from
+    this mel toward the ground truth, and it copes better with a large consistent error than with a
+    smaller one that varies frame to frame. A sharper [1, 2, 1] / 4 filter was tried in v22 and measured
+    worse. See documentation/components.md, Mel Analysis Window.
 
-
-def triangular_downsample(mu_y_fine):
+    avg_pool1d counts the zero padding, so the first and last frames average against silence, which
+    is fine because every recording starts and ends with silence.
     """
-    Halves the time resolution of a mel spectrogram using a centered [1, 2, 1] / 4 triangular filter.
-    If the original had a hop length of 128, the result will have a hop of 256.
-    Replicated boundaries preserve the first and last mel frames instead of blending them with zero padding.
-    More accurate than the downsample() method above. 
-    I tested by calling this method with the fine res mel from my corpus then comparing the output to the standard mel 
-    from my corpus. Both MAE and MSE errors are lower when using this version.
-    The result is sharper, great for speakers like Kai or Brian.
-    """
-    padded_mu_y_fine = F.pad(mu_y_fine, (1, 1), mode="replicate")
-    adjacent_frame_averages = F.avg_pool1d(padded_mu_y_fine, kernel_size=2, stride=1)
-    return F.avg_pool1d(adjacent_frame_averages, kernel_size=2, stride=2)
+    return F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)

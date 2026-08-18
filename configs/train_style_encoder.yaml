@@ -12,8 +12,8 @@ defaults:
   - _self_
 
 task_name: "train_style_encoder"
-run_name: style_encoder_v23
-tags: ["style_encoder", "v23"]
+run_name: style_encoder_v22
+tags: ["style_encoder", "v22"]
 
 train: True
 test: False
@@ -24,7 +24,7 @@ data:
 
 seed: 1234
 
-# The previous 96-dimensional style encoder cannot be resumed for v23's 128-dimensional speaker embeddings.
+# The previous 96-dimensional style encoder cannot be resumed for v21's 128-dimensional speaker embeddings.
 ckpt_path: null
 
 callbacks:
