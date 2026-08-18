@@ -63,6 +63,8 @@ elongated unnaturally.
 
 To fix this, I am running the Encoder and MAS in a higher resolution. 
 I am using 24KHz / hop 128 input mel spectrograms, that have frames of 5.3ms.
+The finer resolution buys MAS smaller duration steps, not more acoustic detail, since both resolutions are extracted
+with the same analysis window. See the Mel Analysis Window section below.
 
 ### Text Encoder
 A small stack of convolutions with SiLU activation, Norm and Dropout, called a pre-net, takes phonemes and processes 
@@ -135,7 +137,9 @@ It has some clicks and pops. The Decoder's job is to convert the jagged Encoder 
 
 At this point, we can no longer work in fine resolution. The Encoder training would be too slow, and its output would not
 match what the Vocoder expects. I need to go back to standard resolution at this point. I'm downsampling the assembled mel
-that had 5.3ms frames into a spectrogram with 10.6ms frames by averaging adjacent frames (avg_pool1d with a kernel of 3).
+that had 5.3ms frames into a spectrogram with 10.6ms frames with `box_downsample`, an [1, 1, 1] / 3 box filter
+(avg_pool1d with a kernel of 3 and a stride of 2). It averages across frame pairs rather than within them, so it smooths
+as well as decimates. That smoothing is deliberate, see the Mel Analysis Window section below.
 
 As such, the Decoder needs a different set of ground truth mels for computing losses, mels generated with a hop of 256, 
 not the fine resolution mels used as to calculate the Encoder loss.
@@ -144,6 +148,76 @@ not the fine resolution mels used as to calculate the Encoder loss.
 I needed a high quality vocoder that is not horribly slow. The only one I could find that meets both criteria is Vocos
 and the best one I found was trained on 24KHz mels, with 100 bins and a hop of 256. It is almost as good, but 50 times
 faster than the amazing BigVGAN from nVidia.
+
+### Mel Analysis Window
+Both mel spectrogram variants, the standard resolution one with a hop of 256 samples and the fine resolution one with
+a hop of 128 samples, are extracted with the same 1024 sample analysis window, which is 42.7ms of audio at 24KHz.
+Only the hop differs. Two consecutive fine resolution frames therefore share 87.5% of their samples.
+
+A measurable consequence is that the extra frames of the fine resolution mel carry almost no new acoustic detail:
+the in-between frames are 78.5% predictable by simply interpolating between their neighbours. This is not a defect.
+It confirms what the fine resolution is for. It buys MAS finer *granularity*, durations in steps of 5.3ms instead of
+10.6ms, so a short consonant can be given 3 fine frames instead of being forced up to a multiple of 10.6ms. That is
+what fixed the skipped phoneme problem described in the Phonemizer section, and it has nothing to do with the window
+length.
+
+#### Why a shorter window looked attractive
+A 1024 sample window smears every frame over 42.7ms of audio. A 15 - 20ms consonant is therefore spread across a
+window several times longer than the sound itself, which blurs exactly the boundaries MAS has to find. Shortening the
+window would make the extra fine resolution frames genuinely informative and give MAS a sharper view of the audio.
+
+#### Why we did not do it
+Frequency resolution is inversely proportional to window length. A 1024 sample window at 24KHz resolves about 23.4Hz
+per bin; a 640 sample window resolves only about 37.5Hz. Voiced speech is a comb of harmonics spaced at the speaker's
+fundamental frequency, roughly 85 - 180Hz for male voices and 165 - 255Hz for female ones, and the window must span
+several periods of that fundamental to separate one harmonic from the next. At 1024 samples the window covers about
+four periods of a 100Hz voice; at 640 samples it covers under three, and the harmonic comb starts to smear into a
+single broad hump.
+
+That comb is where pitch and speaker identity live, and the Decoder has no speaker embedding of its own. The
+assembled mel it receives is its only source of speaker information. Losing harmonic structure there means losing
+voice identity, which is a much worse trade than a slightly blurred consonant boundary.
+
+Measured on the corpus: the efficient exchange rate runs out at around a 640 sample window, where roughly 11% of
+pitch fidelity is unrecoverable. This is an information limit rather than a modelling limit, because a linear fit and
+a small neural network both plateau near 89%.
+
+The risk did not fall where expected. The low pitched speakers were unaffected and scored above the corpus mean.
+It fell on the two speakers with the least harmonic structure to begin with: the whispering speaker at 66%, and
+speaker 11 (Lewis) at 70%. For the whispering speaker the failure mode was specific — the shorter window produced
+80% of her harmonic ripple magnitude while matching only 66% of it, meaning it invents harmonic structure in the
+wrong places.
+
+The idea was dropped because it targets MAS, and MAS performs well at the current window. Certain cost, speculative
+gain.
+
+#### The standard resolution mel is exactly every other fine resolution frame
+Because both variants share the 1024 sample window and only the hop differs, the standard resolution frames land on
+the same sample positions as the even numbered fine resolution frames. Taking every other fine frame reproduces the
+standard mel exactly, measured as zero error across the corpus. This question is closed, there is nothing to recover
+by filtering.
+
+It follows that ranking the downsampling filters in `matcha/utils/model.py` by their error against the standard mel
+only ranks them by how little they filter, since doing nothing scores zero. That error is not a quality criterion.
+The filters differ in how much they smooth the assembled mel, and nothing else, so the choice is a preference about
+smoothing rather than about correctness. Training with a sharp filter while running inference with a blurrier one
+leaves the Decoder output deliberately under sharpened, which is a softening knob and not a fix for an artifact.
+
+#### Why we smooth on purpose
+Exactness is available and we do not want it. `box_downsample` uses an [1, 1, 1] / 3 filter, so each standard frame is
+mixed with the two fine frames on either side of it, and the result is measurably flatter than the true standard mel.
+This is the better input for this Decoder, and the reason is the Decoder's job rather than the mel's accuracy.
+Because use_mu_prior is true, the Decoder does not map noise to speech, it learns a correction from the assembled mel
+toward the ground truth. A correction learner absorbs a consistent bias almost for free, because it can learn one rule
+and apply it everywhere. It handles an error that varies frame to frame much worse, because it first has to work out
+which case it is in. The box filter's error is large but consistent in direction and magnitude; a sharper filter's
+error is smaller on average but depends on how fast the mel is moving locally.
+This was tested rather than assumed. A sharper [1, 2, 1] / 4 triangular filter was trained for 2000 epochs in v22 as
+the only change, and it came out worse both subjectively and by MCD, with harshness concentrated exactly where the mel
+changes fastest. That filter has been deleted. See the Downsampler mechanism section in IMPROVEMENT_IDEAS.md for the
+full account and the ideas it produced.
+Both training and inference use the same filter, so the Decoder is never asked to correct a mel it did not see in
+training.
 
 ### Speaker Embeddings
 Two separate embedding tables: one for the Encoder, one for the Duration Predictor.

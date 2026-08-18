@@ -144,37 +144,6 @@ The target checkpoint is backed up to `<target>.bak` before modification.
 python -m matcha.utils.transplant_spk_emb <target.ckpt> <source.ckpt> <spk_id>
 ```
 
-## Improvements
-
-Compared to the original MatchaTTS, I did the following:
-- Switched to Vocos using a model trained on 24KHz audio
-  All other vocoders were trained on 22KHz audio files, and should have had an f_max of 11KHz
-  but f_max was set to 8KHz for all of them.  
-- Increased the decoder model capacity
-  I hope it will make room for the extra frequencies that came with using Vocos 24K.
-- Increased the spk_emb_dim; I hope it will capture the differences between speakers better
-- Switched to an AdamW optimizer
-- Implemented a mel precomputation script
-  Originally, the mels were computed during training, on the fly.
-  This speeds up training a bit
-- Switched to the torch built in ODE solver 
-  No need to maintain our own version, since the torch one supports all algorithms. 
-- Switched to the Super-MAS monotonic_align implementation (you can find it in GitHub)
-- Found a series of other performance improvements
-- Implemented a Dynamic Data Loader that reduces the VRAM wasted on padding a lot
-- Made changes to get the model to compile for training, it speeds up training by 20%  
-- Made changes to get the model to compile for inference, it improves synthesis time 3x
-- Made the Duration Predictor model smarter; changed the input to the Predictor to be just 
-the phoneme embeddings (not the Encoder output)
-- Introduced a revolutionary method of phonemization, which helped the Encoder represent coarticulation 
-sounds much, much better than the blunt "separators everywhere" scheme. 
-- Introduced a revolutionary method of running the Encoder and MAS in high resolution
-while the Decoder and the vocoder still run at the normal resolution; this improved MAS a LOT.
-- Changed the loss computation function for prior and duration to Huber which reduced the 
-train-to-validate gap; added an offset to the durations before duration loss computation to
-shift the value into the more linear part of the log graph, which improved Duration Predictor's 
-ability to learn by a LOT.
-
 # PyTorch stuff
 
 When compiling models, pytorch stores some information to be reused at later runs.
@@ -213,8 +182,9 @@ uv cache clean && uv cache prune
 
 To keep training running even if you close the terminal window, use `tmux`:
 ```bash
+cd ~/projects/matcha-tts/
 tmux new -s train
-python -m matcha.train +experiment=v21
+python -m matcha.train +experiment=v22
 ```
 
 Detach from the session at any time with `Ctrl+B, D`. The process keeps running in the background.

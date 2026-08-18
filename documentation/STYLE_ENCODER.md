@@ -5,7 +5,7 @@
 The Style Encoder lets you add a new voice to a trained Matcha-TTS model from a small set of recordings
 (~50 Harvard Sentences), without retraining the full model.
 
-Matcha-TTS v23 represents each speaker as two learned 128-number vectors:
+Matcha-TTS v22 represents each speaker as two learned 128-number vectors:
 - one drives the text encoder, shaping how phonemes are mapped to mel frames
 - one drives the duration predictor
 
@@ -100,7 +100,7 @@ learn a vector biased to cancel an acoustic error rather than one that describes
 compensation goes stale as soon as the acoustic network improves, and it does not survive the independent
 averaging that adding a new speaker performs across recordings.
 
-Measured on the v23 checkpoint, at the acoustic accuracy the previous training run reached, this shifted
+Measured on the v22 checkpoint, at the acoustic accuracy the previous training run reached, this shifted
 durations by about as much as the genuine rhythm error itself. Roughly half of what the rhythm loss measured
 was not rhythm error.
 
@@ -127,11 +127,11 @@ one, by design: the Style Encoder learns only from the effect a vector has on th
 Those two distance charts do **not** report a plain distance, because a plain distance misleads. A speaker
 vector reaches the main model through exactly one layer, which turns its 128 numbers into the scale and shift
 values applied inside the encoder or the duration predictor. That layer reacts strongly to a handful of
-directions and barely at all to the rest: in the v23 checkpoint, 113 of the duration predictor's 128 input
+directions and barely at all to the rest: in the v22 checkpoint, 113 of the duration predictor's 128 input
 directions carry under 5 percent of the effect of the strongest one, and 101 of 128 do so in the text encoder.
 
 So a predicted vector can sit far from the stored one and still produce identical output, because the
-difference lies where the model does not look. Measured on v23, an error of plain size 0.2311 changes
+difference lies where the model does not look. Measured on v22, an error of plain size 0.2311 changes
 durations by under 0.0015 when it lies in an ignored direction and by 0.4069 when it lies in an influential
 one. A plain distance reports 0.2311 for both.
 
@@ -153,7 +153,7 @@ Comparing effects does that weighting for free.
 
 One consequence to keep in mind: as the main model trains, magnitude migrates out of the speaker embedding
 tables and into these projection layers, so the same vector error causes a larger effect over time. Measured
-across 235 epochs of v23, the duration side became 90 percent more sensitive and the encoder side 29 percent.
+across 235 epochs of v22, the duration side became 90 percent more sensitive and the encoder side 29 percent.
 A later main-model checkpoint is a harder target, and the two yardstick values above grow with it.
 
 ---
@@ -191,7 +191,7 @@ are still large, and the loss is purely quadratic once the model has converged.
 
 The values cannot be copied from the main model, for two reasons. The main model measures its predicted mel
 against a ground truth mel, while these losses measure only the drift caused by swapping a real vector for a
-predicted one, which is far smaller — in the v23 run the prior error reached p90 = 0.12, while the Style
+predicted one, which is far smaller — in the v22 run the prior error reached p90 = 0.12, while the Style
 Encoder's converged acoustic error reached p90 = 0.0039. And the two use different loss functions:
 `huber_loss(delta=d)` equals `d * smooth_l1_loss(beta=d)`, so the same number means a different loss scale in
 each place.
@@ -210,7 +210,7 @@ python -m matcha.train_style_encoder
 ```
 
 Note that existing Style Encoder checkpoints cannot be resumed. The two-network split renamed every
-parameter, and earlier checkpoints also produce 96-number vectors where v23 expects 128. `ckpt_path` is
+parameter, and earlier checkpoints also produce 96-number vectors where v22 expects 128. `ckpt_path` is
 `null` for that reason.
 
 ---
@@ -233,7 +233,7 @@ alongside the normal ones as `<name>.fine.npy`.
 source .venv/bin/activate
 python -m matcha.add_speaker \
   --style-encoder-ckpt <trained-style-encoder.ckpt> \
-  --matcha-ckpt logs/train/v23/checkpoint_epoch=234.ckpt \
+  --matcha-ckpt logs/train/v22/checkpoint_epoch=234.ckpt \
   --csv data/extra-speakers-24k/train.csv \
   --output checkpoint_with_new_speaker.ckpt
 ```

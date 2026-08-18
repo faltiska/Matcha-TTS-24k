@@ -45,6 +45,12 @@ Use your judgment.
 7. Do not nest multiple function calls or chain multiple values into a single expression when it hurts readability. 
 Assign intermediate results to named variables instead.
 
+8. Comments and docstrings say why the code exists. Write them for someone who never saw the code before.
+   - Give the fact the reader is missing, name what it applies to, then say what the code does about it.
+   - Use short, plain sentences. No fluff, no hedging, no words that carry no information.
+   - Write about the code as it is now. Never mention past bugs, older versions or what the code used to do.
+   - Put a comment on the line whose logic it justifies, not on a nearby setup line.
+
 # Keep performance in mind at all times
 When writing code, think very carefully about performance:
 - Think about alternate ways of writing code and choose the variant that executes faster
