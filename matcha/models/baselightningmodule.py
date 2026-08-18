@@ -26,7 +26,14 @@ class BaseLightningClass(LightningModule, ABC):
         self.register_buffer("mel_mean", torch.tensor(data_statistics["mel_mean"]))
         self.register_buffer("mel_std", torch.tensor(data_statistics["mel_std"]))
 
-    def configure_optimizers(self) -> Any:
+    def _optimizer_param_group_spec(self):
+        """
+        The optimizer's parameter groups, as names plus the per-group option overrides.
+
+        Embeddings, normalization parameters, and biases are excluded from weight decay, as it would erase speaker identity from embeddings, or the learned scale/shift of normalization layers.
+
+        This is the single source of truth for the decay/no-decay split.
+        """
         from matcha.models.components.text_encoder import LayerNorm as ConvLayerNorm
 
         no_decay_modules = (
@@ -42,21 +49,28 @@ class BaseLightningClass(LightningModule, ABC):
                 if isinstance(module, no_decay_modules) or param_name == "bias":
                     no_decay_names.add(full_name)
 
-        log.debug("No-decay params: %s", sorted(no_decay_names))
-
-        decay_params, no_decay_params = [], []
+        decay, no_decay = [], []
         for name, param in self.named_parameters():
             if not param.requires_grad:
                 continue
-            if name in no_decay_names:
-                no_decay_params.append(param)
-            else:
-                decay_params.append(param)
+            (no_decay if name in no_decay_names else decay).append(name)
 
-        return self.hparams.optimizer(params=[
-            {"params": decay_params},
-            {"params": no_decay_params, "weight_decay": 0.0},
-        ])
+        log.debug("No-decay params: %s", sorted(no_decay))
+
+        return [
+            {"names": decay, "overrides": {}},
+            {"names": no_decay, "overrides": {"weight_decay": 0.0}},
+        ]
+
+    def configure_optimizers(self) -> Any:
+        params_by_name = dict(self.named_parameters())
+
+        param_groups = [
+            {"params": [params_by_name[name] for name in group["names"]], **group["overrides"]}
+            for group in self._optimizer_param_group_spec()
+        ]
+
+        return self.hparams.optimizer(params=param_groups)
 
     def get_losses(self, batch, is_training_step):
         x, x_lengths = batch["x"], batch["x_lengths"]
@@ -81,21 +95,42 @@ class BaseLightningClass(LightningModule, ABC):
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
-        
-        for key in ("lr", "weight_decay"):
-            self._override_optimizer_param(checkpoint, key)
+
+        self._override_optimizer_params(checkpoint)
 
         self.add_speaker_if_needed(checkpoint)
 
-    def _override_optimizer_param(self, checkpoint, key):
-        config_val = self.hparams.optimizer.keywords.get(key)
-        if config_val is None:
+    def _override_optimizer_params(self, checkpoint):
+        """
+        LR and weight_decay are saved in the checkpoint. If you want to change them in the yaml file, stop training and
+        resume from a ckpt to use the new values, they need to be explicitly overridden after ckpt is loaded.
+
+        Note that weight_decay is not the same for every parameter: embeddings, normalization parameters and biases are
+        trained with weight_decay 0.0 (see _optimizer_param_group_spec) and have to stay at 0.0. So the value from the
+        yaml is written only to the parameters that do use decay.
+        """
+        keywords = self.hparams.optimizer.keywords
+        configured = {key: keywords[key] for key in ("lr", "weight_decay") if keywords.get(key) is not None}
+        if not configured:
             return
+
+        spec = self._optimizer_param_group_spec()
+
         for opt_state in checkpoint.get("optimizer_states", []):
-            for param_group in opt_state.get("param_groups", []):
-                old_val = param_group.get(key)
-                param_group[key] = config_val
-                log.info(f"Overriding checkpoint {key} {old_val} with config value {config_val}")
+            saved_groups = opt_state["param_groups"]
+            saved_sizes = [len(group["params"]) for group in saved_groups]
+            spec_sizes = [len(group["names"]) for group in spec]
+            
+            assert saved_sizes == spec_sizes, "Model changed, so this checkpoint cannot be resumed."
+
+            # The saved groups were built from the spec, in the same order, so groups at the same position hold the
+            # same parameters and the spec tells us which of them skip weight decay.
+            for saved_group, spec_group in zip(saved_groups, spec):
+                for key, config_val in configured.items():
+                    group_val = spec_group["overrides"].get(key, config_val)
+                    log.info("Overriding checkpoint %s %s with config value %s", key, saved_group.get(key), group_val)
+                    saved_group[key] = group_val
+
 
     def add_speaker_if_needed(self, checkpoint):
         state_dict = checkpoint["state_dict"]
@@ -151,6 +186,9 @@ class BaseLightningClass(LightningModule, ABC):
         logged on the preceding epoch, this allows computing the train-to-validation gap, which
         indicates how well the model generalizes.
         """
+        if not self.hparams.log_diagnostics:
+            return
+
         if is_training_step:
             is_epoch_before_validation = (self.current_epoch + 1) % self.trainer.check_val_every_n_epoch == 0
             if not is_epoch_before_validation:
@@ -174,6 +212,9 @@ class BaseLightningClass(LightningModule, ABC):
             self.log(self.MAE_VAL_KEY.format(metric_name), valid_abs_error.mean(), on_step=False, on_epoch=True, batch_size=batch_size)
 
     def log_mae_gap(self, metrics, metric_name):
+        if not self.hparams.log_diagnostics:
+            return
+
         train_mae = metrics.get(self.MAE_TRAIN_KEY.format(metric_name))
         val_mae = metrics.get(self.MAE_VAL_KEY.format(metric_name))
         if train_mae is not None and val_mae is not None:
@@ -204,6 +245,8 @@ class BaseLightningClass(LightningModule, ABC):
     def training_step(self, batch: Any, batch_idx: int):
         diff_loss, dur_loss, prior_loss = self.get_losses(batch, is_training_step=True)
         bs = batch["x"].shape[0]
+        # The 3 losses are independent, each influencing only its own part of the model, being detached
+        # from the other parts. They are summed only because the optimizer needs a single number.
         total_loss = dur_loss + prior_loss + diff_loss
 
         metrics = {
@@ -233,6 +276,9 @@ class BaseLightningClass(LightningModule, ABC):
 
     def on_before_optimizer_step(self, optimizer):
         # Param and Grad norm computation is rather slow, so enable it only if you must see the charts in Tensorboard.
+        if not self.hparams.log_diagnostics:
+            return
+
         # self.encoder is torch.compile()'d, so its original submodules are accessed via _orig_mod.
         enc = self.encoder._orig_mod
         submodules = {
