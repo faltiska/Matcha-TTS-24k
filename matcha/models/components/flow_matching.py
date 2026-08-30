@@ -16,10 +16,10 @@ from .ode_solver_wrapper import OdeSolverWrapper
 # They found to be the best of 61 formulations, both overall and when sampling with as few steps as I use in inference.
 # Location 0.0 keeps the density symmetric around the middle, so the direction in which the
 # trajectory runs does not matter. Negative values move sampling towards the start, positive values towards destination.
-TIMESTEP_SAMPLING_LOCATION = 0.0
+TIMESTEP_SAMPLING_LOCATION = -0.6
 # Larger scale widens the density towards both ends, and a smaller scale # concentrates it more tightly in the middle. 
 # Scale: 1.0 middle focused, 1.4 wider hump, 1.8 as uniform as it gets with this formula.
-TIMESTEP_SAMPLING_SCALE = 1.4
+TIMESTEP_SAMPLING_SCALE = 1.2
 
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
 # trajectory and longer ones near the destination. This was described in "Sway Sampling", by Chen et al. 2024, F5-TTS.

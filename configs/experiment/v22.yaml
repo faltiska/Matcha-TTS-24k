@@ -12,21 +12,15 @@
 #   start closed and each block starts as an identity. Diffusers does not zero it and the Xavier
 #   pass used to overwrite it, so in v21 the blocks started with random gates. This is correct but
 #   slower to get going, so early epochs may trail v21.
-# 2. Changed the Decoder to sample more steps in the middle of the trajectory during training.
+# 2. Changed the Decoder to sample more steps at the start of the trajectory during training.
 # 3. Changed the Decoder to take shorter steps at the start of the trajectory during inference.
-
-# I wanted to reuse de fully trained encoder and duration predictor from v21, but the new decoder is not compatible with
-# v21 ckpts. I had to train with the v22 code to get a ckpt from which I can take the decoder.
-# Next I used the reset tool to create a ckpt with a fully trained v21 Encoder and Duration Predictor, and the v22 Decoder:
-# python -m matcha.utils.reset_decoder \
-#  logs/train/v21-prod/checkpoint_epoch=1313-final.ckpt \
-#  logs/train/v22/checkpoint_epoch=004.ckpt \
-#  -o logs/train/v22/empty-decoder.ckpt
-# Then I trained with: 
-#   prior_loss: false
-#   duration_loss: false
-# I've learned that training with encoder and duration predictor dropout set to 0 makes the decoder validation loss
-# start to grow while the train loss drops normally, so I concluded it hurts generalization.
+# See these chart showing how the timestep samples are distributed during training:  
+#  documentation/timestep_density_location_options.png
+#  documentation/timestep_density_scale_options.png
+# I also removed any torch rng seeding from training code. When I stop, change the training params and resume
+# I want a different seed, otherwise Lightning would feed the exact same noise to the Decoder model. 
+# Each resume re-fed the same opening sequence of batch compositions and t values. That prefix was over-represented 
+# in the gradient history.
 
 run_name: v22
 
@@ -37,17 +31,16 @@ data:
   num_workers: 8
   max_frames_per_batch: 30000
 
-# Stopped and resumed from epoch 139 so I can set the encoder and duration predictor dropout to 0 
-ckpt_path: logs/train/v22/checkpoint_epoch=139.ckpt
+ckpt_path: logs/train/v22/checkpoint_epoch=1239.ckpt
 
 model:
   spk_emb_dim: 128
-  prior_loss: false
-  duration_loss: false
-  log_diagnostics: false
+  prior_loss: true
+  duration_loss: true
+  log_diagnostics: true
 
-  prior_loss_threshold: 0.95
-  duration_loss_threshold: 1.1
+  prior_loss_threshold: 0.96
+  duration_loss_threshold: 0.96
   
   encoder:
     encoder_params:
@@ -58,7 +51,7 @@ model:
       n_heads: 6
       n_layers: 4
       kernel_size: 5
-      p_dropout: 0.05
+      p_dropout: 0.1
       
       prenet: true
       # should not go over 3, it affects prior loss
@@ -71,7 +64,7 @@ model:
       n_heads: 6
       n_layers: 4
       kernel_size: 3
-      p_dropout: 0.1
+      p_dropout: 0.15
   
   decoder:
     # The rule for divisibility by num_heads applies to the second figure only
@@ -79,15 +72,21 @@ model:
     attention_head_dim: 64
     num_heads: 6
     num_mid_blocks: 2
-    dropout: 0.1
+    dropout: 0.3
   
   cfm:
     use_mu_prior: true
 
   optimizer:
 # Epoch 0 
-    lr: 1e-4
-    weight_decay: 2e-4
+#    lr: 8e-5
+#    weight_decay: 1e-4
+# Epoch 1239 
+    lr: 4e-5
+    weight_decay: 5e-5
+# Epoch 1899 
+#    lr: 1e-5
+#    weight_decay: 1e-5
     
 callbacks:
   model_checkpoint:

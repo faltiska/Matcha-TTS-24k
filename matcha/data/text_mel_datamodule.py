@@ -274,7 +274,6 @@ class TextMelDataModule(LightningDataModule):
         f_min,
         f_max,
         data_statistics,
-        seed,
         mel_dir: Optional[str] = None,
         persistent_workers: bool = True,
         mel_backend="vocos",
@@ -302,7 +301,6 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f_min,
             self.hparams.f_max,
             self.hparams.data_statistics,
-            self.hparams.seed,
             self.hparams.mel_dir,
             self.hparams.mel_backend,
         )
@@ -316,7 +314,6 @@ class TextMelDataModule(LightningDataModule):
             self.hparams.f_min,
             self.hparams.f_max,
             self.hparams.data_statistics,
-            self.hparams.seed,
             self.hparams.mel_dir,
             self.hparams.mel_backend,
         )
@@ -380,7 +377,6 @@ class TextMelDataset(torch.utils.data.Dataset):
         f_min=0.0,
         f_max=8000,
         data_parameters=None,
-        seed=None,
         mel_dir=None,
         mel_backend="vocos",
     ):
@@ -415,7 +411,7 @@ class TextMelDataset(torch.utils.data.Dataset):
             self.data_parameters = data_parameters
         else:
             self.data_parameters = {"mel_mean": 0, "mel_std": 1}
-        random.seed(seed)
+        # The file list is shuffled so the order in the CSV does not matter.
         random.shuffle(self.filepaths_and_text)
 
     def get_datapoint(self, csv_row):

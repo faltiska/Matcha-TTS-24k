@@ -17,7 +17,6 @@ import types
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
-import lightning as L
 import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
@@ -58,9 +57,6 @@ def filter_dataset_to_speaker(datamodule: LightningDataModule, target_speaker: i
 @utils.task_wrapper
 def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     target_speaker: int = cfg.target_speaker
-
-    if cfg.get("seed"):
-        L.seed_everything(cfg.seed, workers=True)
 
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)

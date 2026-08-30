@@ -8,7 +8,6 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
-import lightning as L
 import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
@@ -31,10 +30,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     :param cfg: A DictConfig configuration composed by Hydra.
     :return: A tuple with metrics and dict with all instantiated objects.
     """
-    # set seed for random number generators in pytorch, numpy and python.random
-    if cfg.get("seed"):
-        L.seed_everything(cfg.seed, workers=True)
-
+    # The RNGs are deliberately left unseeded. Training is stopped and resumed many times, and Lightning does
+    # not checkpoint RNG state, so a fixed seed would rewind every stream on each resume and replay the same
+    # batch compositions, timesteps and dropout masks instead of continuing the run.
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")  # pylint: disable=protected-access
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 

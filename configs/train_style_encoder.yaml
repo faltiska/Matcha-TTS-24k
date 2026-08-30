@@ -22,8 +22,6 @@ limit_val_batches: 1.0
 data:
   num_workers: 2
 
-seed: 1234
-
 # The previous 96-dimensional style encoder cannot be resumed for v21's 128-dimensional speaker embeddings.
 ckpt_path: null
 

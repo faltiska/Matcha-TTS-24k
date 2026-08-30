@@ -18,7 +18,6 @@ def dataset():
         f_min=0,
         f_max=12000,
         data_parameters={"mel_mean": -3.186903, "mel_std": 5.36849},
-        seed=1234,
         mel_dir="/home/alfred/projects/matcha-tts/data/corpus-24k/mels",
         mel_backend="vocos"
     )

@@ -7,7 +7,6 @@ os.environ["HF_HOME"] = str(cache_base / "huggingface")
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
-import lightning as L
 import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
@@ -21,9 +20,6 @@ log = logging.getLogger(__name__)
 
 @utils.task_wrapper
 def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    if cfg.get("seed"):
-        L.seed_everything(cfg.seed, workers=True)
-
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
