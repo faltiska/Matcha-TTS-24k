@@ -182,8 +182,9 @@ uv cache clean && uv cache prune
 
 To keep training running even if you close the terminal window, use `tmux`:
 ```bash
-cd ~/projects/matcha-tts/
 tmux new -s train
+cd ~/projects/matcha-tts/
+source .venv/bin/activate
 python -m matcha.train +experiment=v22
 ```
 
