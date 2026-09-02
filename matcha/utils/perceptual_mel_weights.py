@@ -65,7 +65,7 @@ def _interpolate_1d(query_points, known_x, known_y):
     return interpolated
 
 
-def build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max, min_weight=0.7, max_weight=1.3):
+def build_perceptual_mel_weights(n_feats, f_min, f_max, min_weight=0.7, max_weight=1.3):
     """
     Builds a fixed, per-mel-bin weight vector that biases a mel-domain loss towards the frequency ranges
     where human hearing is most sensitive, without introducing a second competing loss term.
@@ -93,7 +93,6 @@ def build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max, min_weight=
 
     Args:
         n_feats (int): number of mel bins.
-        sample_rate (int): audio sample rate in Hz.
         f_min (float): lowest frequency covered by the mel filterbank, in Hz.
         f_max (float): highest frequency covered by the mel filterbank, in Hz.
         min_weight (float): weight assigned to the least sensitive bins (the extremes).
@@ -139,7 +138,7 @@ def build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max, min_weight=
 
 def main():
     parser = argparse.ArgumentParser(description="Plot the perceptual mel-bin weighting curve for the prior loss")
-    parser.add_argument("-i", "--input-config", default=DEFAULT_DATA_CONFIG, help="Data yaml with n_feats, sample_rate, f_min, f_max")
+    parser.add_argument("-i", "--input-config", default=DEFAULT_DATA_CONFIG, help="Data yaml with n_feats, f_min, f_max")
     parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT_PATH, help="Where to save the plot")
     args = parser.parse_args()
 
@@ -148,11 +147,10 @@ def main():
         cfg = yaml.safe_load(f)
 
     n_feats = int(cfg["n_feats"])
-    sample_rate = int(cfg["sample_rate"])
     f_min = float(cfg["f_min"])
     f_max = float(cfg["f_max"])
 
-    weights = build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max)
+    weights = build_perceptual_mel_weights(n_feats, f_min, f_max)
     bin_centers_hz = htk_mel_bin_center_frequencies(n_feats, f_min, f_max)
 
     import matplotlib
