@@ -53,7 +53,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # broadcasts directly over (batch, n_feats, time) mels. The leading dimension of size 1 stands in
         # for a future per-speaker dimension (n_spks, n_feats, 1), selected by speaker id, once per-speaker
         # weights are precomputed from each speaker's own data.
-        perceptual_mel_weights = build_perceptual_mel_weights(n_feats, sample_rate, f_min, f_max)
+        perceptual_mel_weights = build_perceptual_mel_weights(n_feats, f_min, f_max)
         self.register_buffer("perceptual_mel_weights", perceptual_mel_weights.view(1, n_feats, 1), persistent=False)
 
         if n_spks > 1:
