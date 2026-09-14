@@ -6,7 +6,7 @@ from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import box_downsample, sequence_mask, LOG_DURATION_OFFSET
+from matcha.utils.model import DEFAULT_DOWNSAMPLER, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
@@ -33,6 +33,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         prior_loss_threshold=0.08,
         duration_loss_threshold=0.15,
         plot_mel_on_validation_end=False,
+        downsampler=DEFAULT_DOWNSAMPLER,
         sample_rate=None,
         f_min=None,
         f_max=None,
@@ -76,6 +77,15 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         self.encoder = torch.compile(self.encoder, dynamic=True)
         self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
+
+        # The mel downsample sits between the two compiled regions above, so it used to run eagerly as
+        # a handful of separate pointwise kernels. Compiling it on its own fuses the padding, the
+        # strided slices and the scaling into a single kernel, measured at roughly 2-3x faster than
+        # eager on training shapes. It stays a region of its own because forward() cannot become one
+        # single region: find_alignment calls the third-party MAS kernel and _log_diagnostics calls
+        # Lightning's logger and indexes with a boolean mask, and each of those forces a graph break.
+        # Which filter runs here is the `downsampler` hyperparameter; see get_downsampler.
+        self.downsample = torch.compile(get_downsampler(downsampler), dynamic=True)
 
         self.update_data_statistics(data_statistics)
 
@@ -175,8 +185,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        # noinspection PyCallingNonCallable
-        mu_y = box_downsample(mu_y_fine)
+        mu_y = self.downsample(mu_y_fine)
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
 

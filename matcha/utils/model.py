@@ -66,9 +66,46 @@ def box_downsample(mu_y_fine):
     the smoothing is the only thing this function actually adds. The Decoder learns a correction from
     this mel toward the ground truth, and it copes better with a large consistent error than with a
     smaller one that varies frame to frame. A sharper [1, 2, 1] / 4 filter was tried in v22 and measured
-    worse. See documentation/components.md, Mel Analysis Window.
+    worse on the MCD test. See documentation/components.md, Mel Analysis Window.
 
     avg_pool1d counts the zero padding, so the first and last frames average against silence, which
     is fine because every recording starts and ends with silence.
     """
     return F.avg_pool1d(mu_y_fine, kernel_size=3, stride=2, padding=1)
+
+
+def triangular_downsample(mu_y_fine):
+    """
+    Halves the time resolution of a mel spectrogram using a [1, 2, 1] / 4 filter.
+
+    The filter is centred on each retained even-indexed frame. One zero frame is
+    added at both boundaries before filtering, so the edges are weighted against
+    silence just as they are in ``box_downsample``. This matches corpora whose
+    recordings begin and end with silence.
+    """
+    padded = F.pad(mu_y_fine, (1, 1))
+    return (padded[..., :-2:2] + 2 * padded[..., 1:-1:2] + padded[..., 2::2]) * 0.25
+
+
+# Maps the `downsampler` hyperparameter to an implementation. Set it in configs/model/matcha.yaml and
+# override it per experiment. It is saved with the checkpoint hyperparameters, so inference picks the
+# same filter the model was trained with.
+DOWNSAMPLERS = {
+    "box": box_downsample,
+    "triangular": triangular_downsample,
+}
+
+DEFAULT_DOWNSAMPLER = "box"
+
+
+def get_downsampler(name):
+    """
+    Return the mel downsampler registered under `name`.
+
+    An unknown name raises instead of falling back to a default: silently training or synthesising
+    with the wrong filter would be far harder to notice than a failure at startup.
+    """
+    try:
+        return DOWNSAMPLERS[name]
+    except KeyError:
+        raise ValueError(f"Unknown downsampler {name!r}. Available: {sorted(DOWNSAMPLERS)}") from None

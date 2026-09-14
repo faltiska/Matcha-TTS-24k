@@ -7,7 +7,7 @@
 # n_feats is 100, imposed by vocos and spk_emb_dim is set to 96 in matchat.yaml => 296
 channels: [320, 320]
 
-# This model does not show a lot of overfitting, so I can use the original value of 0.05.
+# Applied in the attention output projection and feed-forward of every transformer block, and in the convolutional path of every ResnetBlock1D.
 dropout: 0.05
 
 # It used to be recommended that num channels / num heads should be at least 64 

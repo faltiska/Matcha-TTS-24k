@@ -22,3 +22,6 @@ duration_loss: true
 log_diagnostics: true
 prior_loss_threshold: 0.08
 duration_loss_threshold: 0.15
+
+# Use box_downsample. See matcha/utils/model.py.
+downsampler: box

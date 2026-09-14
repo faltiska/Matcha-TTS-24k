@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import denormalize, box_downsample, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
+from matcha.utils.model import denormalize, DEFAULT_DOWNSAMPLER, get_downsampler, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
 from matcha.text.phonemizers import multilingual_phonemizer
 from matcha.text.symbols import N_VOCAB
 from matcha.vocos24k.vocos_wrapper import load_model as load_vocos
@@ -14,21 +14,21 @@ import numpy as np
 from matcha.utils.mp3_converter import encode_mp3
 
 VOICES = [
-    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",      "scale_correction": 0.98},
-    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",     "scale_correction": 0.97},
-    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction": 0.99},
-    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction": 0.97},
-    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction": 0.98},
-    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction": 1.01},
-    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction": 0.97},
+    {"id":  "0", "lang": "en-us", "gender": "male",   "name": "Kai",      "scale_correction": 0.99},
+    {"id":  "1", "lang": "en-us", "gender": "female", "name": "Jane",     "scale_correction": 0.96},
+    {"id":  "2", "lang": "en-us", "gender": "female", "name": "Aria",     "scale_correction": 0.97},
+    {"id":  "3", "lang": "en-us", "gender": "female", "name": "Bella",    "scale_correction": 0.98},
+    {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction": 0.95},
+    {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction": 1.02},
+    {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction": 0.96},
     {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",     "scale_correction": 1.00},
     {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction": 0.98},
     {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction": 0.97},
     {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction": 0.98},
-    {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction": 0.99},
-    {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction": 0.98},
-    {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction": 1.00},
-    {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction": 1.00},
+    {"id": "11", "lang": "en-us", "gender": "male",   "name": "Lewis",    "scale_correction": 0.95},
+    {"id": "12", "lang": "en-us", "gender": "male",   "name": "Michael",  "scale_correction": 0.97},
+    {"id": "13", "lang": "it",    "gender": "female", "name": "Isabella", "scale_correction": 1.02},
+    {"id": "14", "lang": "it",    "gender": "male",   "name": "Marcello", "scale_correction": 1.01},
 ]
 
 SAMPLE_RATE = 24000
@@ -42,7 +42,7 @@ DEFAULT_NUM_STEPS = 4
 DEVICE = torch.device("cuda")
 
 class MatchaTTSInfer(nn.Module):
-    def __init__(self, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, **_):
+    def __init__(self, n_spks, n_feats, encoder, decoder, cfm, data_statistics, spk_emb_dim, downsampler=DEFAULT_DOWNSAMPLER, **_):
         super().__init__()
         self.speaker_embeddings_enc = nn.Embedding(n_spks, spk_emb_dim)
         self.speaker_embeddings_dur = nn.Embedding(n_spks, spk_emb_dim)
@@ -54,6 +54,10 @@ class MatchaTTSInfer(nn.Module):
         # Don't use mode "reduce-overhead", it triggers recompilation during inference, depending on input length 
         self.encoder = torch.compile(self.encoder, dynamic=True)
         self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
+        # `downsampler` comes from the checkpoint hyperparameters, so synthesis always uses the filter
+        # the model was trained with. Compiled for the same reason as in training: eager runs it as
+        # several pointwise kernels, and the triangular filter in particular is far slower that way.
+        self.downsample = torch.compile(get_downsampler(downsampler), dynamic=True)
 
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
@@ -165,7 +169,7 @@ class MatchaTTSInfer(nn.Module):
         # The assembled mel is the ODE solver's starting point, and the solver takes its state dtype from it, so
         # keeping it in fp32 keeps the whole integration in fp32 while the Decoder itself still runs under autocast.
         # It is also what the vocoder expects, as it runs outside the autocast region.
-        mu_y = box_downsample(mu_y_fine).float()
+        mu_y = self.downsample(mu_y_fine).float()
 
         y_max_length_ = y_fine_max_length_ // 2
         y_lengths = torch.clamp_min((y_fine_lengths + 1) // 2, 1)
