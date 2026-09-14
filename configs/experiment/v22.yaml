@@ -45,6 +45,38 @@
 # architecture change and would need a fresh run.
 # See tests/test_decoder.py: appending masked padding must not change the valid part of the output.
 
+# Conclusion:
+#  Some of these changes made the model worse.
+#  I am measuring the model with the mcd script, and I cannot get even close to the values I had in v1, despite an
+# improvement I made in inference (sway sampling), which improves the mcd measurements by around 0.06dB.
+# In v21 I reached 4.36dB without it after 1300 epochs. Now I could only reach 3.39dB with it, after 1700 epochs.
+# I am not sure which changes are responsible, but Iam pretty sure it is in the Decoder. Here's why:
+# I have absolute error quantiles logged for Duration and Encoder, and I see them being as good as, or even a bit
+# better than in v21. Plus, I didn't really make any changes there. I focused on the Decoder
+# I also think a these changes are good, because I made them after I already noticed the quality degradation,
+# and they did not introduce more degradation, in fact they may have helped a little:
+#  - Reduced timestep embedding. 
+#  - Added a MaskedGroupNorm which I now used instead of torch.nn.GroupNorm in Block1D. 
+#  - Added a dropout to some of the Decoder components that did not have one.
+#  - Removing the rng seeding from training code.
+#  - sway sampling to make the  Decoder to take shorter steps at the start of the trajectory during inference.
+# Since it was inference only, I measured the effect of sway sampling on v21 too and reduced the MCD from 4.36 to 4.31, so we should keep it.
+# That leaves just the following as possible culprits:
+# 1. Bug fixes and improvements in the Decoder:
+# - the attention mask is cast to boolean, so padded frames are really excluded instead of being
+#   added to the attention logits, which left them visible
+# - LoRACompatibleLinear replaced with nn.Linear (deprecated, same parameter names)
+# - the feed-forward branch no longer has a second adaptive layer norm of its own, which was
+#   modulating it twice; it now uses the shift, scale and gate that the attention adaptive norm
+#   already produces, as adaLN-Zero intends.
+#   This change makes the model incompatible with the v21 checkpoints.
+# - the modulation projection is explicitly zeroed after the global weight init, so both gates
+#   start closed and each block starts as an identity. Diffusers does not zero it and the Xavier
+#   pass used to overwrite it, so in v21 the blocks started with random gates. This is correct but
+#   slower to get going, so early epochs may trail v21.
+# 2. Changed the Decoder to sample more steps in the middle of the trajectory during training.
+# I should revert them for v23
+
 run_name: v22
 
 defaults:

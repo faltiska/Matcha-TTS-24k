@@ -8,19 +8,6 @@ from torchdiffeq import odeint
 from matcha.models.components.decoder import Decoder
 from .ode_solver_wrapper import OdeSolverWrapper
 
-# Controls the distribution of training timesteps along the noise-to-mel trajectory, so the model spends 
-# more time training in the middle of the trajectory.
-# The velocity target is hardest to predict in the middle of the trajectory, because near either end
-# the best possible prediction is simply the mean of the noise or the mean of the target mels.
-# This  logit-normal density, was described by Esser et al. 2024 in "Scaling Rectified Flow Transformers".
-# They found to be the best of 61 formulations, both overall and when sampling with as few steps as I use in inference.
-# Location 0.0 keeps the density symmetric around the middle, so the direction in which the
-# trajectory runs does not matter. Negative values move sampling towards the start, positive values towards destination.
-TIMESTEP_SAMPLING_LOCATION = -0.0
-# Larger scale widens the density towards both ends, and a smaller scale # concentrates it more tightly in the middle. 
-# Scale: 1.0 middle focused, 1.4 wider hump, 1.8 as uniform as it gets with this formula.
-TIMESTEP_SAMPLING_SCALE = 1.2
-
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
 # trajectory and longer ones near the destination. This was described in "Sway Sampling", by Chen et al. 2024, F5-TTS.
 # The coarse structure of the speech is formed during the early steps, so giving the solver more
@@ -121,9 +108,8 @@ class BASECFM(torch.nn.Module, ABC):
         """
         b = mu.shape[0]
 
-        # Random timestep, concentrated in the middle of the trajectory (see the constants on top)
-        normal_sample = torch.randn([b, 1, 1], device=mu.device, dtype=mu.dtype)
-        t = torch.sigmoid(normal_sample * TIMESTEP_SAMPLING_SCALE + TIMESTEP_SAMPLING_LOCATION)
+        # random timestep
+        t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
         # Start from mu + noise or pure noise depending on use_mu_prior (see cfm yaml), must match inference.
         if self.use_mu_prior:
             x0 = mu + torch.randn_like(x1)

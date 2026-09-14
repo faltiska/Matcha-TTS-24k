@@ -159,6 +159,27 @@ speaker_013 MCD   6.14 dB  6.14 dB  6.07 dB  6.05 dB  6.04 dB  5.98 dB  6.01 dB 
 speaker_014 MCD   5.94 dB  5.94 dB  5.90 dB  5.88 dB  5.85 dB  5.87 dB  5.85 dB  5.85 dB  5.84 dB  5.82 dB
 ----------------------------------------------------------------------------------------------------------
 Average MCD v2:   4.61 dB  4.59 dB  4.53 dB  4.51 dB  4.49 dB  4.46 dB  4.45 dB  4.43 dB  4.41 dB  4.39 dB
+I gave up on v22, something is broken. I have reverted most changes except sway sampling in inference.
+
+V21b is v21 plus sway sampling in inference:
+V21b      epoch      1313
+speaker_000 MCD   4.57 dB  
+speaker_001 MCD   3.09 dB  
+speaker_002 MCD   3.42 dB  
+speaker_003 MCD   2.57 dB  
+speaker_004 MCD   4.33 dB  
+speaker_005 MCD   3.66 dB  
+speaker_006 MCD   3.93 dB  
+speaker_007 MCD   5.04 dB  
+speaker_008 MCD   4.86 dB  
+speaker_009 MCD   4.61 dB  
+speaker_010 MCD   3.94 dB  
+speaker_011 MCD   5.02 dB  
+speaker_012 MCD   3.98 dB  
+speaker_013 MCD   5.85 dB  
+speaker_014 MCD   5.79 dB  
+-------------------------
+Average MCD v2:   4.31 dB  
 
 """
 
