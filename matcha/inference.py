@@ -154,7 +154,11 @@ class MatchaTTSInfer(nn.Module):
         # Ensure fine length is compatible with the UNet and even number
         y_fine_lengths = torch.clamp_min(phoneme_durations.sum(dim=1).long(), 1)
         y_fine_max_length = y_fine_lengths.max()
-        y_fine_max_length_ = fix_len_compatibility(y_fine_max_length) * 2
+        # The fine canvas must be a multiple of 4 so that the mel canvas it downsamples to stays
+        # even for the UNet's single downsampling. Note this was `fix_len_compatibility(...) * 2`
+        # from commit 3fd5244 until now, which made the canvas twice the length of the speech and
+        # left the Decoder running on 50% masked padding at inference against ~10% in training.
+        y_fine_max_length_ = fix_len_compatibility(y_fine_max_length, 2)
 
         y_fine_mask = sequence_mask(y_fine_lengths, y_fine_max_length_).unsqueeze(1).to(x_mask.dtype)
         attn_mask_fine = x_mask.unsqueeze(-1) * y_fine_mask.unsqueeze(2)

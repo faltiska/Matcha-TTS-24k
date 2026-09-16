@@ -169,6 +169,16 @@ class TimestepConditionedTransformerBlock(nn.Module):
         # Project timestep embedding to match the block's hidden dimension.
         time_emb = self.time_proj(timestep)
 
+        # The decoder supplies a 0.0 / 1.0 float mask. Scaled dot product attention treats a float
+        # mask as a bias to *add* to the logits, so padded keys stay visible, merely down-weighted
+        # by one logit. Casting to boolean selects the path where they are genuinely excluded.
+        # Without it, what the model learns for an utterance depends on how much padding its batch
+        # neighbours imposed, which is the same defect MaskedGroupNorm fixes for the normalisation.
+        # v23 fixes both: on the v21b weights, fixing only the normalisation while attention kept
+        # leaking measured 0.72 dB worse than leaving both alone.
+        # This is a key mask, so no query row can end up fully masked and produce NaNs.
+        attention_mask = attention_mask.bool()
+
         # --- Self-attention sub-layer ---
         # norm1 returns normalised states + 4 modulation tensors (gate_msa used here, rest for FFN)
         normed, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=time_emb)

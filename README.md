@@ -1,14 +1,19 @@
 ## Environment preparation
 
 ```bash
+# Replace `.venv` with another name, such as `.venv-pt214`, when testing an upgrade.
 uv venv .venv --python 3.13
 source .venv/bin/activate
-uv pip install -r requirements.txt --upgrade
-uv pip install git+https://github.com/supertone-inc/super-monotonic-align.git --upgrade
-uv pip install -e .
+uv sync --active
 ```
-
-Note: torch, torchaudio and torchcodec are listed in `requirements.txt` and their CUDA index is configured in `pyproject.toml` via `[tool.uv.sources]`, so they are installed from the correct PyTorch CUDA index automatically.
+To refresh the lock and install newer allowed versions of the complete dependency set, run:
+```commandline
+uv lock --upgrade
+uv sync
+```
+Note: `torch`, `torchaudio` and `torchcodec` are pinned to exact `+cu132` builds in `pyproject.toml`,
+so `uv lock --upgrade` will not move them. torch 2.14 measured 30-40% slower in training than 2.12.1.
+To try a newer torch, relax the pins in a separate venv (`uv venv .venv-pt214`) and benchmark before adopting.
 
 ## A note on running inference and training at the same time
 Sometimes I need to test a checkpoint while training still runs. 

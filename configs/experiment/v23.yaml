@@ -1,0 +1,140 @@
+# @package _global_
+#
+# Changes compared to v21b:
+#
+# 1. Changed the Decoder to sample more steps in the middle of the trajectory during training.
+# See these chart showing how the timestep samples are distributed during training:  
+#  documentation/timestep_density_location_options.png
+#  documentation/timestep_density_scale_options.png
+#
+# 2. Removed any torch rng seeding from the training code. When I stop, change the training params and resume
+# I want a different seed, otherwise Lightning would feed the exact same noise to the Decoder model. 
+# Each resume re-fed the same opening sequence of batch compositions and t values. That prefix was over-represented 
+# in the gradient history.
+#
+# 3. Fixed the dropout in the decoder. Only a part of the decoder had dropout implemented and the model was 
+# overfitting rather severely. After 600 epochs or so, the validation loss was rising while the train loss 
+# was still dropping. The decoder dropout is now applied in on 6 more sites in the ResnetBlock1D convolutional path.
+#
+# 4. Fixed the GroupNorm in the Decoder's Block1D. GroupNorm averages over the time dimension as well as over the 
+# channels, so the padded frames were part of the mean and the variance that rescale the real frames. Masking 
+# before and after the block does not help, the damage is done inside. The result was that the same utterance 
+# came out differently depending on how much padding the longest sample in its batch imposed on it, and inference, 
+# which pads nothing, saw yet another variant. With this corpus, the median sample carries 10% padding, the mean is 
+# 12%, and 5% of the samples sit above 50%, so this was not a rounding error: at 10% padding the generated mel moved 
+# by about 1.4 dB on average.
+# Block1D now uses a MaskedGroupNorm that computes its statistics over the valid frames only. With nothing padded it 
+# is the same math as before, which is exactly the inference case, so v22 checkpoints keep producing the same audio 
+# and training resumes without a disturbance. Only the padded training path changes, and it now agrees with inference.
+# I did not switch to a per-frame LayerNorm or RMSNorm, which would fix this too, because that would be a real 
+# architecture change and would need a fresh run.
+# See tests/test_decoder.py: appending masked padding must not change the valid part of the output.
+#
+# 5. Added a triangular downsampler and a config option to use it instead of the box downsampler.
+# I want to test it set to triangular in conjunction with use_mu_prior = false in v23.
+#
+# 6. The attention mask in the Decoder is cast to boolean, so padded frames are really excluded
+# instead of being added to the attention logits, which left them visible. With a float mask the
+# padded keys are only down-weighted by one logit, so what the model learns for an utterance depends
+# on how much padding its batch neighbours imposed. That is the same defect that MaskedGroupNorm
+# fixes for the normalisation, and the two have to be fixed together: on the v21b checkpoint, fixing
+# the normalisation alone while attention kept leaking measured 0.72 dB worse (4.31 -> 5.03) than
+# leaving both alone. See tests/test_decoder.py, where appending masked padding must now leave the
+# valid part of the whole Decoder output unchanged, attention included.
+#
+# 7. Inference no longer doubles the mel canvas. `fix_len_compatibility(y_fine_max_length) * 2` gave
+# the Decoder a canvas twice the length of the speech, so it generated into 50% masked padding at
+# inference against ~10% in training. It is now `fix_len_compatibility(y_fine_max_length, 2)`, which
+# keeps the canvas a multiple of 4 as the UNet needs and drops the padding to under 0.5%. This has
+# been wrong since commit 3fd5244 in April, so it affected every measurement from v17 or so onward.
+# Measured on the v21b checkpoint it is neutral, 4.31 either way, and end-to-end synthesis time is
+# unchanged within noise (204 ms vs 215 ms mean, 192 vs 193 ms minimum). It is in for hygiene: with
+# it, inference sees the same padding regime as training, which is what made the MaskedGroupNorm
+# result unreadable in the first place.
+# 
+# Left to test on v24:
+# Make the time embedding dimension 4 times smaller in the Decoder: time_embed_dim = channels[0]
+# it just encodes one scalar, there may be no need for a larger value. 
+# This will reduce the decoder size by 10m params.
+
+
+run_name: v23
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  num_workers: 8
+  max_frames_per_batch: 30000
+
+ckpt_path: null
+
+model:
+  spk_emb_dim: 128
+  prior_loss: true
+  duration_loss: true
+  log_diagnostics: true
+  # Use triangular_downsample. See matcha/utils/model.py.
+  # I suspected this may help when used in combination with use_mu_prior: false 
+  downsampler: triangular
+
+  prior_loss_threshold: 0.94
+  duration_loss_threshold: 1.0
+  
+  encoder:
+    encoder_params:
+      # Head dim: n_channels / n_heads = 64, divisible by 8
+      n_channels: 384
+      # 384 * 3 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05 
+      p_dropout: 0.1
+      
+      prenet: true
+      # should not go over 3, it affects prior loss
+      # 5 is slightly worse, 7 is considerably worse 
+      prenet_kernel_size: 3
+    
+    duration_predictor_params:
+      # head dim is filter_channels_dp / n_heads = 64, divisible by 8
+      filter_channels_dp: 384
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 3
+      # 0.15 reduces the train to validate gap, but increases the validation loss value compared to 0.1 
+      p_dropout: 0.1
+  
+  decoder:
+    # The rule for divisibility by num_heads applies to the second figure only
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    num_mid_blocks: 2
+    # 0.15 reduces the train to validate gap, I think, I did not test extensively. 
+    # I tweaked this when trying to convince the validation loss to keep dropping past 650 epochs, but I made more changes
+    # including adding dropout to parts of the Decoder that were ignoring the dropout config. One of the changes helped.
+    dropout: 0.15
+  
+  cfm:
+    use_mu_prior: false
+
+  optimizer:
+# Epoch 0 
+    lr: 8e-5
+    weight_decay: 1e-4
+# Epoch 704 
+#    lr: 4e-5
+#    weight_decay: 5e-5
+# Epoch 1694 
+#    lr: 2e-5
+#    weight_decay: 2e-5
+    
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 5
+
+trainer:
+  check_val_every_n_epoch: 5

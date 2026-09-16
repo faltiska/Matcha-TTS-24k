@@ -8,6 +8,26 @@ from torchdiffeq import odeint
 from matcha.models.components.decoder import Decoder
 from .ode_solver_wrapper import OdeSolverWrapper
 
+# Controls the distribution of training timesteps along the noise-to-mel trajectory, so the model
+# spends more of its training in the middle of the trajectory. The velocity target is hardest to
+# predict there, because near either end the best possible prediction is close to the mean of the
+# noise or the mean of the target mels. This logit-normal density was described by Esser et al. 2024
+# in "Scaling Rectified Flow Transformers", who found it the best of 61 formulations, both overall
+# and when sampling with as few steps as are used here for inference.
+#
+# Location 0.0 keeps the density symmetric around the middle, so the direction in which the
+# trajectory runs does not matter. Negative values move sampling towards the start (the noise end),
+# positive values towards the destination. Note that SWAY_SAMPLING_COEFFICIENT below puts the
+# solver's fine steps near the start, so a mildly negative location is the natural follow-up
+# experiment: it would let training resolution match where inference actually spends its steps.
+# Change one of the two at a time.
+TIMESTEP_SAMPLING_LOCATION = 0.0
+# Larger scale widens the density towards both ends, smaller concentrates it more tightly in the
+# middle. 1.0 middle focused, 1.4 wider hump, 1.8 about as uniform as this formula gets.
+# See documentation/timestep_density_location_options.png and
+#     documentation/timestep_density_scale_options.png
+TIMESTEP_SAMPLING_SCALE = 1.2
+
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
 # trajectory and longer ones near the destination. This was described in "Sway Sampling", by Chen et al. 2024, F5-TTS.
 # The coarse structure of the speech is formed during the early steps, so giving the solver more
@@ -108,8 +128,11 @@ class BASECFM(torch.nn.Module, ABC):
         """
         b = mu.shape[0]
 
-        # random timestep
-        t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
+        # Random timestep, concentrated in the middle of the trajectory (see the constants on top).
+        # v21b trained with a uniform t; if v23 disappoints, this is the one of its three changes
+        # that only affects what the model sees, so it is the cheapest to rule out by re-running.
+        normal_sample = torch.randn([b, 1, 1], device=mu.device, dtype=mu.dtype)
+        t = torch.sigmoid(normal_sample * TIMESTEP_SAMPLING_SCALE + TIMESTEP_SAMPLING_LOCATION)
         # Start from mu + noise or pure noise depending on use_mu_prior (see cfm yaml), must match inference.
         if self.use_mu_prior:
             x0 = mu + torch.randn_like(x1)

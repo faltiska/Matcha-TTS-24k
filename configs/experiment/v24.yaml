@@ -1,0 +1,43 @@
+#Update all py libraries as documented in readme.md
+#
+#Check if librosa 1.0.0 changes mel output (worth recomputing statistics and comparing 
+#against the current mel_mean/mel_std before training), and whether anything imports matplotlib directly,
+#since it drops out of the graph.
+#
+#Test with torch 2.14 + cu132, and troubleshoot the training speed
+#
+#Make the time embedding dimension 4 times smaller in the Decoder: time_embed_dim = channels[0]
+#it just encodes one scalar, there may be no need for a larger value. 
+#This will reduce the decoder size by 10m params.
+#
+#Check if I can reduce the duration speaker embedding; Claude Opus said some of it is empty.
+#
+#Check which of the v22 Decoder changes made it worse. Maybe it is just one of them, and the other changes were good.
+#In v23 we reverted some of the changes made in v22 and trained successfully, so we think the v22 culprit is probably 
+#that we deleted norm3, the feed-forward branch's own timestep modulation.
+#  norm3 turns the timestep into a shift and a scale for the feed-forward half of each transformer
+#  block. v21 had one of these per half. v22 deleted the feed-forward one and reused the attention
+#  half's values instead, which is what the DiT paper does, so it looked like removing a redundancy.
+#  It was not redundant. It was 10.6M params, as much as the attention one, so half the decoder's
+#  timestep conditioning went away. Two modulations in series can also change more sharply with t
+#  than one can, and that matters because we generate in only 4 steps.
+#  So: keep norm3 in v24.
+#  Weaker second suspect: v22 also zeroed the modulation weights at init. Probably innocent, because
+#  v22 was ahead in the early epochs and zero-init would have made it slower to start. To check it:
+#  v23's config plus the zeroing, 44 epochs (~3h), compare against v23's 5.26 dB at epoch 44. An init
+#  effect either shows up early or never.
+#  Not the culprit: the smaller timestep embedding. v22 was already failing before we made it.
+#  Safe to keep, v23 has all of these and still beat v21b: boolean attention mask, logit-normal
+#  training t, MaskedGroupNorm, dropout in the ResnetBlock conv path, use_mu_prior false,
+#  triangular downsampler.
+#
+#Zero-init the modulation projection while keeping norm3. Never tried together, costs nothing.
+#arXiv 2608.09438 (TPAMI 2026) finds zero-init the most influential part of adaLN-Zero, and proposes
+#adaLN-Gaussian as a better init.
+#
+#Try one modulation per branch, projected by a 2-layer MLP instead of a linear, in place of v21's
+#stacked pair. Same sharp t-dependence at about half the params. Matching v21 means the win was
+#nonlinearity in t, not capacity.
+#
+#ResnetBlock1D only adds the time embedding, never scales by it. DiT and ADM do both. About +3.5M params.
+#

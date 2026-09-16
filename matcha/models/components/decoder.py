@@ -28,33 +28,90 @@ class SinusoidalPosEmb(torch.nn.Module):
         return emb
 
 
+class MaskedGroupNorm(torch.nn.GroupNorm):
+    """GroupNorm that computes its statistics over the valid frames only.
+
+    torch.nn.GroupNorm reduces over the grouped channels *and* the time dimension, so the padded
+    frames of a batch end up inside the mean and the variance that rescale the valid frames.
+    Masking around the layer cannot undo that: with the corpus batching used here (median 10%
+    padding, mean 12.3%, 5% of the samples above 50%) the valid part of a decoder output moved by
+    a few percent up to tens of percent depending on how much padding the sample happened to get,
+    and the generated mel moved by ~1.4 dB on average at 10% padding.
+
+    Excluding the padded frames from the statistics removes that dependency: the valid output no
+    longer changes when masked padding is appended. Parameters and their names are unchanged, so
+    checkpoints load either way.
+
+    This has to be trained with, not bolted on. Inference hands the decoder a canvas twice the
+    length of the speech (`fix_len_compatibility(...) * 2` in inference.py), so its mask is 50%
+    zeros against roughly 10% in training. Weights trained under plain GroupNorm have absorbed
+    those padded statistics: switching this layer in for inference alone cost 0.62 dB MCD on the
+    v21b checkpoint, 4.36 -> 4.98. Trained in from the start, training and inference agree.
+    """
+
+    def forward(self, x, mask):
+        """
+        Args:
+            x (torch.Tensor): shape (batch_size, channels, time)
+            mask (torch.Tensor): 1 for valid frames, 0 for padding, shape (batch_size, 1, time)
+        """
+        batch_size, channels, time = x.shape
+        channels_per_group = channels // self.num_groups
+
+        # Statistics are accumulated in fp32. Under bf16 autocast torch.nn.GroupNorm upcasts
+        # internally, and summing thousands of values in bf16 would lose too much precision.
+        grouped = x.float().view(batch_size, self.num_groups, channels_per_group, time)
+        valid = mask.float().view(batch_size, 1, 1, time)
+
+        # Every group holds channels_per_group values per valid frame.
+        valid_count = valid.sum(dim=(2, 3), keepdim=True) * channels_per_group
+        mean = (grouped * valid).sum(dim=(2, 3), keepdim=True) / valid_count
+        variance = (((grouped - mean) * valid) ** 2).sum(dim=(2, 3), keepdim=True) / valid_count
+
+        normalized = ((grouped - mean) * torch.rsqrt(variance + self.eps)).view(batch_size, channels, time)
+        normalized = normalized * self.weight.view(1, -1, 1) + self.bias.view(1, -1, 1)
+        return normalized.to(x.dtype)
+
+
 class Block1D(torch.nn.Module):
     def __init__(self, dim, dim_out, groups=8):
         super().__init__()
-        self.block = torch.nn.Sequential(
-            torch.nn.Conv1d(dim, dim_out, 3, padding=1), 
-            torch.nn.GroupNorm(groups, dim_out),
-            nn.Mish(),
+        # A ModuleList rather than a Sequential because MaskedGroupNorm needs the mask as a second
+        # argument. The indices are kept so the state dict keys stay block.0.* and block.1.*.
+        self.block = torch.nn.ModuleList(
+            [
+                torch.nn.Conv1d(dim, dim_out, 3, padding=1),
+                MaskedGroupNorm(groups, dim_out),
+                nn.Mish(),
+            ]
         )
 
     def forward(self, x, mask):
-        output = self.block(x * mask)
+        conv, norm, activation = self.block
+        output = activation(norm(conv(x * mask), mask))
         return output * mask
 
 
 class ResnetBlock1D(torch.nn.Module):
-    def __init__(self, dim, dim_out, time_emb_dim, groups=8):
+    def __init__(self, dim, dim_out, time_emb_dim, groups=8, dropout=0.0):
         super().__init__()
         self.mlp = torch.nn.Sequential(nn.Mish(), torch.nn.Linear(time_emb_dim, dim_out))
 
         self.block1 = Block1D(dim, dim_out, groups=groups)
         self.block2 = Block1D(dim_out, dim_out, groups=groups)
 
+        # Placed on the activations feeding the second convolution, which is where the diffusers
+        # ResnetBlock this one is modelled on puts it. Without it the convolutional path is the only
+        # part of the Decoder no dropout ever reaches, leaving weight decay as its sole regularizer.
+        # v21 overfitted from roughly 600 epochs on: validation loss rising while train loss fell.
+        self.dropout = torch.nn.Dropout(dropout)
+
         self.res_conv = torch.nn.Conv1d(dim, dim_out, 1)
 
     def forward(self, x, mask, time_emb):
         h = self.block1(x, mask)
         h += self.mlp(time_emb).unsqueeze(-1)
+        h = self.dropout(h)
         h = self.block2(h, mask)
         output = h + self.res_conv(x * mask)
         return output
@@ -234,7 +291,7 @@ class Decoder(nn.Module):
             input_channel = output_channel
             output_channel = channels[i]
             is_last = i == len(channels) - 1
-            resnet = ResnetBlock1D(dim=input_channel, dim_out=output_channel, time_emb_dim=time_embed_dim)
+            resnet = ResnetBlock1D(dim=input_channel, dim_out=output_channel, time_emb_dim=time_embed_dim, dropout=dropout)
             transformer_blocks = nn.ModuleList(
                 [
                     self.get_block(
@@ -257,7 +314,7 @@ class Decoder(nn.Module):
         for _ in range(num_mid_blocks):
             input_channel = channels[-1]
 
-            resnet = ResnetBlock1D(dim=input_channel, dim_out=output_channel, time_emb_dim=time_embed_dim)
+            resnet = ResnetBlock1D(dim=input_channel, dim_out=output_channel, time_emb_dim=time_embed_dim, dropout=dropout)
 
             transformer_blocks = nn.ModuleList(
                 [
@@ -285,6 +342,7 @@ class Decoder(nn.Module):
                 dim=2 * input_channel,
                 dim_out=output_channel,
                 time_emb_dim=time_embed_dim,
+                dropout=dropout,
             )
             transformer_blocks = nn.ModuleList(
                 [
