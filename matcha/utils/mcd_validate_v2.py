@@ -18,7 +18,7 @@ Use each script consistently within its own measurement series.
 
 Usage:
     python -m matcha.utils.mcd_validate_v2 --checkpoint your.ckpt
-
+    python -m matcha.utils.mcd_validate_v2 --checkpoint your.ckpt --steps 8 --solver euler
 
 v17       epoch       044      064      094      164      224      264      369      424      494      579      599      603
 speaker_000 MCD:  5.87 dB  5.44 dB  5.17 dB  4.89 dB  4.85 dB  4.71 dB  4.60 dB  4.57 dB  4.60 dB  4.56 dB  4.60 dB  4.44 dB
@@ -71,37 +71,8 @@ Average MCD:      5.36 dB  5.16 dB  4.94 dB  4.64 dB  4.47 dB  4.33 dB  4.27 dB 
 All measurements until V8 were taken with the recommended scaling applied, ODE solver midpoint, 10 steps.
 Measurements after V8 were taken without any scale corrections.
 
-ODE solver tests on V19 checkpoint_epoch=1281
-
-Solver/Steps:         mid/20   mid/10    mid/6    mid/5    mid/4      rk4/10    rk4/6    rk4/5    rk4/4     heun3/6  heun3/5  heun3/4     euler/5  euler/4
-speaker_000 MCD:     4.38 dB  4.38 dB  4.31 dB  4.31 dB  4.28 dB     4.36 dB  4.31 dB  4.31 dB  4.28 dB     4.31 dB  4.31 dB  4.28 dB     4.31 dB  4.28 dB
-speaker_001 MCD:     2.92 dB  2.92 dB  2.86 dB  2.82 dB  2.79 dB     2.88 dB  2.86 dB  2.82 dB  2.79 dB     2.86 dB  2.82 dB  2.79 dB     2.82 dB  2.79 dB
-speaker_002 MCD:     3.26 dB  3.27 dB  3.16 dB  3.12 dB  3.08 dB     3.22 dB  3.16 dB  3.12 dB  3.08 dB     3.16 dB  3.12 dB  3.08 dB     3.12 dB  3.08 dB
-speaker_003 MCD:     2.44 dB  2.44 dB  2.35 dB  2.34 dB  2.30 dB     2.40 dB  2.35 dB  2.34 dB  2.30 dB     2.35 dB  2.34 dB  2.30 dB     2.34 dB  2.30 dB
-speaker_004 MCD:     4.21 dB  4.26 dB  4.18 dB  4.14 dB  4.14 dB     4.20 dB  4.18 dB  4.14 dB  4.14 dB     4.18 dB  4.14 dB  4.14 dB     4.14 dB  4.14 dB
-speaker_005 MCD:     3.54 dB  3.52 dB  3.47 dB  3.46 dB  3.44 dB     3.52 dB  3.47 dB  3.46 dB  3.44 dB     3.47 dB  3.46 dB  3.44 dB     3.46 dB  3.44 dB
-speaker_006 MCD:     3.60 dB  3.59 dB  3.58 dB  3.56 dB  3.53 dB     3.58 dB  3.58 dB  3.56 dB  3.53 dB     3.58 dB  3.56 dB  3.53 dB     3.56 dB  3.53 dB
-speaker_007 MCD:     4.54 dB  4.54 dB  4.49 dB  4.47 dB  4.44 dB     4.51 dB  4.49 dB  4.47 dB  4.44 dB     4.49 dB  4.47 dB  4.44 dB     4.47 dB  4.44 dB
-speaker_008 MCD:     4.53 dB  4.54 dB  4.42 dB  4.41 dB  4.36 dB     4.49 dB  4.42 dB  4.41 dB  4.36 dB     4.42 dB  4.41 dB  4.36 dB     4.41 dB  4.36 dB
-speaker_009 MCD:     4.11 dB  4.10 dB  4.01 dB  3.99 dB  3.96 dB     4.06 dB  4.01 dB  3.99 dB  3.96 dB     4.01 dB  3.99 dB  3.96 dB     3.99 dB  3.96 dB
-speaker_010 MCD:     3.88 dB  3.88 dB  3.82 dB  3.81 dB  3.80 dB     3.85 dB  3.82 dB  3.81 dB  3.80 dB     3.82 dB  3.81 dB  3.80 dB     3.81 dB  3.80 dB
-speaker_011 MCD:     4.90 dB  4.89 dB  4.90 dB  4.87 dB  4.84 dB     4.98 dB  4.90 dB  4.87 dB  4.84 dB     4.90 dB  4.87 dB  4.84 dB     4.87 dB  4.84 dB
-speaker_012 MCD:     3.70 dB  3.71 dB  3.63 dB  3.62 dB  3.59 dB     3.67 dB  3.63 dB  3.62 dB  3.59 dB     3.63 dB  3.62 dB  3.59 dB     3.62 dB  3.59 dB
-speaker_013 MCD:     5.45 dB  5.44 dB  5.37 dB  5.35 dB  5.30 dB     5.43 dB  5.37 dB  5.35 dB  5.30 dB     5.37 dB  5.35 dB  5.30 dB     5.35 dB  5.30 dB
-speaker_014 MCD:     5.37 dB  5.37 dB  5.30 dB  5.28 dB  5.26 dB     5.34 dB  5.30 dB  5.28 dB  5.26 dB     5.30 dB  5.28 dB  5.26 dB     5.28 dB  5.26 dB
--------------------------------------------------------------------------------------------------------------------------------------------------  -------
-Average MCD:         4.06 dB  4.06 dB  3.99 dB  3.97 dB  3.94 dB     4.03 dB  3.99 dB  3.97 dB  3.94 dB     3.99 dB  3.97 dB  3.94 dB     3.97 dB  3.94 dB
-
-The results were a surprise, but in hindsight they make sense.
-What happens is the trajectory found by the Decoder is always so straight, it makes not sense to use a larger order ODE solver.
-And, probably because the Decoder starts from prior + noise, not pure noise, the number of steps required is very small. 
-Since all ODE solvers show the same results with 6, 5 and 4 steps, I should choose euler, as it is the fastest.
-But I also did subjective tests, and I think hear a slight metallic resonance with euler, which I do not hear with midpoint.  
-I think the mcd tool may have its limitations. To be safe, I decided to use midpoint with 4 steps. 
-
-All measurements until since V20 were taken with ODE solver midpoint, 4 steps.
+All measurements since V8 until V20 were taken with ODE solver midpoint, 4 steps.
 The difference between 10 ODE steps and 4 steps is around 0.2 dB (eg. 4.74 instead of 4.94 at epoch 44). 
-
 V20       epoch       044      064      094      124      234      354      479      494      739      834     1129     1449     1639
 speaker_000 MCD   5.29 dB  5.00 dB  4.82 dB  4.74 dB  4.52 dB  4.41 dB  4.43 dB  4.39 dB  4.31 dB  4.31 dB  4.29 dB  4.23 dB  4.17 dB
 speaker_001 MCD   3.77 dB  3.49 dB  3.43 dB  3.36 dB  3.14 dB  2.99 dB  2.98 dB  2.98 dB  2.89 dB  2.88 dB  2.88 dB  2.78 dB  2.74 dB
@@ -166,28 +137,44 @@ speaker_014 MCD   5.79 dB
 -------------------------
 Average MCD v2:   4.31 dB  
 
-V23       epoch       044      064      094      124      234      334      434      609      659      884     1199     1299     1313
-speaker_000 MCD   5.87 dB  5.57 dB  5.40 dB  5.22 dB  5.19 dB  5.05 dB  4.93 dB  4.85 dB  
-speaker_001 MCD   4.24 dB  4.05 dB  3.85 dB  3.76 dB  3.65 dB  3.51 dB  3.45 dB  3.39 dB  
-speaker_002 MCD   4.66 dB  4.39 dB  4.24 dB  4.07 dB  4.00 dB  3.90 dB  3.83 dB  3.70 dB  
-speaker_003 MCD   3.73 dB  3.34 dB  3.26 dB  3.23 dB  3.17 dB  2.93 dB  2.87 dB  2.77 dB  
-speaker_004 MCD   6.05 dB  5.66 dB  5.52 dB  5.23 dB  5.12 dB  4.89 dB  4.80 dB  4.68 dB  
-speaker_005 MCD   4.37 dB  4.25 dB  4.20 dB  4.11 dB  4.01 dB  3.90 dB  3.86 dB  3.81 dB  
-speaker_006 MCD   4.75 dB  4.57 dB  4.43 dB  4.39 dB  4.33 dB  4.27 dB  4.19 dB  4.09 dB  
-speaker_007 MCD   5.94 dB  5.70 dB  5.56 dB  5.44 dB  5.32 dB  5.20 dB  5.18 dB  5.17 dB  
-speaker_008 MCD   5.77 dB  5.58 dB  5.55 dB  5.40 dB  5.26 dB  5.13 dB  5.07 dB  4.98 dB  
-speaker_009 MCD   5.42 dB  5.22 dB  5.13 dB  5.00 dB  4.95 dB  4.88 dB  4.82 dB  4.77 dB  
-speaker_010 MCD   4.62 dB  4.56 dB  4.38 dB  4.39 dB  4.32 dB  4.19 dB  4.14 dB  4.12 dB  
-speaker_011 MCD   5.60 dB  5.43 dB  5.30 dB  5.26 dB  5.18 dB  5.15 dB  4.96 dB  4.90 dB  
-speaker_012 MCD   4.75 dB  4.66 dB  4.45 dB  4.40 dB  4.31 dB  4.28 dB  4.18 dB  4.11 dB  
-speaker_013 MCD   6.75 dB  6.53 dB  6.42 dB  6.36 dB  6.23 dB  6.11 dB  5.98 dB  6.03 dB  
-speaker_014 MCD   6.41 dB  6.30 dB  6.28 dB  6.12 dB  6.05 dB  5.99 dB  5.92 dB  5.92 dB  
-----------------------------------------------------------------------------------------  
-Average MCD v2:   5.26 dB  5.05 dB  4.93 dB  4.83 dB  4.74 dB  4.62 dB  4.55 dB  4.49 dB  
+V23       epoch       044      064      094      124      234      334      434      609      634      714      734      739      764     1069     1139     1299     1313
+speaker_000 MCD   5.87 dB  5.57 dB  5.40 dB  5.22 dB  5.19 dB  5.05 dB  4.93 dB  4.85 dB  4.87 dB  4.87 dB  4.90 dB  4.88 dB  4.81 dB  
+speaker_001 MCD   4.24 dB  4.05 dB  3.85 dB  3.76 dB  3.65 dB  3.51 dB  3.45 dB  3.39 dB  3.43 dB  3.31 dB  3.39 dB  3.33 dB  3.31 dB  
+speaker_002 MCD   4.66 dB  4.39 dB  4.24 dB  4.07 dB  4.00 dB  3.90 dB  3.83 dB  3.70 dB  3.75 dB  3.73 dB  3.71 dB  3.74 dB  3.66 dB  
+speaker_003 MCD   3.73 dB  3.34 dB  3.26 dB  3.23 dB  3.17 dB  2.93 dB  2.87 dB  2.77 dB  2.88 dB  2.78 dB  2.85 dB  2.79 dB  2.74 dB  
+speaker_004 MCD   6.05 dB  5.66 dB  5.52 dB  5.23 dB  5.12 dB  4.89 dB  4.80 dB  4.68 dB  4.76 dB  4.72 dB  4.69 dB  4.69 dB  4.67 dB  
+speaker_005 MCD   4.37 dB  4.25 dB  4.20 dB  4.11 dB  4.01 dB  3.90 dB  3.86 dB  3.81 dB  3.88 dB  3.87 dB  3.84 dB  3.86 dB  3.88 dB  
+speaker_006 MCD   4.75 dB  4.57 dB  4.43 dB  4.39 dB  4.33 dB  4.27 dB  4.19 dB  4.09 dB  4.16 dB  4.16 dB  4.11 dB  4.11 dB  4.09 dB  
+speaker_007 MCD   5.94 dB  5.70 dB  5.56 dB  5.44 dB  5.32 dB  5.20 dB  5.18 dB  5.17 dB  5.14 dB  5.09 dB  5.14 dB  5.12 dB  5.09 dB  
+speaker_008 MCD   5.77 dB  5.58 dB  5.55 dB  5.40 dB  5.26 dB  5.13 dB  5.07 dB  4.98 dB  5.03 dB  5.05 dB  5.03 dB  4.97 dB  4.93 dB  
+speaker_009 MCD   5.42 dB  5.22 dB  5.13 dB  5.00 dB  4.95 dB  4.88 dB  4.82 dB  4.77 dB  4.79 dB  4.69 dB  4.79 dB  4.71 dB  4.70 dB  
+speaker_010 MCD   4.62 dB  4.56 dB  4.38 dB  4.39 dB  4.32 dB  4.19 dB  4.14 dB  4.12 dB  4.15 dB  4.11 dB  4.09 dB  4.16 dB  4.18 dB  
+speaker_011 MCD   5.60 dB  5.43 dB  5.30 dB  5.26 dB  5.18 dB  5.15 dB  4.96 dB  4.90 dB  4.90 dB  4.92 dB  4.93 dB  4.93 dB  4.90 dB  
+speaker_012 MCD   4.75 dB  4.66 dB  4.45 dB  4.40 dB  4.31 dB  4.28 dB  4.18 dB  4.11 dB  4.15 dB  4.14 dB  4.17 dB  4.14 dB  4.12 dB  
+speaker_013 MCD   6.75 dB  6.53 dB  6.42 dB  6.36 dB  6.23 dB  6.11 dB  5.98 dB  6.03 dB  5.99 dB  6.01 dB  6.03 dB  6.03 dB  6.04 dB  
+speaker_014 MCD   6.41 dB  6.30 dB  6.28 dB  6.12 dB  6.05 dB  5.99 dB  5.92 dB  5.92 dB  5.94 dB  5.89 dB  5.93 dB  5.91 dB  5.87 dB  
+---------------------------------------------------------------------------------------------------------------------------------------
+Average MCD v2:   5.26 dB  5.05 dB  4.93 dB  4.83 dB  4.74 dB  4.62 dB  4.55 dB  4.49 dB  4.52 dB  4.49 dB  4.51 dB  4.49 dB  4.47 dB  
 
+A test for the solver method and various number of steps, using ckpt 764:
+              euler     midpt     heun3       rk4
+ 1 steps:   4.44 dB   4.36 dB   4.43 dB   4.63 dB 
+ 2 steps:   4.32 dB   4.38 dB   4.43 dB   4.44 dB 
+ 4 steps:   4.32 dB   4.47 dB   4.53 dB   4.86 dB 
+ 8 steps:   4.32 dB   4.57 dB   4.62 dB   4.69 dB 
+12 steps:   4.41 dB   4.62 dB   4.66 dB   4.68 dB  
+16 steps:   4.45 dB   4.64 dB   4.68 dB   4.68 dB
+20 steps:   4.48 dB   4.66 dB   4.68 dB   4.70 dB
+24 steps:   4.50 dB   4.?? dB   4.?? dB   4.?? dB
+32 steps:   4.54 dB   4.?? dB   4.?? dB   4.?? dB
 
-
+I am convinced now that the mcd tool does not reflect the quality of the generated voices well. 
+At least not with 4 midpoint steps.  
+It does not reflect how the model reproduces the timbre and rhythm of the original speakers.
+Or if there are audible artifacts, like those that make some male voices sound as if they have a sore throat.
+ 
 """
+
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pyworld")
@@ -284,7 +271,7 @@ def compute_mcd(gen_wav: torch.Tensor, ref_wav_path: Path, mcd_toolbox: Calculat
     sf.write(gen_path, gen_trimmed.numpy(), sample_rate)
     sf.write(ref_path, ref_trimmed.numpy(), ref_sr)
 
-    mcd = mcd_toolbox.calculate_mcd(gen_path, ref_path)
+    mcd = mcd_toolbox.calculate_mcd(ref_path, gen_path)
     Path(gen_path).unlink(missing_ok=True)
     Path(ref_path).unlink(missing_ok=True)
 
@@ -311,6 +298,7 @@ def main():
     sample_rate = int(cfg["sample_rate"])
 
     model = load_matcha("custom_model", args.checkpoint)
+    model.decoder.solver = args.solver
     vocoder = load_vocoder(args.vocoder)
     mcd_toolbox = Calculate_MCD_24k(MCD_mode="dtw")
 

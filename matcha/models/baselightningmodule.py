@@ -80,7 +80,7 @@ class BaseLightningClass(LightningModule, ABC):
 
         # self(...) will invoke the __call__ method from the super class, 
         # which, in its turn, invokes the forward method from matcha_tts.py
-        diff_loss, dur_loss, prior_loss = self(
+        diff_loss, dur_loss, prior_loss, late_diff_loss = self(
             x=x,
             x_lengths=x_lengths,
             y=y,
@@ -91,7 +91,7 @@ class BaseLightningClass(LightningModule, ABC):
             is_training_step=is_training_step,
         )
 
-        return diff_loss, dur_loss, prior_loss
+        return diff_loss, dur_loss, prior_loss, late_diff_loss
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
@@ -243,7 +243,7 @@ class BaseLightningClass(LightningModule, ABC):
         self.log_mae_gap(metrics, self.METRIC_DURATION)
 
     def training_step(self, batch: Any, batch_idx: int):
-        diff_loss, dur_loss, prior_loss = self.get_losses(batch, is_training_step=True)
+        diff_loss, dur_loss, prior_loss, _ = self.get_losses(batch, is_training_step=True)
         bs = batch["x"].shape[0]
         # The 3 losses are independent, each influencing only its own part of the model, being detached
         # from the other parts. They are summed only because the optimizer needs a single number.
@@ -260,7 +260,7 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int):
-        diff_loss, dur_loss, prior_loss = self.get_losses(batch, is_training_step=False)
+        diff_loss, dur_loss, prior_loss, late_diff_loss = self.get_losses(batch, is_training_step=False)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
@@ -269,6 +269,8 @@ class BaseLightningClass(LightningModule, ABC):
             f"sub_loss/val_diff_epoch": diff_loss,
             f"sub_loss/val_dur_epoch": dur_loss,
             f"sub_loss/val_prior_epoch": prior_loss,
+            # Measured at a fixed point near the end of the trajectory which influences the final mel error the most. This is useful to select the best checkpoint.  
+            f"sub_loss/val_diff_late_epoch": late_diff_loss,
         }
         self.log_dict(metrics, on_step=False, on_epoch=True, logger=True, batch_size=bs)
 

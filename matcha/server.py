@@ -23,7 +23,7 @@ torch._inductor.config.fx_graph_cache = True
 from matcha.inference import (load_matcha, load_vocoder, pipeline, convert_to_mp3, convert_to_opus_ogg, SAMPLE_RATE, 
                               DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, VOICES)
 
-CHECKPOINT_PATH = "logs/train/v22/checkpoint_epoch=1354b.ckpt"
+CHECKPOINT_PATH = "logs/train/v23/checkpoint_epoch=1069.ckpt"
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", CHECKPOINT_PATH)
 model = None
 vocoder = None

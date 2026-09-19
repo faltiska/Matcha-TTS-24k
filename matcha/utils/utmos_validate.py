@@ -11,10 +11,19 @@ UTMOS is a reference-free predicted MOS on a 1-5 scale. Higher is better. Produc
 TTS usually lands above 4.0. The model is downloaded on first run via torch.hub from
 tarepan/SpeechMOS and cached under ~/.cache/torch/hub.
 
-Usage:
-    python -m matcha.utils.utmos_validate --checkpoint logs/train/v18/averaged.ckpt
+UTMOSv2 (SLT 2024) was tried and rejected: it costs about 1 s per utterance against v1's ~0.05 s,
+roughly 7x the total runtime, because it runs four 512x512 mel images through EfficientNetV2-S
+alongside wav2vec2 instead of a single wav2vec2 pass. On the v23 epoch 1014 checkpoint it ranked
+all 15 speakers in the same order as v1, so the extra cost bought nothing for checkpoint tracking.
+Batching to recover the time does not work either: predict() needs equal-length input, and the
+zero padding shifts scores by up to 0.76 MOS. v2's strength is ranking different systems against
+each other (VoiceMOS 2024), which is not what this script does.
 
-Edit the constants at the top to change anything other than the checkpoint.
+Usage:
+    python -m matcha.utils.utmos_validate --checkpoint your.ckpt
+    python -m matcha.utils.utmos_validate --checkpoint your.ckpt --steps 8 --solver euler
+
+Edit the constants at the top to change anything other than the checkpoint, data-config, vocoder, solver, and steps.
 
 V18
 ----------------------------------------------------------------------------------------------
@@ -32,6 +41,35 @@ speaker_009 UTMOS:  2.79  2.87  3.03  3.25  3.22  3.29  3.28
 --------------------------------------------------------------------------------------------------------------
 Average UTMOS:      3.06  3.11  3.34  3.54  3.59  3.61  3.65
 
+V23 at midpoint / 4 steps 
+----------------------------------------------------------------------------------------------
+                     234   334   434   609   634   714   734   739   764  1069  1139  1299  1313
+speaker_000 UTMOS:                                4.16  4.19  4.19  4.11
+speaker_001 UTMOS:                                4.34  4.40  4.32  4.38
+speaker_002 UTMOS:                                4.04  4.01  4.02  4.08
+speaker_003 UTMOS:                                4.13  4.11  4.15  4.16
+speaker_004 UTMOS:                                4.21  4.26  4.12  4.16
+speaker_005 UTMOS:                                4.18  4.20  4.24  4.23
+speaker_006 UTMOS:                                3.37  3.31  3.34  3.29
+speaker_007 UTMOS:                                3.54  3.55  3.51  3.45
+speaker_008 UTMOS:                                3.26  3.31  3.40  3.34
+speaker_009 UTMOS:                                3.43  3.35  3.47  3.38
+speaker_009 UTMOS:                                4.31  4.14  4.24  4.23
+speaker_009 UTMOS:                                4.08  3.98  4.04  3.97
+speaker_009 UTMOS:                                4.20  4.21  4.17  4.23
+speaker_009 UTMOS:                                3.11  3.08  3.14  3.07
+speaker_009 UTMOS:                                3.39  3.41  3.43  3.48
+-------------------------------------------------------------------------------------------------
+Average UTMOS:                                    3.85  3.83  3.85  3.84
+
+V23 at heun3 / 8 steps 
+----------------------------------------------------------------------------------------------
+                     234   334   434   609   634   714   734   739   764  1069  1139  1299  1313
+-------------------------------------------------------------------------------------------------
+Average UTMOS:                                    3.75  3.77  3.76  3.75
+
+
+
 """
 
 import argparse
@@ -40,7 +78,7 @@ from pathlib import Path
 import torch
 import torchaudio.functional as taf
 
-from matcha.inference import VOICES, load_matcha, load_vocoder, pipeline
+from matcha.inference import VOICES, DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, load_matcha, load_vocoder, pipeline
 from matcha.utils.precompute_mels import _load_yaml_config, _resolve_path, parse_filelist
 
 DATA_CONFIG = "configs/data/corpus-24k.yaml"
@@ -55,7 +93,7 @@ def pick_samples(valid_filelist: Path, speaker_id: str) -> list[tuple[str, Path]
     all_rows = parse_filelist(valid_filelist)
     samples = []
     skipped = 0
-    for rel_path, spk_id, _lang, text in all_rows:
+    for rel_path, spk_id, _lang, text, _phoneme_ids in all_rows:
         if spk_id != speaker_id:
             continue
         if skipped < SAMPLE_OFFSET:
@@ -85,19 +123,24 @@ def score_utmos(predictor, waveform: torch.Tensor, source_sr: int, device: torch
 def main():
     parser = argparse.ArgumentParser(description="UTMOS validation: predicted naturalness score per speaker")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
+    parser.add_argument("--data-config", default=DATA_CONFIG)
+    parser.add_argument("--vocoder", default=VOCODER, choices=["vocos"])
+    parser.add_argument("--solver", type=str, default=DEFAULT_ODE_SOLVER)
+    parser.add_argument("--steps", type=int, default=DEFAULT_NUM_STEPS)
     args = parser.parse_args()
 
     ckpt_name = Path(args.checkpoint).stem
     print(f"Processing {ckpt_name}...")
 
-    cfg = _load_yaml_config(Path(DATA_CONFIG).resolve())
+    cfg = _load_yaml_config(Path(args.data_config).resolve())
     valid_filelist = _resolve_path(str(cfg["valid_filelist_path"]))
     sample_rate = int(cfg["sample_rate"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = load_matcha("custom_model", args.checkpoint)
-    vocoder = load_vocoder(VOCODER)
+    model.decoder.solver = args.solver
+    vocoder = load_vocoder(args.vocoder)
 
     predictor = torch.hub.load("tarepan/SpeechMOS:v1.2.0", "utmos22_strong", trust_repo=True)
     predictor = predictor.to(device).eval()
@@ -117,7 +160,7 @@ def main():
 
         scores = []
         for text, _gt_wav_path in samples:
-            waveform = pipeline(model, vocoder, text, spk_id)
+            waveform = pipeline(model, vocoder, text, spk_id, None, args.steps)
             scores.append(score_utmos(predictor, waveform, sample_rate, device))
         speaker_scores[voice["id"]] = sum(scores) / len(scores)
 

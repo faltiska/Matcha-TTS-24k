@@ -95,6 +95,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
             2. prior loss: loss between mel-spectrogram and encoder outputs.
             3. flow matching loss: loss between mel-spectrogram and decoder outputs.
+        and, on validation steps only, a fourth reading of the flow matching loss pinned to the end
+        of the trajectory (last 5% of it). Not calculated if is_training_step = true.
 
         Args:
             x (torch.Tensor): batch of texts, converted to a tensor with phoneme embedding ids.
@@ -194,7 +196,17 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # We want the Encoder to learn how to produce mels that match the ground truth.
         diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y.detach())
 
-        return diff_loss, dur_loss, prior_loss
+        # A second reading of the same loss, pinned to the end of the trajectory, for validation only.
+        late_diff_loss = None
+        if not is_training_step:
+            late_diff_loss = self.decoder.compute_loss(
+                x1=y,
+                mask=y_mask,
+                mu=mu_y.detach(),
+                sample_late_trajectory=True,
+            )
+
+        return diff_loss, dur_loss, prior_loss, late_diff_loss
 
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
