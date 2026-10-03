@@ -9,7 +9,7 @@ from matcha.models.components.decoder import Decoder
 from .ode_solver_wrapper import OdeSolverWrapper
 
 # Selects the training timestep distribution. True draws t uniformly, as v21b did.
-NORMAL_TIMESTEP_SAMPLING_DISTRIBUTION = True
+UNIFORM_TIMESTEP_SAMPLING_DISTRIBUTION = False
 # Controls the distribution of training timesteps along the noise-to-mel trajectory, so the model
 # spends more of its training in the middle of the trajectory. The velocity target is hardest to
 # predict there, because near either end the best possible prediction is close to the mean of the
@@ -20,12 +20,41 @@ NORMAL_TIMESTEP_SAMPLING_DISTRIBUTION = True
 # Location 0.0 keeps the density symmetric around the middle, so the direction in which the
 # trajectory runs does not matter. Negative values move sampling towards the start (the noise end),
 # positive values towards the destination (the mel end).
-TIMESTEP_SAMPLING_LOCATION = 0.0
+TIMESTEP_SAMPLING_LOCATION = 1.1
 # Larger scale widens the density towards both ends, smaller concentrates it more tightly in the
-# middle. 1.0 middle focused, 1.4 wider hump, 1.8 about as uniform as this formula gets.
+# middle. 1.0 middle focused, 1.4 wider hump, 1.8 is a bit u-shaped, with more samples at both ends of the interval
+# compared to the middle.
 # See documentation/timestep_density_location_options.png and
 #     documentation/timestep_density_scale_options.png
-TIMESTEP_SAMPLING_SCALE = 1.2
+# The distribution based on scale and location is as follows:
+# density                <0.30  .30-.60  .60-.80  .80-.94    >0.94    mismatch
+# uniform                30.0%    30.0%    20.0%    14.0%     6.0%       46.3%
+# 0.0/1.2                24.0%    39.2%    24.4%    11.3%     1.1%       49.0%
+# 0.3/1.2                17.0%    36.6%    28.2%    16.2%     2.1%       44.1%
+# 0.5/1.2                13.1%    33.8%    30.1%    20.0%     3.0%       40.3%
+# 0.5/1.4                16.8%    30.5%    26.4%    20.9%     5.4%       39.3%
+# 0.8/1.2                 8.5%    28.6%    31.6%    26.1%     5.2%       34.2%
+# 1.1/1.0                 2.6%    21.8%    36.9%    33.8%     4.9%       29.0%
+# 1.1/1.4                 8.2%    22.8%    27.1%    30.0%    11.9%       30.3%
+# Mismatch is the L1 distance to the optimal row, halved so it reads as a fraction of misplaced samples.
+# The right location / scale combo seems to be 0.5/1.2
+# I started training from 3099 with 1.1/1.0 and by did a test at 3504.
+# The MCD did not improve with either midpoint/4 or heun3/8, but the number of "sore throat" heard in voice Brian reduced. 
+# Plus, the late trajectory loss metrics logged show clearly that the loss improved dramatically at locations above 0.6
+# Did another test at 4534, sore throat almost disappeared for all male speakers (with midpoint/12). 
+# The 1.1/1.0 recommendation was based on heun3/8 steps; I also checked how other solver / step combinations match the new distribution
+# Measured directly by probing torchdiffeq with your build_step_grid at sway −1.0 (recording every t the solver passes to the estimator):
+#     midpoint/12 is the match. It needs 12 steps, not 4.
+# method/N      nfe  ceiling  final step  W1 to heun3/8
+# heun3/8        24   0.9350     0.1951        —
+# midpoint/8     16   0.9025     0.1951      0.0129
+# midpoint/10    20   0.9218     0.1564      0.0060
+# midpoint/12    24   0.9347     0.1305      0.0013
+# midpoint/13    26   0.9397     0.1205      0.0021
+# Why 12: midpoint evaluates at t0 and t0 + h/2, so its highest query is the midpoint of the last sway interval, (g[N-1] + 1)/2. 
+# At N=12 that lands at 0.9347 versus heun3/8's 0.9350
+
+TIMESTEP_SAMPLING_SCALE = 1.0
 
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
 # trajectory and longer ones near the destination. This was described in "Sway Sampling", by Chen et al. 2024, F5-TTS.
@@ -42,7 +71,15 @@ SWAY_SAMPLING_COEFFICIENT = -1.0
 # the end of the trajectory gets to the output almost undamped. Weighting the measured error profile by the measured
 # sensitivity, puts roughly 99% of the final error budget in the last third of the trajectory. So the
 # late loss tracks output quality far more closely than the total does.
-LATE_TRAJECTORY_T = 0.95
+# heun3/8 never queries above 0.935 and midpoint/4 never above 0.81. 
+# Training above 0.94 is spent on a region the inference configuration I use never visits.
+#
+# Where those two ceilings come from: the solver walks a grid of positions from 0 to 1 and evaluates
+# the decoder at stage offsets inside each step, so its last evaluation falls short of 1.0.
+# SWAY_SAMPLING_COEFFICIENT bends that grid towards the noise end, which at -1.0 makes it
+# 1 - cos(pi * u / 2) and leaves a long final step. Changing the sway coefficient or the step count
+# moves the ceilings, so recompute them before reading this position as what inference sees.
+LATE_TRAJECTORY_T = 0.935
 
 class BASECFM(torch.nn.Module, ABC):
     def __init__(
@@ -139,7 +176,7 @@ class BASECFM(torch.nn.Module, ABC):
 
         if sample_late_trajectory:
             t = torch.full([b, 1, 1], LATE_TRAJECTORY_T, device=mu.device, dtype=mu.dtype)
-        elif NORMAL_TIMESTEP_SAMPLING_DISTRIBUTION:
+        elif UNIFORM_TIMESTEP_SAMPLING_DISTRIBUTION:
             t = torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
         else:
             normal_sample = torch.randn([b, 1, 1], device=mu.device, dtype=mu.dtype)

@@ -200,11 +200,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         late_diff_loss = None
         if not is_training_step:
             late_diff_loss = self.decoder.compute_loss(
-                x1=y,
-                mask=y_mask,
-                mu=mu_y.detach(),
+                    x1=y,
+                    mask=y_mask,
+                    mu=mu_y.detach(),
                 sample_late_trajectory=True,
-            )
+                )
 
         return diff_loss, dur_loss, prior_loss, late_diff_loss
 
