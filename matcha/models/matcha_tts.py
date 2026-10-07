@@ -6,7 +6,7 @@ from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.utils.model import DEFAULT_DOWNSAMPLER, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
+from matcha.utils.model import DEFAULT_DOWNSAMPLER, generate_path, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
@@ -187,6 +187,15 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
+        # Comment out these lines to condition the Decoder on the exact MAS alignment.
+        # They sit after the duration and prior losses, so the Duration Predictor still learns the true MAS
+        # durations and the Encoder still learns each phoneme's own frame, not a blend with its neighbours.
+        # mu_x is detached because the Decoder's input is detached below anyway, so building a backward
+        # graph through this second assembly would only cost memory.
+        if is_training_step:
+            attn_fine_jittered = self.jitter_alignment(attn_fine, attn_mask_fine.squeeze(1))
+            mu_y_fine = torch.matmul(mu_x.detach(), attn_fine_jittered)
+
         mu_y = self.downsample(mu_y_fine)
         y_max_length = y.shape[-1]
         y_mask = sequence_mask(y_lengths, y_max_length).unsqueeze(1).to(x_mask)
@@ -207,6 +216,67 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 )
 
         return diff_loss, dur_loss, prior_loss, late_diff_loss
+
+    # The fraction of its own frames a token may hand over to a neighbour, never less than one frame.
+    # One fine frame is 5.3ms, half a frame at the resolution the Decoder works at.
+    # The allowance follows duration because the Duration Predictor's error does: measured against MAS on
+    # this corpus it is 0.4 to 0.9 frames for tokens up to 8 frames, which is 88% of them, and 1.4 to 2.6
+    # frames on the pauses above 13, where the worst tenth reaches 5. A flat allowance would under-jitter
+    # exactly the tokens the predictor gets most wrong.
+    JITTER_FRACTION = 0.15
+
+    def jitter_alignment(self, attn_fine, attn_mask_fine):
+        """
+        Moves each token boundary, so the mel the Decoder is conditioned on comes out slightly different on
+        every step.
+
+        With the prior loss off, nothing trains the Encoder, so MAS returns the same alignment every epoch
+        and the Decoder keeps seeing one fixed conditioning mel per sample, which it can memorise. A moving
+        boundary also matches what inference feeds the Decoder, where durations come from the Duration
+        Predictor and are never exactly the MAS ones.
+
+        The ground truth mel does not move, so the frame total may not change either. Frames are therefore
+        only traded between two neighbouring tokens: what one loses, the other gains. Tokens are paired up
+        and only the boundary inside a pair moves. The pairing starts one token later on odd steps, so
+        every boundary gets its turn.
+        """
+        durations = attn_fine.sum(-1)
+        first_token = self.global_step % 2
+        pair_count = (durations.shape[1] - first_token) // 2
+        last_token = first_token + 2 * pair_count
+
+        first_durations = durations[:, first_token:last_token:2]
+        second_durations = durations[:, first_token + 1:last_token:2]
+
+        frames_the_first_can_give = self.frames_a_token_can_give(first_durations)
+        frames_the_second_can_give = self.frames_a_token_can_give(second_durations)
+        # A uniform draw over the integers in [-frames_the_first_can_give, frames_the_second_can_give].
+        # A positive draw moves frames from the second token to the first. torch.randint cannot do this,
+        # because it takes one pair of bounds for the whole tensor and here every pair has its own.
+        uniform_draw = torch.rand(first_durations.shape, device=durations.device, dtype=durations.dtype)
+        draw_span = frames_the_first_can_give + frames_the_second_can_give + 1
+        transferred_frames = torch.floor(uniform_draw * draw_span) - frames_the_first_can_give
+
+        # A pair that touches padding trades nothing. The padding has no frames to give, and a frame handed
+        # to a padded token is masked out of the path, which would leave a frame of silence in the mel.
+        both_tokens_are_real = (first_durations >= 1) & (second_durations >= 1)
+        transferred_frames = transferred_frames * both_tokens_are_real
+
+        jittered_durations = durations.clone()
+        jittered_durations[:, first_token:last_token:2] += transferred_frames
+        jittered_durations[:, first_token + 1:last_token:2] -= transferred_frames
+
+        return generate_path(jittered_durations, attn_mask_fine)
+
+    def frames_a_token_can_give(self, durations):
+        """
+        How many frames each token may hand to a neighbour: its share of JITTER_FRACTION, but at least one
+        frame, since a frame is the smallest move there is, and never its last frame, because MAS gives
+        every real token at least one and inference also floors predicted durations at one.
+        Padding holds no frames and reports nothing to give.
+        """
+        allowance = (durations * self.JITTER_FRACTION).round().clamp(min=1)
+        return torch.minimum(durations - 1, allowance).clamp(min=0)
 
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram

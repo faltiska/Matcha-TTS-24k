@@ -26,34 +26,6 @@ TIMESTEP_SAMPLING_LOCATION = 1.1
 # compared to the middle.
 # See documentation/timestep_density_location_options.png and
 #     documentation/timestep_density_scale_options.png
-# The distribution based on scale and location is as follows:
-# density                <0.30  .30-.60  .60-.80  .80-.94    >0.94    mismatch
-# uniform                30.0%    30.0%    20.0%    14.0%     6.0%       46.3%
-# 0.0/1.2                24.0%    39.2%    24.4%    11.3%     1.1%       49.0%
-# 0.3/1.2                17.0%    36.6%    28.2%    16.2%     2.1%       44.1%
-# 0.5/1.2                13.1%    33.8%    30.1%    20.0%     3.0%       40.3%
-# 0.5/1.4                16.8%    30.5%    26.4%    20.9%     5.4%       39.3%
-# 0.8/1.2                 8.5%    28.6%    31.6%    26.1%     5.2%       34.2%
-# 1.1/1.0                 2.6%    21.8%    36.9%    33.8%     4.9%       29.0%
-# 1.1/1.4                 8.2%    22.8%    27.1%    30.0%    11.9%       30.3%
-# Mismatch is the L1 distance to the optimal row, halved so it reads as a fraction of misplaced samples.
-# The right location / scale combo seems to be 0.5/1.2
-# I started training from 3099 with 1.1/1.0 and by did a test at 3504.
-# The MCD did not improve with either midpoint/4 or heun3/8, but the number of "sore throat" heard in voice Brian reduced. 
-# Plus, the late trajectory loss metrics logged show clearly that the loss improved dramatically at locations above 0.6
-# Did another test at 4534, sore throat almost disappeared for all male speakers (with midpoint/12). 
-# The 1.1/1.0 recommendation was based on heun3/8 steps; I also checked how other solver / step combinations match the new distribution
-# Measured directly by probing torchdiffeq with your build_step_grid at sway −1.0 (recording every t the solver passes to the estimator):
-#     midpoint/12 is the match. It needs 12 steps, not 4.
-# method/N      nfe  ceiling  final step  W1 to heun3/8
-# heun3/8        24   0.9350     0.1951        —
-# midpoint/8     16   0.9025     0.1951      0.0129
-# midpoint/10    20   0.9218     0.1564      0.0060
-# midpoint/12    24   0.9347     0.1305      0.0013
-# midpoint/13    26   0.9397     0.1205      0.0021
-# Why 12: midpoint evaluates at t0 and t0 + h/2, so its highest query is the midpoint of the last sway interval, (g[N-1] + 1)/2. 
-# At N=12 that lands at 0.9347 versus heun3/8's 0.9350
-
 TIMESTEP_SAMPLING_SCALE = 1.0
 
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the

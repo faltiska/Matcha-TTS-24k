@@ -73,7 +73,10 @@ data:
 #I have changed the step sampling distribution at epoch 3099
 #I had to resume from epoch 3539, because the trainer crashed
 #Reduced LR at 4539
-ckpt_path: logs/train/v23/checkpoint_epoch=4539.ckpt
+#Reduced LR at 5224
+ckpt_path: logs/train/v23/checkpoint_epoch=5224.ckpt
+#
+#For fine-tuning: reduce LR, freeze prior, set all dropouts to 0.
 
 model:
   spk_emb_dim: 128
@@ -98,7 +101,8 @@ model:
       n_heads: 6
       n_layers: 4
       kernel_size: 5
-      # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05 
+      # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05
+      # changed from 0.1 to 0 at 5224
       p_dropout: 0.1
       
       prenet: true
@@ -113,6 +117,7 @@ model:
       n_layers: 4
       kernel_size: 3
       # 0.15 reduces the train to validate gap, but increases the validation loss value compared to 0.1 
+      # changed from 0.1 to 0 at 5224
       p_dropout: 0.1
   
   decoder:
@@ -124,6 +129,7 @@ model:
     # 0.15 reduces the train to validate gap, I think, I did not test extensively. 
     # I tweaked this when trying to convince the validation loss to keep dropping past 650 epochs, but I made more changes
     # including adding dropout to parts of the Decoder that were ignoring the dropout config. One of the changes helped.
+    # changed from 0.15 to 0 at 5224
     dropout: 0.15
   
   cfm:
@@ -137,12 +143,15 @@ model:
 #    lr: 4e-5
 #    weight_decay: 5e-5
 # Epoch 4539 
-    lr: 2e-5
-    weight_decay: 2e-5
+#    lr: 2e-5
+#    weight_decay: 2e-5
+# Epoch 5224 
+    lr: 1e-5
+    weight_decay: 1e-5
     
 callbacks:
   model_checkpoint:
-    every_n_epochs: 5
+    every_n_epochs: 1
 
 trainer:
-  check_val_every_n_epoch: 5
+  check_val_every_n_epoch: 1
