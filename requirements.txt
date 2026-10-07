@@ -1,2 +1,0 @@
-# Dependencies are declared in pyproject.toml. Install them with `uv sync`.
-# This legacy file is retained only as a migration marker.

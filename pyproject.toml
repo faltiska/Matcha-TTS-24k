@@ -6,30 +6,25 @@ build-backend = "setuptools.build_meta"
 name = "matcha-tts"
 version = "0.1.0"
 requires-python = ">=3.13"
+# Runtime dependencies for inference (matcha.cli, matcha.server). The Docker image installs only these,
+# from uv.lock, via `uv sync --no-default-groups`. Training-only packages live in the `train` group below.
 dependencies = [
     # Pinned: torch 2.14 measured 30-40% slower in training than 2.12.1, so stay on 2.12.
     # torchaudio +cu132 builds are published only in the test channel, see [tool.uv.sources] below.
     "torch==2.12.1+cu132",
     "torchaudio==2.11.0+cu132",
-    "torchcodec==0.16.0+cu132",
-    # triton is needed by super-monotonic-align, which declares no dependencies of its own.
+    # triton backs torch.compile at inference, and is needed by super-monotonic-align in training.
     # torch happens to pull it on linux/py<3.15, but keep it explicit so it is not accidental.
     "triton",
-    "lightning",
-    "torchmetrics",
     "torchdiffeq",
-    "torch-ema",
     "phonemizer",
     "nemo_text_processing",
     "vocos",
     "av",
+    # Lightning checkpoints pickle hparams as omegaconf/hydra objects (e.g. hydra._internal.target_policy),
+    # so torch.load needs both installed even though inference never runs hydra.
     "hydra-core",
-    "hydra-colorlog",
-    "hydra-optuna-sweeper",
     "omegaconf",
-    "rich",
-    "pytest",
-    "tensorboard",
     "librosa",
     "numpy",
     "einops",
@@ -38,13 +33,30 @@ dependencies = [
     "conformer",
     "diffusers",
     "parse",
-    "setuptools",
-    "pymcd",
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
+]
+
+[dependency-groups]
+train = [
+    "torchcodec==0.16.0+cu132",
+    "lightning",
+    "torchmetrics",
+    "torch-ema",
+    "hydra-colorlog",
+    "hydra-optuna-sweeper",
+    "rich",
+    "pytest",
+    "tensorboard",
+    "setuptools",
+    "pymcd",
     "super-monotonic-align @ git+https://github.com/supertone-inc/super-monotonic-align.git",
 ]
+
+[tool.uv]
+# Plain `uv sync` keeps installing everything (inference + training) in the local venv.
+default-groups = ["train"]
 
 [[tool.uv.index]]
 name = "pytorch-cu132"
