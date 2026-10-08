@@ -171,6 +171,17 @@ A test for the solver method and various number of steps, using ckpt 764:
 24 steps:   4.50 dB   4.67 dB   4.68 dB   4.66 dB
 32 steps:   4.54 dB   4.68 dB   4.67 dB   4.?? dB
 
+I am convinced now that the mcd tool does not reflect the quality of the generated voices well. 
+It does not reflect how the model reproduces the timbre and rhythm of the original speakers.
+Or if there are audible artifacts, like those that make some male voices sound as if they have a sore throat.
+But it is still a good tool to compare 2 checkpoints. The ckpt that has the lowest MCD is better, even though
+it is not guaranteed it will have less metallic resonances or audio artifacts.
+
+A few things are clear:
+- a higher number of steps will not fix the audio artifacts
+- trying out various inference sway values had no effect on the audio artifacts either    
+- a lower number of steps will introduce a metallic resonance
+
 Inference speed (measured with linux's time command, for the entire mcd validate v2 script):
                    
 midpt/4:   2.30 min 
@@ -179,12 +190,8 @@ midpt/9:   3.42 min
 heun3/8:   4.00 min 
 midpt/12:  4.01 min
 
-I am convinced now that the mcd tool does not reflect the quality of the generated voices well. 
-It does not reflect how the model reproduces the timbre and rhythm of the original speakers.
-Or if there are audible artifacts, like those that make some male voices sound as if they have a sore throat.
-But it is still a good tool to compare 2 checkpoints. The ckpt that has the lowest MCD is better, even though
-it is not guaranteed it will have less metallic resonances or audio artifacts. 
- 
+
+
 """
 
 
