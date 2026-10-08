@@ -26,6 +26,16 @@ TIMESTEP_SAMPLING_LOCATION = 1.1
 # compared to the middle.
 # See documentation/timestep_density_location_options.png and
 #     documentation/timestep_density_scale_options.png
+# The distribution based on scale and location is as follows:
+# density                <0.30  .30-.60  .60-.80  .80-.94    >0.94
+# uniform                30.0%    30.0%    20.0%    14.0%     6.0%
+# 0.0/1.2                24.0%    39.2%    24.4%    11.3%     1.1%
+# 0.3/1.2                17.0%    36.6%    28.2%    16.2%     2.1%
+# 0.5/1.2                13.1%    33.8%    30.1%    20.0%     3.0%
+# 0.5/1.4                16.8%    30.5%    26.4%    20.9%     5.4%
+# 0.8/1.2                 8.5%    28.6%    31.6%    26.1%     5.2%
+# 1.1/1.0                 2.6%    21.8%    36.9%    33.8%     4.9%
+# 1.1/1.4                 8.2%    22.8%    27.1%    30.0%    11.9%
 TIMESTEP_SAMPLING_SCALE = 1.0
 
 # Controls the location of inference timesteps, so the solver takes short steps near the beginning of the
@@ -41,10 +51,10 @@ SWAY_SAMPLING_COEFFICIENT = -1.0
 # Measured on v23 epoch 1069, the decoder's error at t=0.975 is 75 times larger that the error at t=0.025.
 # A # velocity error at the start of the trajectory is damped about 18 times before the solver finishes, while one at 
 # the end of the trajectory gets to the output almost undamped. Weighting the measured error profile by the measured
-# sensitivity, puts roughly 99% of the final error budget in the last third of the trajectory. So the
-# late loss tracks output quality far more closely than the total does.
+# sensitivity, puts roughly 99% of the final error budget in the last third of the trajectory.
+# Late loss tracks output quality far more closely than the total does.
 # heun3/8 never queries above 0.935 and midpoint/4 never above 0.81. 
-# Training above 0.94 is spent on a region the inference configuration I use never visits.
+# Training above 0.94 is spent on a region the inference never visits.
 #
 # Where those two ceilings come from: the solver walks a grid of positions from 0 to 1 and evaluates
 # the decoder at stage offsets inside each step, so its last evaluation falls short of 1.0.

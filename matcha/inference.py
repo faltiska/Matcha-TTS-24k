@@ -37,7 +37,7 @@ HIGH_RES_HOP_LENGTH = 128
 
 # mcd_validate.py shows how I chose these values
 DEFAULT_ODE_SOLVER = "heun3"
-DEFAULT_NUM_STEPS = 6
+DEFAULT_NUM_STEPS = 5
 
 DEVICE = torch.device("cuda")
 

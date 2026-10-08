@@ -69,19 +69,25 @@ data:
   num_workers: 8
   max_frames_per_batch: 30000
 
-#ckpt_path: null
 #I have changed the step sampling distribution at epoch 3099
 #I had to resume from epoch 3539, because the trainer crashed
 #Reduced LR at 4539
-#Reduced LR at 5224
+#Fine-tuning from 5224 
 ckpt_path: logs/train/v23/checkpoint_epoch=5224.ckpt
 #
-#For fine-tuning: reduce LR, freeze prior, set all dropouts to 0.
+# Fine-tuning instructions: 
+# - reduce LR 
+# - freeze prior 
+# - set all dropouts to 0
+# - set weights decay to 0
+# - run validation every 1 epoch
+# - save checkpoints every 1 epoch
+#
 
 model:
   spk_emb_dim: 128
-  prior_loss: true
-  duration_loss: true
+  prior_loss: false
+  duration_loss: false
   log_diagnostics: true
   # Use triangular_downsample. See matcha/utils/model.py.
   # I suspected this may help when used in combination with use_mu_prior: false 
@@ -90,7 +96,8 @@ model:
   # changed from 0.84 to 0.9 at epoch 754
   prior_loss_threshold: 0.9
   # changed from 1.0 to 0.9 at epoch 754
-  duration_loss_threshold: 0.9
+  # changed from 0.9 to 0.7 at epoch 5354 because it dropped below 0.8 
+  duration_loss_threshold: 0.7
   
   encoder:
     encoder_params:
@@ -102,8 +109,8 @@ model:
       n_layers: 4
       kernel_size: 5
       # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05
-      # changed from 0.1 to 0 at 5224
-      p_dropout: 0.1
+      # changed from 0.1 to 0 at 5354
+      p_dropout: 0
       
       prenet: true
       # should not go over 3, it affects prior loss
@@ -117,8 +124,8 @@ model:
       n_layers: 4
       kernel_size: 3
       # 0.15 reduces the train to validate gap, but increases the validation loss value compared to 0.1 
-      # changed from 0.1 to 0 at 5224
-      p_dropout: 0.1
+      # changed from 0.1 to 0 at 5354
+      p_dropout: 0
   
   decoder:
     # The rule for divisibility by num_heads applies to the second figure only
@@ -129,8 +136,8 @@ model:
     # 0.15 reduces the train to validate gap, I think, I did not test extensively. 
     # I tweaked this when trying to convince the validation loss to keep dropping past 650 epochs, but I made more changes
     # including adding dropout to parts of the Decoder that were ignoring the dropout config. One of the changes helped.
-    # changed from 0.15 to 0 at 5224
-    dropout: 0.15
+    # changed from 0.15 to 0 at 5354
+    dropout: 0
   
   cfm:
     use_mu_prior: false
@@ -147,7 +154,7 @@ model:
 #    weight_decay: 2e-5
 # Epoch 5224 
     lr: 1e-5
-    weight_decay: 1e-5
+    weight_decay: 0
     
 callbacks:
   model_checkpoint:
