@@ -1,43 +1,99 @@
-#Update all py libraries as documented in readme.md
+# @package _global_
 #
-#Check if librosa 1.0.0 changes mel output (worth recomputing statistics and comparing 
-#against the current mel_mean/mel_std before training), and whether anything imports matplotlib directly,
-#since it drops out of the graph.
+# Changes compared to v23:
+# 1. Duration jitter before decoding (used in late v23 epochs too, lowers diffusion validation loss)
+
+# 2. Make the time embedding dimension 4 times smaller in the Decoder: time_embed_dim = channels[0]
+# it just encodes one scalar, there may be no need for a larger value. 
+# This will reduce the decoder size by 10m params.
+
+# 3. Decoder params averaging.
+
+
+run_name: v24
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  num_workers: 8
+  max_frames_per_batch: 30000
+
+ckpt_path: logs/train/v24/checkpoint_epoch=4539.ckpt
 #
-#Test with torch 2.14 + cu132, and troubleshoot the training speed
+# Fine-tuning instructions: 
+# - reduce LR 
+# - freeze prior 
+# - set all dropouts to 0
+# - set weights decay to 0
+# - run validation every 1 epoch
+# - save checkpoints every 1 epoch
 #
-#Make the time embedding dimension 4 times smaller in the Decoder: time_embed_dim = channels[0]
-#it just encodes one scalar, there may be no need for a larger value. 
-#This will reduce the decoder size by 10m params.
-#
-#Check if I can reduce the duration speaker embedding; Claude Opus said some of it is empty.
-#
-#Check which of the v22 Decoder changes made it worse. Maybe it is just one of them, and the other changes were good.
-#In v23 we reverted some of the changes made in v22 and trained successfully, so we think the v22 culprit is probably 
-#that we deleted norm3, the feed-forward branch's own timestep modulation.
-#  norm3 turns the timestep into a shift and a scale for the feed-forward half of each transformer
-#  block. v21 had one of these per half. v22 deleted the feed-forward one and reused the attention
-#  half's values instead, which is what the DiT paper does, so it looked like removing a redundancy.
-#  It was not redundant. It was 10.6M params, as much as the attention one, so half the decoder's
-#  timestep conditioning went away. Two modulations in series can also change more sharply with t
-#  than one can, and that matters because we generate in only 4 steps.
-#  So: keep norm3 in v24.
-#  Weaker second suspect: v22 also zeroed the modulation weights at init. Probably innocent, because
-#  v22 was ahead in the early epochs and zero-init would have made it slower to start. To check it:
-#  v23's config plus the zeroing, 44 epochs (~3h), compare against v23's 5.26 dB at epoch 44. An init
-#  effect either shows up early or never.
-#  Not the culprit: the smaller timestep embedding. v22 was already failing before we made it.
-#  Safe to keep, v23 has all of these and still beat v21b: boolean attention mask, logit-normal
-#  training t, MaskedGroupNorm, dropout in the ResnetBlock conv path, use_mu_prior false,
-#  triangular downsampler.
-#
-#Zero-init the modulation projection while keeping norm3. Never tried together, costs nothing.
-#arXiv 2608.09438 (TPAMI 2026) finds zero-init the most influential part of adaLN-Zero, and proposes
-#adaLN-Gaussian as a better init.
-#
-#Try one modulation per branch, projected by a 2-layer MLP instead of a linear, in place of v21's
-#stacked pair. Same sharp t-dependence at about half the params. Matching v21 means the win was
-#nonlinearity in t, not capacity.
-#
-#ResnetBlock1D only adds the time embedding, never scales by it. DiT and ADM do both. About +3.5M params.
-#
+
+model:
+  spk_emb_dim: 128
+  prior_loss: true
+  duration_loss: true
+  log_diagnostics: true
+  downsampler: triangular
+
+  prior_loss_threshold: 0.9
+  duration_loss_threshold: 0.7
+
+  # Exponential moving average of the Decoder weights; null turns it off. See matcha/models/components/decoder_ema.py.
+  # At ~480 optimizer steps per epoch, 0.9999 averages roughly the last 10000 steps, about 21 epochs.
+  # Inference and the validation scripts use the averaged weights unless they are run with --no-ema / --no_ema.
+  decoder_ema_decay: 0.9999
+
+  # Duration jitter before decoding
+  alignment_jitter: true
+  
+  encoder:
+    encoder_params:
+      # Head dim: n_channels / n_heads = 64, divisible by 8
+      n_channels: 384
+      # 384 * 3 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05
+      p_dropout: 0.1
+      
+      prenet: true
+      # should not go over 3, it affects prior loss
+      # 5 is slightly worse, 7 is considerably worse 
+      prenet_kernel_size: 3
+    
+    duration_predictor_params:
+      # head dim is filter_channels_dp / n_heads = 64, divisible by 8
+      filter_channels_dp: 384
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 3
+      # 0.15 reduces the train to validate gap, but increases the validation loss value compared to 0.1 
+      p_dropout: 0.1
+  
+  decoder:
+    # The rule for divisibility by num_heads applies to the second figure only
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    num_mid_blocks: 2
+    # 0.15 reduces the train to validate gap, I think, I did not test extensively. 
+    dropout: 0.15
+  
+  cfm:
+    use_mu_prior: false
+
+  optimizer:
+# Epoch 4539 
+    lr: 2e-5
+    weight_decay: 2e-5
+
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 5
+
+trainer:
+  check_val_every_n_epoch: 5

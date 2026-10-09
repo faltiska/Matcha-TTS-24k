@@ -4,6 +4,7 @@ import time
 import torch
 import torch.nn as nn
 from matcha.models.components.flow_matching import CFM
+from matcha.models.components.decoder_ema import select_decoder_weights
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import denormalize, DEFAULT_DOWNSAMPLER, get_downsampler, fix_len_compatibility, generate_path, sequence_mask, LOG_DURATION_OFFSET
 from matcha.text.phonemizers import multilingual_phonemizer
@@ -197,17 +198,24 @@ class MatchaTTSInfer(nn.Module):
         }
 
 
-def load_matcha(model_name, checkpoint_path):
+def load_matcha(model_name, checkpoint_path, use_decoder_ema=True):
+    """
+    Loads a checkpoint for inference. When the checkpoint holds an exponential moving average of the Decoder
+    weights and use_decoder_ema is set, the averaged weights replace the live Decoder weights.
+    """
     print(f"[!] Loading {model_name}!")
     ckpt = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
     hparams = ckpt["hyper_parameters"]
     hparams.pop("optimizer", None)
     hparams.pop("scheduler", None)
-    sd = ckpt["state_dict"]
+    sd, uses_decoder_ema = select_decoder_weights(ckpt["state_dict"], use_decoder_ema)
     model = MatchaTTSInfer(**hparams).to(DEVICE)
     model.load_state_dict(sd, strict=True)
     model.eval()
-    print(f"[+] {model_name} loaded!")
+    if uses_decoder_ema:
+        print(f"[+] {model_name} loaded with the EMA Decoder weights!")
+    else:
+        print(f"[+] {model_name} loaded with the live Decoder weights!")
     return model
 
 

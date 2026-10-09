@@ -307,6 +307,8 @@ def main():
     parser.add_argument("--vocoder", default="vocos", choices=["vocos"])
     parser.add_argument("--solver", type=str, default=DEFAULT_ODE_SOLVER)
     parser.add_argument("--steps", type=int, default=DEFAULT_NUM_STEPS)
+    parser.add_argument("--no-ema", action="store_true",
+                        help="Use the live Decoder weights even if the checkpoint holds their moving average.")
     args = parser.parse_args()
 
     ckpt_name = Path(args.checkpoint).stem
@@ -316,7 +318,7 @@ def main():
     valid_filelist = _resolve_path(str(cfg["valid_filelist_path"]))
     sample_rate = int(cfg["sample_rate"])
 
-    model = load_matcha("custom_model", args.checkpoint)
+    model = load_matcha("custom_model", args.checkpoint, use_decoder_ema=not args.no_ema)
     model.decoder.solver = args.solver
     vocoder = load_vocoder(args.vocoder)
     mcd_toolbox = Calculate_MCD_24k(MCD_mode="dtw")

@@ -197,10 +197,15 @@ def score_utmos(predictor, waveform, source_sr: int, device: torch.device) -> fl
 def main():
     parser = argparse.ArgumentParser(description="UTMOS benchmark for short utterances")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
+    parser.add_argument("--no-ema", action="store_true",
+                        help="Use the live Decoder weights even if the checkpoint holds their moving average.")
     args = parser.parse_args()
 
     ckpt_path = Path(args.checkpoint)
     ckpt_name = ckpt_path.stem
+    # The wav files are saved under the checkpoint name, so the live run needs its own folder.
+    if args.no_ema:
+        ckpt_name = f"{ckpt_name}-live"
     print(f"Processing {ckpt_name}...")
 
     output_root = OUTPUT_DIR / ckpt_name
@@ -209,7 +214,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = load_matcha("custom_model", str(ckpt_path))
+    model = load_matcha("custom_model", str(ckpt_path), use_decoder_ema=not args.no_ema)
     vocoder = load_vocoder(VOCODER)
 
     predictor = torch.hub.load("tarepan/SpeechMOS:v1.2.0", "utmos22_strong", trust_repo=True)

@@ -1,3 +1,4 @@
+import copy
 import math
 import torch
 import torch.nn.functional as F
@@ -5,6 +6,7 @@ import logging
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
+from matcha.models.components.decoder_ema import paired_flow_matching_losses
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import DEFAULT_DOWNSAMPLER, generate_path, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
 from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
@@ -37,6 +39,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         sample_rate=None,
         f_min=None,
         f_max=None,
+        decoder_ema_decay=None,
+        alignment_jitter=True,
     ):
         super().__init__()
 
@@ -75,6 +79,16 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             decoder_params=decoder,
         )
 
+        # A frozen copy of the Decoder holding the exponential moving average of its weights (see decoder_ema.py).
+        # It is copied before compilation, so its state_dict keys carry no _orig_mod. It is never called: validation
+        # swaps its weights into the live Decoder. Its parameters never require gradients, so the optimizer groups
+        # and the optimizer state of older checkpoints stay the same.
+        # It is registered after the trained modules, so it does not shift their position in named_parameters().
+        self.decoder_ema = None
+        if decoder_ema_decay is not None:
+            self.decoder_ema = copy.deepcopy(self.decoder.estimator)
+            self.decoder_ema.requires_grad_(False)
+
         self.encoder = torch.compile(self.encoder, dynamic=True)
         self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
 
@@ -97,6 +111,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             3. flow matching loss: loss between mel-spectrogram and decoder outputs.
         and, on validation steps only, a fourth reading of the flow matching loss pinned to the end
         of the trajectory (last 5% of it). Not calculated if is_training_step = true.
+        When the Decoder keeps an exponential moving average of its weights, validation steps also return
+        both flow matching readings for the averaged weights, drawn from the same timesteps and noise.
 
         Args:
             x (torch.Tensor): batch of texts, converted to a tensor with phoneme embedding ids.
@@ -187,12 +203,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         else:
             prior_loss = 0
 
-        # Comment out these lines to condition the Decoder on the exact MAS alignment.
-        # They sit after the duration and prior losses, so the Duration Predictor still learns the true MAS
+        # Set alignment_jitter to false to condition the Decoder on the exact MAS alignment.
+        # The jitter sits after the duration and prior losses, so the Duration Predictor still learns the true MAS
         # durations and the Encoder still learns each phoneme's own frame, not a blend with its neighbours.
         # mu_x is detached because the Decoder's input is detached below anyway, so building a backward
         # graph through this second assembly would only cost memory.
-        if is_training_step:
+        should_jitter_alignment = is_training_step and self.hparams.alignment_jitter
+        if should_jitter_alignment:
             attn_fine_jittered = self.jitter_alignment(attn_fine, attn_mask_fine.squeeze(1))
             mu_y_fine = torch.matmul(mu_x.detach(), attn_fine_jittered)
 
@@ -203,19 +220,26 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # Detach mu_y to prevent Decoder gradients from flowing back to the Encoder. We do not want 
         # the Encoder to learn to produce mels that make the Decoder's job easier. 
         # We want the Encoder to learn how to produce mels that match the ground truth.
-        diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=mu_y.detach())
+        decoder_condition = mu_y.detach()
+        if is_training_step:
+            diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=decoder_condition)
+            return diff_loss, dur_loss, prior_loss, None, None
 
-        # A second reading of the same loss, pinned to the end of the trajectory, for validation only.
-        late_diff_loss = None
-        if not is_training_step:
+        if self.decoder_ema is None:
+            diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=decoder_condition)
+            # A second reading of the same loss, pinned to the end of the trajectory, for validation only.
             late_diff_loss = self.decoder.compute_loss(
                     x1=y,
                     mask=y_mask,
-                    mu=mu_y.detach(),
+                    mu=decoder_condition,
                 sample_late_trajectory=True,
                 )
+            return diff_loss, dur_loss, prior_loss, late_diff_loss, None
 
-        return diff_loss, dur_loss, prior_loss, late_diff_loss
+        (diff_loss, late_diff_loss), ema_diff_losses = paired_flow_matching_losses(
+            self.decoder, list(self.decoder_ema.parameters()), y, y_mask, decoder_condition
+        )
+        return diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses
 
     # The fraction of its own frames a token may hand over to a neighbour, never less than one frame.
     # One fine frame is 5.3ms, half a frame at the resolution the Decoder works at.

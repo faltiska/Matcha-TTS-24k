@@ -83,6 +83,11 @@ def cli():
         action="store_true",
         help="Save encoder mel wav too, and a phoneme durations file.",
     )
+    parser.add_argument(
+        "--no_ema",
+        action="store_true",
+        help="Use the live Decoder weights even if the checkpoint holds their moving average.",
+    )
 
     args = parser.parse_args()
 
@@ -91,7 +96,7 @@ def cli():
     print(f"[🍵] Loading custom model from {args.checkpoint_path}")
     args.model = "custom_model"
 
-    model = load_matcha(args.model, args.checkpoint_path)
+    model = load_matcha(args.model, args.checkpoint_path, use_decoder_ema=not args.no_ema)
     model.decoder.solver = args.solver
 
     vocoder = load_vocoder(args.vocoder)

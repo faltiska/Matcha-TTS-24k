@@ -243,6 +243,8 @@ def main():
                         help="Whether the MCD distance counts C0, the loudness coefficient. "
                              "Standard MCD excludes it, so the score reflects spectral shape rather than volume. "
                              "Use 'include' to reproduce pymcd's own behaviour.")
+    parser.add_argument("--no-ema", action="store_true",
+                        help="Use the live Decoder weights even if the checkpoint holds their moving average.")
     args = parser.parse_args()
 
     if args.skip_mcd and args.skip_utmos:
@@ -257,7 +259,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = load_matcha("custom_model", args.checkpoint)
+    model = load_matcha("custom_model", args.checkpoint, use_decoder_ema=not args.no_ema)
     model.decoder.solver = args.solver
     vocoder = load_vocoder(args.vocoder)
 

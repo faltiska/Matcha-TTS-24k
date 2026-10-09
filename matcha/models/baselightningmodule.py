@@ -10,6 +10,14 @@ import torch
 from lightning import LightningModule
 from lightning.pytorch.utilities import grad_norm
 
+from matcha.models.components.decoder_ema import (
+    add_ema_weights_copied_from_live,
+    effective_decay,
+    has_ema_weights,
+    remove_ema_weights,
+    update_ema_weights,
+)
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -80,7 +88,7 @@ class BaseLightningClass(LightningModule, ABC):
 
         # self(...) will invoke the __call__ method from the super class, 
         # which, in its turn, invokes the forward method from matcha_tts.py
-        diff_loss, dur_loss, prior_loss, late_diff_loss = self(
+        diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses = self(
             x=x,
             x_lengths=x_lengths,
             y=y,
@@ -91,7 +99,7 @@ class BaseLightningClass(LightningModule, ABC):
             is_training_step=is_training_step,
         )
 
-        return diff_loss, dur_loss, prior_loss, late_diff_loss
+        return diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         self.ckpt_loaded_epoch = checkpoint["epoch"]  # pylint: disable=attribute-defined-outside-init
@@ -99,6 +107,34 @@ class BaseLightningClass(LightningModule, ABC):
         self._override_optimizer_params(checkpoint)
 
         self.add_speaker_if_needed(checkpoint)
+
+        self.match_checkpoint_ema_weights_to_model(checkpoint["state_dict"])
+
+    def match_checkpoint_ema_weights_to_model(self, state_dict):
+        """
+        Lightning loads the state_dict strictly, so the EMA keys in the checkpoint must match whether this model
+        keeps an exponential moving average (EMA) of the Decoder weights. A checkpoint trained without EMA gets an
+        EMA equal to its live Decoder. A checkpoint with EMA resumed with EMA turned off loses its EMA weights.
+        """
+        model_uses_ema = getattr(self, "decoder_ema", None) is not None
+        checkpoint_has_ema = has_ema_weights(state_dict)
+        if model_uses_ema and not checkpoint_has_ema:
+            add_ema_weights_copied_from_live(state_dict)
+            log.info("Checkpoint has no Decoder EMA weights, the EMA starts from the live Decoder weights.")
+        elif checkpoint_has_ema and not model_uses_ema:
+            ema_free_state_dict = remove_ema_weights(state_dict)
+            state_dict.clear()
+            state_dict.update(ema_free_state_dict)
+            log.warning("Decoder EMA is turned off, the checkpoint's EMA weights are discarded.")
+
+    def optimizer_step(self, *args, **kwargs):
+        super().optimizer_step(*args, **kwargs)
+        if self.decoder_ema is None:
+            return
+        decay = effective_decay(self.hparams.decoder_ema_decay, self.global_step)
+        ema_weights = list(self.decoder_ema.parameters())
+        live_weights = list(self.decoder.estimator.parameters())
+        update_ema_weights(ema_weights, live_weights, decay)
 
     def _override_optimizer_params(self, checkpoint):
         """
@@ -243,7 +279,7 @@ class BaseLightningClass(LightningModule, ABC):
         self.log_mae_gap(metrics, self.METRIC_DURATION)
 
     def training_step(self, batch: Any, batch_idx: int):
-        diff_loss, dur_loss, prior_loss, _ = self.get_losses(batch, is_training_step=True)
+        diff_loss, dur_loss, prior_loss, _, _ = self.get_losses(batch, is_training_step=True)
         bs = batch["x"].shape[0]
         # The 3 losses are independent, each influencing only its own part of the model, being detached
         # from the other parts. They are summed only because the optimizer needs a single number.
@@ -260,7 +296,7 @@ class BaseLightningClass(LightningModule, ABC):
         return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int):
-        diff_loss, dur_loss, prior_loss, late_diff_loss = self.get_losses(batch, is_training_step=False)
+        diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses = self.get_losses(batch, is_training_step=False)
         bs = batch["x"].shape[0]
         total_loss = dur_loss + prior_loss + diff_loss
 
@@ -272,6 +308,12 @@ class BaseLightningClass(LightningModule, ABC):
             # Measured at a fixed point near the end of the trajectory which influences the final mel error the most. This is useful to select the best checkpoint.  
             f"sub_loss/val_diff_late_epoch": late_diff_loss,
         }
+        # The live readings above keep their names, so their charts stay continuous with runs trained without EMA.
+        # Inference uses the averaged weights, so the _ema readings are the ones to compare against them.
+        if ema_diff_losses is not None:
+            ema_diff_loss, ema_late_diff_loss = ema_diff_losses
+            metrics["sub_loss/val_diff_ema_epoch"] = ema_diff_loss
+            metrics["sub_loss/val_diff_late_ema_epoch"] = ema_late_diff_loss
         self.log_dict(metrics, on_step=False, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss

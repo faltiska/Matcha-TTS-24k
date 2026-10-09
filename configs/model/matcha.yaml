@@ -25,3 +25,11 @@ duration_loss_threshold: 0.15
 
 # Use box_downsample. See matcha/utils/model.py.
 downsampler: box
+
+# Exponential moving average of the Decoder weights, e.g. 0.9999; null turns it off.
+# See matcha/models/components/decoder_ema.py.
+decoder_ema_decay: null
+
+# Moves token boundaries a little on every training step before the Decoder's conditioning mel is assembled.
+# false conditions the Decoder on the exact MAS alignment. See MatchaTTS.jitter_alignment.
+alignment_jitter: false
