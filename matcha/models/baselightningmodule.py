@@ -298,6 +298,15 @@ class BaseLightningClass(LightningModule, ABC):
     def validation_step(self, batch: Any, batch_idx: int):
         diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses = self.get_losses(batch, is_training_step=False)
         bs = batch["x"].shape[0]
+
+        live_metrics = {} # from the training weights
+        if ema_diff_losses is not None:
+            live_metrics = {
+                "sub_loss/val_diff_live_epoch": diff_loss,
+                "sub_loss/val_diff_late_live_epoch": late_diff_loss,
+            }
+            diff_loss, late_diff_loss = ema_diff_losses
+
         total_loss = dur_loss + prior_loss + diff_loss
 
         metrics = {
@@ -305,15 +314,9 @@ class BaseLightningClass(LightningModule, ABC):
             f"sub_loss/val_diff_epoch": diff_loss,
             f"sub_loss/val_dur_epoch": dur_loss,
             f"sub_loss/val_prior_epoch": prior_loss,
-            # Measured at a fixed point near the end of the trajectory which influences the final mel error the most. This is useful to select the best checkpoint.  
             f"sub_loss/val_diff_late_epoch": late_diff_loss,
+            **live_metrics,
         }
-        # The live readings above keep their names, so their charts stay continuous with runs trained without EMA.
-        # Inference uses the averaged weights, so the _ema readings are the ones to compare against them.
-        if ema_diff_losses is not None:
-            ema_diff_loss, ema_late_diff_loss = ema_diff_losses
-            metrics["sub_loss/val_diff_ema_epoch"] = ema_diff_loss
-            metrics["sub_loss/val_diff_late_ema_epoch"] = ema_late_diff_loss
         self.log_dict(metrics, on_step=False, on_epoch=True, logger=True, batch_size=bs)
 
         return total_loss

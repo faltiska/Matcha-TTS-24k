@@ -160,19 +160,49 @@ rm -rf /tmp/torchinductor_$USER/
 
 # nVidia drivers
 
-Make sure you do not have nVidia drivers, as, in WSL, you should rely on host drivers.
+In WSL the GPU driver comes from Windows (`/usr/lib/wsl/lib`). Do not install the Linux NVIDIA driver or its
+user-space libraries (`libnvidia-compute`, `libnvidia-gl`, ...). A mismatched `libnvidia-ptxjitcompiler` may
+cause training to hang.
+
+Remove the linux drivers if present:
 ```
-sudo apt-get purge nvidia-driver nvidia-dkms
+sudo apt purge 'libnvidia-compute*' 'libnvidia-gl*' 'libnvidia-decode*' 'libnvidia-encode*' \
+  'libnvidia-fbc*' 'libnvidia-cfg*' 'libnvidia-gpucomp*' 'nvidia-kernel-*' nvidia-firmware \
+  nvidia-modprobe nvidia-persistenced nvidia-settings xserver-xorg-video-nvidia
 ```
-Check to see you do not have nvidia drivers with:
+
+Block apt from ever installing them again:
 ```
-dpkg -l | grep -E "nvidia-driver|nvidia-dkms"
+sudo tee /etc/apt/preferences.d/no-nvidia-driver-in-wsl <<'EOF'
+Package: libnvidia-compute* libnvidia-gl* libnvidia-decode* libnvidia-encode* libnvidia-fbc* libnvidia-cfg* libnvidia-gpucomp* nvidia-kernel-* nvidia-firmware* nvidia-driver-* nvidia-dkms-* xserver-xorg-video-nvidia*
+Pin: release *
+Pin-Priority: -1
+EOF
 ```
-You dso need cuDNN so install / update that with:
+
+Check, after every apt upgrade and every Windows driver update:
+```
+sudo ldconfig
+ldconfig -p | grep -E "libcuda.so.1|libnvidia-ptxjitcompiler"   # only /usr/lib/wsl/lib entries
+dpkg -l | grep -E "^ii +(libnvidia-(compute|gl|decode|encode|fbc|cfg|gpucomp)|nvidia-(kernel|firmware|driver|dkms)|xserver-xorg-video-nvidia)"   # no output
+which nvidia-smi   # /usr/lib/wsl/lib/nvidia-smi
+dpkg -l | grep -E "^ii +(nvidia-container-toolkit|libnvidia-container)"   # 4 packages, needed by Docker
+```
+These libraries are required and safe to have:
+```
+/usr/lib/wsl/lib/libcuda.so.1
+/usr/lib/wsl/lib/nvidia-smi
+libnvidia-container1
+libnvidia-container-tools
+nvidia-container-toolkit
+nvidia-container-toolkit-base
+```
+
+You also need cuDNN, so install / update it with:
 ```
 sudo apt install libcudnn9-cuda-13 --update
 ```
-or update all linux packages:
+or update all linux packages, then run the check above:
 ```
 sudo apt update && sudo apt full-upgrade
 ```
@@ -192,7 +222,7 @@ tmux new -s train
 cd ~/projects/matcha-tts/
 source .venv/bin/activate
 
-python -m matcha.train +experiment=v22
+python -m matcha.train +experiment=v24
 ```
 
 Detach from the session at any time with `Ctrl+B, D`. The process keeps running in the background.

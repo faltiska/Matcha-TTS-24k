@@ -116,8 +116,8 @@ decide how much noise is still in the signal, and how aggressively to correct th
 conditioning signal.
 
 Architecturally it is a small U-Net: each down/mid/up stage is a convolutional residual block (ResNet), followed by a stack
-of attention blocks. I have 2 types of attention blocks, Transformer and Conformer, configurable, but I trained 
-with Transformer so far.
+of attention blocks. There are 2 configurable types of attention blocks, Transformer (trained up to v24) and Conformer
+(v25, `matcha/models/components/conformer.py`).
 
 The diffusion timestep is injected via a sinusoidal positional embedding + MLP. It reaches the model in two ways:
 - The ResNet blocks add it directly to the activations, shifting the feature map at that point in time.
@@ -125,6 +125,12 @@ The diffusion timestep is injected via a sinusoidal positional embedding + MLP. 
   into 6 modulation parameters — a scale and shift applied to the hidden states before attention, a gate on the attention
   output, and the same triplet for the feed-forward sub-layer. The gates are initialised to zero, so early in training
   the block behaves as a plain residual transformer; the timestep conditioning activates gradually as the model learns to use it.
+- The Conformer blocks use the same adaLN-Zero scheme on each of their four sub-layers (macaron layout: half FFN,
+  self-attention, depthwise convolution, half FFN), 12 modulation parameters in total. Their adaLN projection is
+  zero initialised and kept at zero by `Decoder.initialize_weights`, so each block starts as an exact identity.
+  Attention uses QK-norm, rotary positions on half of each head and SDPA with a boolean key mask. The convolution
+  zeroes padded frames before the depthwise kernel and uses a per-frame LayerNorm instead of BatchNorm, so, like
+  `MaskedGroupNorm` in the ResNet blocks, nothing depends on the padding or on the rest of the batch.
 
 ODE starts from the assembled mel plus noise as input, both during training and inference.
 This was described in the original Matcha paper, but it is not what is implemented ikn their github code.

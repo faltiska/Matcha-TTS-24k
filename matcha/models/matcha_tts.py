@@ -17,6 +17,32 @@ log = logging.getLogger(__name__)
 LOG_2_PI = math.log(2 * math.pi)
 
 
+def per_phoneme_prior_loss(y_fine, mu_y_fine, attn_fine, x_mask, threshold):
+    """
+    Prior loss with one vote per phoneme instead of one vote per frame.
+
+    The frame-weighted loss lets long phonemes dominate: a phoneme spanning 20 frames counts 20 times as much
+    as one spanning a single frame, so badly predicted short phonemes barely move the loss. Here each
+    phoneme's error is averaged over the frames MAS assigned to it, then the phonemes are averaged.
+    The scale matches the frame-weighted loss (Huber summed over mel bins, averaged over frames), so the
+    two can be switched without retuning the loss weights.
+
+    Args:
+        y_fine (torch.Tensor): masked target mel. shape: (batch_size, n_feats, T_mel)
+        mu_y_fine (torch.Tensor): masked Encoder output expanded to frames. shape: (batch_size, n_feats, T_mel)
+        attn_fine (torch.Tensor): hard MAS alignment. shape: (batch_size, T_text, T_mel)
+        x_mask (torch.Tensor): text mask. shape: (batch_size, 1, T_text)
+        threshold (float): Huber delta.
+    """
+    frame_loss = F.huber_loss(y_fine, mu_y_fine, delta=threshold, reduction='none').sum(dim=1)  # (B, T_mel)
+    attn_fine = attn_fine.to(frame_loss.dtype)
+    phoneme_loss_sum = torch.bmm(attn_fine, frame_loss.unsqueeze(-1)).squeeze(-1)  # (B, T_text)
+    # MAS gives every real token at least one frame; padding has none, and its sum is 0 anyway.
+    phoneme_frames = attn_fine.sum(dim=-1).clamp(min=1)
+    phoneme_loss = phoneme_loss_sum / phoneme_frames * x_mask.squeeze(1)
+    return phoneme_loss.sum() / x_mask.sum()
+
+
 class MatchaTTS(BaseLightningClass):  # 🍵
     def __init__(
         self,
@@ -41,6 +67,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         f_max=None,
         decoder_ema_decay=None,
         alignment_jitter=True,
+        prior_loss_per_phoneme=False,
     ):
         super().__init__()
 
@@ -194,8 +221,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # to, without adding a second competing loss term (see build_perceptual_mel_weights).
             y_fine_weighted = y_fine * y_fine_mask * self.perceptual_mel_weights
             mu_y_fine_weighted = mu_y_fine * y_fine_mask * self.perceptual_mel_weights
-            prior_loss = F.huber_loss(y_fine_weighted, mu_y_fine_weighted, delta=threshold, reduction='sum')
-            prior_loss = prior_loss / torch.sum(y_fine_mask)
+            if self.hparams.prior_loss_per_phoneme:
+                prior_loss = per_phoneme_prior_loss(y_fine_weighted, mu_y_fine_weighted, attn_fine, x_mask, threshold)
+            else:
+                prior_loss = F.huber_loss(y_fine_weighted, mu_y_fine_weighted, delta=threshold, reduction='sum')
+                prior_loss = prior_loss / torch.sum(y_fine_mask)
 
             if self.hparams.log_diagnostics:
                 with torch.no_grad():

@@ -30,7 +30,6 @@ dependencies = [
     "einops",
     "inflect",
     "scipy",
-    "conformer",
     "diffusers",
     "parse",
     "fastapi",

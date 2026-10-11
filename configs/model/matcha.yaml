@@ -33,3 +33,8 @@ decoder_ema_decay: null
 # Moves token boundaries a little on every training step before the Decoder's conditioning mel is assembled.
 # false conditions the Decoder on the exact MAS alignment. See MatchaTTS.jitter_alignment.
 alignment_jitter: false
+
+# false: prior loss gives one vote per frame, so long phonemes dominate. Needed early in training to learn durations.
+# true: one vote per phoneme, so badly modelled short phonemes count as much as long ones. Use in later stages.
+# See matcha_tts.per_phoneme_prior_loss.
+prior_loss_per_phoneme: false

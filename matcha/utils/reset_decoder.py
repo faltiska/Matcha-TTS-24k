@@ -12,8 +12,10 @@ Optimizer state is rebuilt as a fresh, empty Adaptive Moment Estimation with dec
 state. Training progress is reset so Lightning resumes this checkpoint as a new run.
 
 Usage:
-    python -m matcha.utils.reset_decoder <trained_source.ckpt> <fresh_decoder_source.ckpt> -o <output.ckpt>
-
+    python -m matcha.utils.reset_decoder <trained_encoder_source.ckpt> <fresh_decoder_source.ckpt> -o <output.ckpt>
+Eg:
+    python -m matcha.utils.reset_decoder logs/train/v24/checkpoint_epoch=4539.ckpt logs/train/v24/empty_decoder.ckpt -o empty_decoder_full_encoder.ckpt
+    
 The output path is backed up to <output.ckpt>.bak before modification, if it already exists.
 """
 import argparse

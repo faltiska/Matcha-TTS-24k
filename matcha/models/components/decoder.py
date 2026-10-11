@@ -4,10 +4,10 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from conformer import ConformerBlock
 from diffusers.models.activations import get_activation
 from einops import pack, rearrange
 
+from matcha.models.components.conformer import TimestepConditionedConformerBlock
 from matcha.models.components.transformer import TimestepConditionedTransformerBlock
 
 
@@ -215,45 +215,6 @@ class Upsample1D(nn.Module):
         return outputs
 
 
-class ConformerWrapper(ConformerBlock):
-    def __init__(
-        self,
-        *,
-        dim,
-        dim_head=64,
-        heads=8,
-        ff_mult=4,
-        conv_expansion_factor=2,
-        conv_kernel_size=31,
-        attn_dropout=0,
-        ff_dropout=0,
-        conv_dropout=0,
-        conv_causal=False,
-    ):
-        super().__init__(
-            dim=dim,
-            dim_head=dim_head,
-            heads=heads,
-            ff_mult=ff_mult,
-            conv_expansion_factor=conv_expansion_factor,
-            conv_kernel_size=conv_kernel_size,
-            attn_dropout=attn_dropout,
-            ff_dropout=ff_dropout,
-            conv_dropout=conv_dropout,
-            conv_causal=conv_causal,
-        )
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        timestep=None,
-    ):
-        return super().forward(x=hidden_states, mask=attention_mask.bool())
-
-
 class Decoder(nn.Module):
     def __init__(
         self,
@@ -268,14 +229,18 @@ class Decoder(nn.Module):
         down_block_type="transformer",
         mid_block_type="transformer",
         up_block_type="transformer",
+        conformer_ff_mult=2,
+        conformer_kernel_size=31,
     ):
         super().__init__()
         channels = tuple(channels)
+        self.conformer_ff_mult = conformer_ff_mult
+        self.conformer_kernel_size = conformer_kernel_size
         self.in_channels = in_channels
         self.out_channels = out_channels
 
         self.time_embeddings = SinusoidalPosEmb(in_channels)
-        time_embed_dim = channels[0] * 4
+        time_embed_dim = channels[0]
         self.time_mlp = TimestepEmbedding(
             in_channels=in_channels,
             time_embed_dim=time_embed_dim,
@@ -371,19 +336,16 @@ class Decoder(nn.Module):
         self.initialize_weights()
         # nn.init.normal_(self.final_proj.weight)
 
-    @staticmethod
-    def get_block(block_type, dim, attention_head_dim, num_heads, dropout, time_embed_dim):
+    def get_block(self, block_type, dim, attention_head_dim, num_heads, dropout, time_embed_dim):
         if block_type == "conformer":
-            block = ConformerWrapper(
+            block = TimestepConditionedConformerBlock(
                 dim=dim,
-                dim_head=attention_head_dim,
-                heads=num_heads,
-                ff_mult=1,
-                conv_expansion_factor=2,
-                ff_dropout=dropout,
-                attn_dropout=dropout,
-                conv_dropout=dropout,
-                conv_kernel_size=31,
+                num_attention_heads=num_heads,
+                attention_head_dim=attention_head_dim,
+                time_embed_dim=time_embed_dim,
+                dropout=dropout,
+                ff_mult=self.conformer_ff_mult,
+                conv_kernel_size=self.conformer_kernel_size,
             )
         elif block_type == "transformer":
             block = TimestepConditionedTransformerBlock(
@@ -415,6 +377,11 @@ class Decoder(nn.Module):
 
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
+
+        # Blocks with their own initialisation (zero adaLN gates, per-slice QKV) re-apply it after the generic pass.
+        for m in self.modules():
+            if isinstance(m, TimestepConditionedConformerBlock):
+                m.reset_parameters()
 
     def forward(self, x, mask, mu, t):
         """Forward pass of the UNet1DConditional model.

@@ -9,6 +9,9 @@
 
 # 3. Decoder params averaging.
 
+# 4. Reduced speaker embedding dim
+
+# 5. Added the ability to compute Encoder loss with "one vote per phoneme" instead of "one vote per frame" 
 
 run_name: v24
 
@@ -19,7 +22,7 @@ data:
   num_workers: 8
   max_frames_per_batch: 30000
 
-ckpt_path: logs/train/v24/checkpoint_epoch=4539.ckpt
+ckpt_path: null
 #
 # Fine-tuning instructions: 
 # - reduce LR 
@@ -31,22 +34,25 @@ ckpt_path: logs/train/v24/checkpoint_epoch=4539.ckpt
 #
 
 model:
-  spk_emb_dim: 128
+  spk_emb_dim: 64
   prior_loss: true
   duration_loss: true
   log_diagnostics: true
   downsampler: triangular
 
   prior_loss_threshold: 0.9
-  duration_loss_threshold: 0.7
+  duration_loss_threshold: 1.0
 
   # Exponential moving average of the Decoder weights; null turns it off. See matcha/models/components/decoder_ema.py.
-  # At ~480 optimizer steps per epoch, 0.9999 averages roughly the last 10000 steps, about 21 epochs.
-  # Inference and the validation scripts use the averaged weights unless they are run with --no-ema / --no_ema.
+  # A value of 0.9999 averages roughly the last 10000 steps; At ~480 optimizer steps per epoch, that is ~21 epochs.
+  # Inference and the validation scripts use the averaged weights unless they are run with --no-ema.
   decoder_ema_decay: 0.9999
 
   # Duration jitter before decoding
   alignment_jitter: true
+
+  # One vote per phoneme in the prior loss instead of one per frame. Keep false until durations are learned.
+  prior_loss_per_phoneme: false
   
   encoder:
     encoder_params:
@@ -87,9 +93,9 @@ model:
     use_mu_prior: false
 
   optimizer:
-# Epoch 4539 
-    lr: 2e-5
-    weight_decay: 2e-5
+# Epoch 0 
+    lr: 8e-5
+    weight_decay: 1e-4
 
 callbacks:
   model_checkpoint:

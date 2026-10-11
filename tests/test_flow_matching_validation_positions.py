@@ -1,9 +1,8 @@
-"""Tests for the per-position validation readings of the flow matching loss.
+"""Tests for the timestep that the flow matching loss is computed at.
 
-Validation measures the decoder's velocity error at fixed points along the noise-to-mel trajectory,
-because the error grows by more than an order of magnitude from one end to the other and the average
-over randomly drawn timesteps hides that. Each reading must pin t to exactly the requested position,
-and the position feeding sub_loss/val_diff_late_epoch must be one of the measured ones.
+Training draws a random t for each sample. Validation adds a second reading pinned near the end of the
+noise-to-mel trajectory (LATE_TRAJECTORY_T), where the decoder's velocity error is largest and the average
+over random timesteps hides it. That reading feeds sub_loss/val_diff_late_epoch.
 """
 from types import SimpleNamespace
 
@@ -11,6 +10,7 @@ import torch
 
 from matcha.models.components.flow_matching import (
     BASECFM,
+    LATE_TRAJECTORY_T,
 )
 
 BATCH_SIZE = 3
@@ -37,15 +37,15 @@ def make_cfm():
     return cfm
 
 
-def compute_loss_once(cfm, fixed_trajectory_position=None):
+def compute_loss_once(cfm, sample_late_trajectory=False):
     x1 = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
     mu = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
     mask = torch.ones(BATCH_SIZE, 1, N_FRAMES)
-    return cfm.compute_loss(x1=x1, mask=mask, mu=mu, fixed_trajectory_position=fixed_trajectory_position)
+    return cfm.compute_loss(x1=x1, mask=mask, mu=mu, sample_late_trajectory=sample_late_trajectory)
 
 
 def test_training_path_still_draws_random_timesteps():
-    """Without a position the timestep must still be drawn, otherwise training would collapse to one point."""
+    """Without the late reading the timestep must still be drawn, otherwise training would collapse to one point."""
     cfm = make_cfm()
     for _ in range(8):
         compute_loss_once(cfm)
@@ -55,3 +55,11 @@ def test_training_path_still_draws_random_timesteps():
     assert all_drawn.min() >= 0.0
     assert all_drawn.max() <= 1.0
 
+
+def test_late_reading_pins_every_sample_to_the_late_position():
+    cfm = make_cfm()
+    compute_loss_once(cfm, sample_late_trajectory=True)
+
+    (recorded,) = cfm.estimator.recorded_timesteps
+    assert recorded.shape == (BATCH_SIZE,)
+    assert torch.allclose(recorded, torch.full_like(recorded, LATE_TRAJECTORY_T))
