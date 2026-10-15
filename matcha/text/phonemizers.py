@@ -20,6 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
+from phonemizer.backend.espeak.wrapper import EspeakWrapper
 from matcha.text.symbols import symbol_to_id, voiced_phoneme_ids, PRE_ID, POST_ID
 
 logging.basicConfig()
@@ -35,15 +36,33 @@ for lang in ['en', 'es', 'pt', 'de', 'fr', 'it']:
         logger.warning(f"NeMo normalizer not available for {lang}: {e}")
 
 # Initializing the phonemizer globally significantly improves the speed.
+# Optional custom Romanian dictionary (espeak/bin/ro, built from RoLEX, see espeak/src/compile_ro.sh).
+# Opt-in, because it changes the phonemes: a model must be trained and served with the same dictionary.
+#   MATCHA_ESPEAK_RO_DATA=espeak/bin/ro python -m matcha.train ...
+ro_espeak_data = os.environ.get("MATCHA_ESPEAK_RO_DATA")
+if ro_espeak_data:
+    ro_espeak_data = Path(ro_espeak_data).resolve()
+    if not (ro_espeak_data / "ro_dict").is_file():
+        raise RuntimeError(f"MATCHA_ESPEAK_RO_DATA={ro_espeak_data} does not contain a compiled ro_dict")
+
 phonemizers = {}
 for lang in ["en-us", "en-gb", "ro", "fr-fr", "de", "es", "pt", "it", "ja", "he"]:
-    phonemizers[lang] = phonemizer.backend.EspeakBackend(
-        language=lang,
-        preserve_punctuation=True,
-        with_stress=True,
-        language_switch="remove-flags",
-        logger=logger,
-    )
+    # The data path is read once, when the backend loads its own copy of the eSpeak library,
+    # so the other languages keep using the system data.
+    use_custom_data = lang == "ro" and ro_espeak_data
+    if use_custom_data:
+        EspeakWrapper.set_data_path(str(ro_espeak_data))
+    try:
+        phonemizers[lang] = phonemizer.backend.EspeakBackend(
+            language=lang,
+            preserve_punctuation=True,
+            with_stress=True,
+            language_switch="remove-flags",
+            logger=logger,
+        )
+    finally:
+        if use_custom_data:
+            EspeakWrapper.set_data_path(None)
 
 # eSpeak does not remove the dot after expanding some abbreviations, like "Dr.", making the TTS pause a bit.
 # Search for $dot here: https://github.com/espeak-ng/espeak-ng/blob/master/dictsource/en_list

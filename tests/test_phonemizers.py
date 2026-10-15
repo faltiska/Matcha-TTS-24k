@@ -287,3 +287,46 @@ class TestPhonemeIds:
                 char_index += 1
 
         assert ids == expected_ids
+
+
+class TestCustomRomanianDictionary:
+    """
+    MATCHA_ESPEAK_RO_DATA switches only Romanian to the dictionary in espeak/bin/ro.
+    The variable is read at import time, so each case runs in a fresh interpreter.
+    "abandonatele" is fixed by RoLEX (stem stress), so it tells the two dictionaries apart.
+    """
+
+    REPO_DIR = __import__("pathlib").Path(__file__).resolve().parent.parent
+    SNIPPET = (
+        "from matcha.text.phonemizers import phonemizers as p;"
+        "print(p['ro'].phonemize(['abandonatele'], strip=True)[0]);"
+        "print(p['en-us'].phonemize(['hello'], strip=True)[0])"
+    )
+
+    def _run(self, ro_data):
+        import os, subprocess, sys
+        env = {k: v for k, v in os.environ.items() if k != "MATCHA_ESPEAK_RO_DATA"}
+        if ro_data is not None:
+            env["MATCHA_ESPEAK_RO_DATA"] = ro_data
+        result = subprocess.run([sys.executable, "-c", self.SNIPPET], cwd=self.REPO_DIR, env=env,
+                                capture_output=True, text=True)
+        return result
+
+    def test_default_uses_system_dictionary(self):
+        result = self._run(None)
+        assert result.returncode == 0, result.stderr
+        ro, en = result.stdout.split("\n")[-3:-1]
+        assert ro == "ˌabandˌonatˈele"
+        assert en == "həlˈoʊ"
+
+    def test_custom_dictionary_for_ro_only(self):
+        result = self._run("espeak/bin/ro")
+        assert result.returncode == 0, result.stderr
+        ro, en = result.stdout.split("\n")[-3:-1]
+        assert ro == "ˌabandonˈatele"
+        assert en == "həlˈoʊ"
+
+    def test_missing_dictionary_fails_fast(self, tmp_path):
+        result = self._run(str(tmp_path))
+        assert result.returncode != 0
+        assert "does not contain a compiled ro_dict" in result.stderr

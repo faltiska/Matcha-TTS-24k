@@ -144,6 +144,22 @@ The target checkpoint is backed up to `<target>.bak` before modification.
 python -m matcha.utils.transplant_spk_emb <target.ckpt> <source.ckpt> <spk_id>
 ```
 
+# Custom Romanian eSpeak dictionary
+
+`espeak/bin/ro` is a self-contained eSpeak-ng 1.51 data dir whose Romanian dictionary is extended with
+[RoLEX](https://github.com/adrianastan/rolex) pronunciations (stress and segmental fixes). It is opt-in:
+```
+MATCHA_ESPEAK_RO_DATA=espeak/bin/ro python -m matcha.train +experiment=v22
+```
+Train and serve with the same setting, the phonemes differ from the stock dictionary.
+
+Sources are in `espeak/src/ro` (`ro_rules`, `ro_list`, `ro_emoji` from espeak-ng 1.51, `ro_listx` generated, `ro_extra` manual).
+- Fix a word: add it to `espeak/src/ro/ro_extra`, then run `espeak/src/compile_ro.sh`.
+- After editing `ro_rules` or `ro_list`: run `espeak/src/build_ro_listx.sh` (regenerates `ro_listx` and the reports in `espeak/src/reports`, then compiles).
+- Check a word: `espeak-ng --path=espeak/bin/ro -v ro -q -x --ipa "cuvânt"`
+
+Only the installed `espeak-ng` binary is needed, no eSpeak checkout. Commit `espeak/bin/ro` after rebuilding.
+
 # PyTorch stuff
 
 When compiling models, pytorch stores some information to be reused at later runs.
