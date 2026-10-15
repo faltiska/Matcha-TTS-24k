@@ -1,0 +1,504 @@
+RoLEX (bcdce3ce7b06a525a82040cf91afa6e9674af769) vs eSpeak-ng 1.51 Romanian rules
+
+Word forms compared:             261503
+  rules already agree:           144317
+  RoLEX differs, in ro_listx:    116601
+    stress position only:        73952
+    segmental (maybe + stress):  42649
+  ambiguous homographs, skipped: 396  (ro_ambiguous.tsv)
+  in ro_list, RoLEX disagrees:   189  (ro_list_conflicts.tsv)
+  manual overrides in ro_extra:  0
+Pinned in ro_listx (agree, but a listed stem would change them): 826
+Ambiguous / ro_list words changed through a listed stem:        118
+RoLEX rows rejected:             13472  (ro_rejected.tsv)
+    10180  form lost its initial î
+     3040  nuclei/syllable count mismatch
+      142  no vowel letter
+       44  e_X before o_X
+       26  unsupported symbols ['je']
+       24  unsupported symbols ['.']
+        8  unsupported symbols ['c']
+        5  non-final i_0
+        2  stress column spells a different word
+        1  o_X before None
+
+Stress shifts (vowels after the stress mark: rules → RoLEX; 0 = final syllable)
+
+  40539  2 → 3   top endings: -lor:15030, -ele:6404, -eră:3150, -ăţi:3085, -răm:3080, -ule:2803, -ile:2740, -ică:657, -iei:563, -ere:253, -lei:237, -ilă:210
+           abandonaseră ˌabandˌonasˈeɾə→ˌabandonˈaseɾə
+           abandonaserăm ˌabandˌonasˈeɾəm→ˌabandonˈaseɾəm
+           abandonaserăţi ˌabandˌonasˈeɾətsʲ→ˌabandonˈaseɾətsʲʲ
+           abandonatele ˌabandˌonatˈele→ˌabandonˈatele
+  16536  1 → 2   top endings: -eţi:3062, -sem:2918, -eşi:2917, -răm:2739, -uri:1615, -rii:1087, -ici:739, -gii:135, -gem:42, -dem:39, -ini:35, -nem:27
+           abandonarăm ˌabandˌonaɾˈəm→ˌabandonˈaɾəm
+           abandonasem ˌabandˌonasˈem→ˌabandonˈasem
+           abandonaseşi ˌabandˌonasˈeʃʲ→ˌabandonˈaseʃʲʲ
+           abandonaseţi ˌabandˌonasˈetsʲʲ→ˌabandonˈasetsʲʲ
+   5058  2 → 1   top endings: -ndu:689, -sei:177, -iză:158, -iza:150, -nii:134, -cea:98, -tii:80, -lii:80, -gea:77, -eri:76, -rii:73, -ţii:70
+           abandona ˌabandˈona→ˌabandonˈa
+           abandonă ˌabandˈonə→ˌabandonˈə
+           abdic ˈabdik→abdˈik
+           abilita ˌabilˈita→ˌabilitˈa
+   3905  2 → 4   top endings: -lor:1743, -ele:1478, -ule:210, -ndu:168, -ile:63, -lui:45, -iţa:15, -nul:11, -ere:11, -eră:7, -răm:7, -ăţi:7
+           abatoarele ˌabatɔaɾˈele→ˌabatˈɔaɾele
+           abatoarelor ˌabatɔaɾˈelor→ˌabatˈɔaɾelor
+           aberoscoapele ˌabeɾˌoskɔapˈele→ˌabeɾoskˈɔapele
+           aberoscoapelor ˌabeɾˌoskɔapˈelor→ˌabeɾoskˈɔapelor
+   3863  3 → 4   top endings: -lor:1666, -ile:1584, -lui:452, -ele:44, -nea:21, -lea:13, -iţe:12, -ţei:12, -iţă:11, -rea:6, -reo:6, -sul:5
+           abandonurile ˌabandonˈurile→ˌabandˈonuɾile
+           abandonurilor ˌabandonˈurilor→ˌabandˈonuɾilor
+           abisurile ˌabisˈurile→abˈisuɾile
+           abisurilor ˌabisˈurilor→abˈisuɾilor
+   1746  3 → 2   top endings: -nea:124, -rea:87, -tea:83, -dea:82, -ţei:81, -iţă:81, -reo:81, -iţe:77, -rii:72, -ica:66, -lea:59, -cii:56
+           abdice ˈabditʃˌe→abdˈitʃe
+           absolvea absˈolvea→ˌabsolvˈea
+           absorbea absˈorbea→ˌabsorbˈea
+           abstrusul ˈabstrusul→abstrˈusul
+    649  4 → 3   top endings: -lor:240, -lui:137, -ele:106, -ule:64, -ile:48, -rea:21, -ica:5, -ice:5, -cul:5, -cei:3, -cii:3, -ila:2
+           abililor ˈabilʲˌilor→abˈililor
+           abstrusului ˈabstrusuluɪ→abstrˈusuluɪ
+           actriţele ˈaktritsˌele→aktrˈitsele
+           actriţelor ˈaktritsˌelor→aktrˈitselor
+    366  3 → 1   top endings: -răm:64, -ica:57, -rii:55, -cii:41, -eră:36, -era:17, -ănă:8, -ătă:7, -ămă:6, -ără:5, -ăcă:5, -lii:5
+           abdica ˈabdikˌa→ˌabdikˈa
+           acceleră aktʃˈeleɾˌə→ˌaktʃeleɾˈə
+           accelerăm aktʃˈeleɾˌəm→ˌaktʃeleɾˈəm
+           acoperii akˈopeɾˌiɪ→ˌakopeɾˈiɪ
+    336  3 → 5   top endings: -lor:143, -ile:140, -lui:42, -lea:3, -rii:3, -reo:2, -ară:1, -tea:1, -teo:1
+           ablauturile ˌablaʊtˈurile→ˈablaʊtuɾile
+           ablauturilor ˌablaʊtˈurilor→ˈablaʊtuɾilor
+           adaosurile ˌadaosˈurile→adˈaosuɾile
+           adaosurilor ˌadaosˈurilor→adˈaosuɾilor
+    321  1 → 3   top endings: -uri:143, -gii:13, -rii:8, -ând:8, -uia:7, -lţi:5, -eţi:5, -urg:5, -tas:4, -ici:4, -ind:4, -lum:3
+           ablauturi ˌablaʊtˈurʲ→ˈablaʊtuɾʲʲ
+           aceleiaşi ˌatʃelejˈaʃʲʲ→atʃˈelejaʃʲʲ
+           aceloraşi ˌatʃeloɾˈaʃʲʲ→atʃˈeloɾaʃʲʲ
+           aceluia ˌatʃelujˈa→atʃˈeluja
+    176  2 → 5   top endings: -ndu:107, -lor:27, -ule:14, -ele:13, -lui:5, -cea:3, -rul:3, -ece:1, -lii:1, -lul:1, -ile:1
+           anghemahtule ˌaŋɡemahtˈule→ˈaŋɡemahtule
+           boacănele bˌɔakənˈele→bˈɔakənele
+           boacănelor bˌɔakənˈelor→bˈɔakənelor
+           cirocumuluşilor tʃˌiɾokˌumuluʃʲˈilor→tʃˌiɾokˈumuluʃilor
+    170  4 → 2   top endings: -ăţi:113, -rea:22, -reo:10, -ele:8, -nea:4, -ile:2, -tea:2, -rii:2, -lea:2, -zea:1, -ule:1, -leo:1
+           abdicarăţi ˈabdikˌaɾətsʲ→ˌabdikˈaɾətsʲʲ
+           acoperea akˈopeɾˌea→ˌakopeɾˈea
+           acoperirăţi akˈopeɾʲˌiɾətsʲ→ˌakopeɾˈiɾətsʲʲ
+           adeverea adˈeveɾˌea→ˌadeveɾˈea
+     58  5 → 4   top endings: -lor:23, -ile:23, -lui:7, -ele:5
+           agreabililor aɡrˈeabilʲˌilor→ˌaɡreˈabililor
+           agreabilului aɡrˈeabiluluɪ→ˌaɡreˈabiluluɪ
+           albumurile ˈalbumurile→albˈumuɾile
+           albumurilor ˈalbumurilor→albˈumuɾilor
+     43  4 → 5   top endings: -lor:17, -lui:12, -ele:12, -ile:1, -ece:1
+           branchipusului brankˈipusuluɪ→brˈankipusuluɪ
+           chelneriţele kelnˈeɾitsˌele→kˈelneɾitsele
+           chelneriţelor kelnˈeɾitsˌelor→kˈelneɾitselor
+           cirocumulusului tʃˌiɾokumˈulusuluɪ→tʃˌiɾokˈumulusuluɪ
+     34  2 → 6   top endings: -ndu:31, -lor:1, -ule:1, -nse:1
+           feldmareşalilor fˌeldmaɾˌeʃalʲˈilor→fˈeldmaɾeʃalilor
+           feldmareşalule fˌeldmaɾˌeʃalˈule→fˈeldmaɾeʃalule
+           neinvectivându nˌeinvˌektivˈɨndu→nˈeinvektivɨndu
+           nemaibălăngănindu nˌemaɪbˌələŋɡənˈindu→nemˈaɪbələŋɡənindu
+
+Segmental patterns (rules → RoLEX, canonical IPA; contexts as left_right, # = word edge)
+
+  25042  j → i           contexts i_l:2739, s_o:2716, r_a:1357, s_a:1220, ʃ_a:1033, r_e:1017
+           abadia abˈadja→ˌabadˈia
+           aberaţia ˌabeɾˈatsja→ˌabeɾˈatsia
+           aberaţie ˌabeɾˈatsje→ˌabeɾˈatsie
+           aberaţiile ˌabeɾatsˈiɪle→ˌabeɾˈatsiile
+  11132  w → u           contexts a_t:1762, t_i:725, t_a:698, d_i:509, s_i:483, i_l:428
+           accentuai ˌaktʃentwˈaɪ→ˌaktʃentuˈaɪ
+           accentuam ˌaktʃentwˈam→ˌaktʃentuˈam
+           accentuare ˌaktʃentwˈaɾe→ˌaktʃentuˈaɾe
+           accentuarea ˌaktʃentwˈaɾea→ˌaktʃentuˈaɾea
+   2062  i → j           contexts a_#:795, o_n:245, e_n:198, ə_m:137, ə_n:136, o_k:96
+           absolveai ˌabsolvˈeai→ˌabsolvˈeaj
+           absorbeai ˌabsorbˈeai→ˌabsorbˈeaj
+           abureai abˈuɾeaˌi→ˌabuɾˈeaj
+           abăteai ˌabətˈeai→ˌabətˈeaj
+    684  ɔ → o           contexts k_a:211, t_a:164, r_a:160, v_a:34, n_a:29, m_a:14
+           agroalimentar ˌaɡrɔalˌimentˈar→ˌaɡroˌalimentˈar
+           agroalimentara ˌaɡrɔalˌimentˈaɾa→ˌaɡroˌalimentˈaɾa
+           agroalimentare ˌaɡrɔalˌimentˈaɾe→ˌaɡroˌalimentˈaɾe
+           agroalimentarea ˌaɡrɔalˌimentˈaɾea→ˌaɡroˌalimentˈaɾea
+    592  ∅ → i           contexts ʃ_o:123, i_j:118, l_#:42, t_#:42, ʃ_#:37, ʃ_ɔ:35
+           adamclisi ˌadamklˈisʲ→ˌadamklisˈi
+           adi ˈadʲʲ→ˈadʲi
+           afridi afrˈidʲʲ→afrˈidʲi
+           agronomiei ˌaɡronomˈei→ˌaɡronomˈieɪ
+    472  yj → ɨi         contexts s_t:35, r_t:35, s_s:28, r_s:28, k_s:28, k_t:26
+           alămâile ˌaləmˈyɪle→ˌaləmˈɨile
+           alămâilor ˌaləmˈyɪlor→ˌaləmˈɨilor
+           bâjbâiră bɨʒbˈyɪɾə→bˌɨʒbɨˈiɾə
+           bâjbâirăm bˌɨʒbyɪɾˈəm→bˌɨʒbɨˈiɾəm
+    437  iw → ju         contexts r_#:68, k_l:50, o_l:50, k_r:41, r_l:33, ɡ_r:27
+           accesoriu ˌaktʃesˈoɾiʊ→ˌaktʃesˈoɾju
+           acvariu akvˈaɾiʊ→akvˈaɾju
+           aluminiu ˌalumˈiniʊ→ˌalumˈinju
+           aluminiule ˌaluminˈiʊle→ˌalumˈinjule
+    397  i → ∅           contexts ʃ_u:133, j_#:126, ʒ_u:71, r_#:45, n_#:18, ʃ_z:2
+           albiii albˈiji→ˌalbiˈiɪ
+           albumuri ˈalbumuri→albˈumuɾʲʲ
+           albăstriii ˌalbəstrˈiji→ˌalbəstrˈiiɪ
+           aleatoriii ˌaleatˈoɾijˌi→ˌaleatˈoɾiiɪ
+    373  wi → uj         contexts k_b:46, k_p:43, h_d:36, b_b:25, p_e:20, b_m:13
+           amăruielor ˌaməɾwˈielor→ˌaməɾˈujelor
+           apuie ˈapwiˌe→apˈuje
+           atribuie atrˈibwiˌe→atrˈibuje
+           binedispuie bˌinedˈispwiˌe→bˌinedispˈuje
+    306  y → ɨ           contexts ɡ_j:77, r_j:39, s_j:30, k_j:26, m_j:23, b_j:19
+           alămâia ˌaləmˈyɪa→ˌaləmˈɨja
+           alămâie alˈəmyɪˌe→ˌaləmˈɨje
+           alămâioara ˌaləmyɪˈɔaɾa→ˌaləmɨjˈɔaɾa
+           alămâioare ˌaləmyɪˈɔaɾe→ˌaləmɨjˈɔaɾe
+    236  u → w           contexts a_r:56, e_t:52, a_t:20, e_m:17, a_d:16, a_s:13
+           aleurometre ˌaleˌuɾomˈetre→ˌaleʊɾomˈetre
+           aleurometrele ˌaleˌuɾometrˈele→ˌaleʊɾomˈetrele
+           aleurometrelor ˌaleˌuɾometrˈelor→ˌaleʊɾomˈetrelor
+           aleurometru ˌaleˌuɾomˈetru→ˌaleʊɾomˈetru
+    221  ɡz → ks         contexts e_a:152, e_e:65, e_i:4
+           anexai ˌaneɡzˈaɪ→ˌaneksˈaɪ
+           anexam ˌaneɡzˈam→ˌaneksˈam
+           anexare ˌaneɡzˈaɾe→ˌaneksˈaɾe
+           anexarea ˌaneɡzˈaɾea→ˌaneksˈaɾea
+    196  w → v           contexts #_a:54, o_n:18, #_o:16, u_e:15, #_e:14, r_a:13
+           brownian brownjˈan→brˌovniˈan
+           browniana brownjˈana→brˌovniˈana
+           brownianul brownjˈanul→brˌovniˈanul
+           brownianului brownjˈanuluɪ→brovnjˈanuluɪ
+    167  ʃ → sh          contexts e_u:45, e_i:44, e_ə:25, #_o:24, #_a:12, n_u:6
+           desham deʃˈam→deshˈam
+           deshame deʃˈame→deshˈame
+           deshami deʃˈamʲʲ→deshˈamʲʲ
+           deshamă deʃˈamə→deshˈamə
+     98  ks → ɡz         contexts e_u:36, e_i:33, e_o:18, i_i:10, e_a:1
+           complexam kˌompleksˈam→kˌompleɡzˈam
+           elixir ˌeliksˈir→ˌeliɡzˈir
+           elixire ˌeliksˈiɾe→ˌeliɡzˈiɾe
+           elixirele ˌeliksiɾˈele→ˌeliɡzˈiɾele
+     93  j → ∅           contexts ʒ_ɔ:31, ʒ_o:20, ʒ_a:13, ʃ_e:6, #_e:5, i_#:4
+           aerul ˈaɪerul→ˈaeɾul
+           aerului ˈaɪeruluɪ→ˈaeɾuluɪ
+           caragiale kˌaɾadʒjˈale→kˌaɾadʒˈale
+           ceahlăi tʃˈahləɪ→tʃahlˈəʲ
+     87  e → ∅           contexts ʒ_o:35, ʃ_u:10, ʃ_o:5, d_#:4, s_#:4, ʒ_#:3
+           blake blˈake→blˈeɪk
+           boeing boˈeiŋɡ→bˈeoiŋɡ
+           cambridge kambrˈiddʒe→kambrˈiddʒ
+           cangeo kˈaŋdʒeo→kˈandʒo
+     84  k → ∅           contexts o_k:13, k_u:13, k_#:11, k_i:10, a_k:8, i_k:6
+           barack baɾˈakk→bˈeɾak
+           beck bˈekk→bˈek
+           blockmans blokkmˈans→blˈokməns
+           cocker kokkˈer→kˈoker
+     69  k → tʃh         contexts #_a:28, #_t:10, #_o:6, a_m:6, o_u:5, a_t:3
+           chalon kalˈon→tʃhalˈon
+           chalonul kalˈonul→tʃhalˈonul
+           chalonului kalˈonuluɪ→tʃhalˈonuluɪ
+           chamoisul kˌamoˈisul→tʃhˌamoˈisul
+     55  ∅ → e           contexts ʃ_a:41, ʒ_a:11, b_o:1, ɡ_o:1, j_a:1
+           birceal birtʃˈal→bˌirtʃeˈal
+           boeing boˈeiŋɡ→bˈeoiŋɡ
+           exigea eksˈidʒa→ˌeɡzidʒˈea
+           exigeai ˌeksidʒˈaɪ→ˌeɡzidʒˈeaj
+     47  h → ∅           contexts t_#:7, t_a:6, t_e:6, n_n:4, a_l:3, a_#:3
+           agatha aɡˈatha→aɡˈata
+           arthur arthˈur→ˈartur
+           athanasiu ˌathanˈasiʊ→ˌatanasˈiu
+           athletico ˌathletˈiko→atlˈetiko
+     46  jɔ → io         contexts d_a:44, s_a:2
+           cardioaccelerator kˌardjɔˈaktʃelˌeɾatˌor→kˌardiˌoaktʃˌeleɾatˈor
+           cardioacceleratori kˌardjɔˈaktʃelˌeɾatˌoɾʲʲ→kˌardiˌoaktʃˌeleɾatˈoɾʲʲ
+           cardioacceleratorii kˌardjɔˈaktʃelˌeɾatˌoɾiɪ→kˌardiˌoaktʃˌeleɾatˈoɾiɪ
+           cardioacceleratorilor kˌardjɔˈaktʃelˌeɾatˌoɾʲilor→kˌardiˌoaktʃˌeleɾatˈoɾilor
+     45  e → ə           contexts t_r:11, v_r:6, l_r:4, n_r:4, m_n:3, p_l:2
+           alzheimer ˌalzheimˈer→altshˈaɪmər
+           anderson ˌandersˈon→ˈendərsən
+           bestseller bˌestselˈer→bestsˈelər
+           biden bidˈen→bˈidən
+     44  s → z           contexts t_e:15, t_u:10, t_i:9, t_a:4, a_e:1, #_a:1
+           basel basˈel→bˈazel
+           kibbutzul kibˈutsul→kibˈutzul
+           kibbutzului kibˈutsuluɪ→kibˈutzuluɪ
+           kibbutzuri kˌibutsˈurʲ→kibˈutzuɾʲʲ
+     39  ʒ → j           contexts #_u:10, #_i:6, #_ɡ:5, i_l:3, a_u:2, #_a:2
+           ajungeaţi ˌaʒuŋdʒˈatsʲʲ→ˌajundʒˈatsʲʲ
+           disjungeaţi dˌisʒuŋdʒˈatsʲʲ→dˌisjundʒˈatsʲʲ
+           echipajule ˌekipaʒˈule→ˌekipˈajule
+           jacob ʒakˈob→jakˈob
+     34  ∅ → kol         contexts i_e:28, a_e:6
+           agricolele ˌaɡriˈele→aɡrˈikolele
+           agricolelor ˌaɡriˈelor→aɡrˈikolelor
+           apicolele ˌapiˈele→apˈikolele
+           apicolelor ˌapiˈelor→apˈikolelor
+     31  yw → ɨu         contexts r_l:19, r_r:8, d_l:2, l_l:2
+           brâul brˈyʊl→brˈɨul
+           brâule brˈyʊle→brɨˈule
+           brâului brˈyʊluɪ→brˈɨuluɪ
+           brâurile brˈyʊrile→brˈɨuɾile
+     30  dʒ → ɡ          contexts n_i:8, #_i:5, #_e:4, r_e:2, u_e:2, a_i:2
+           alungind ˌaluŋdʒˈind→ˌaluŋɡˈind
+           amgen amdʒˈen→ˈamɡen
+           boţogilor bˌotsodʒˈilor→botsˈoɡilor
+           ciungind tʃuŋdʒˈind→tʃuŋɡˈind
+     28  k → tʃ          contexts n_ɡ:6, r_ɡ:6, #_a:4, #_i:3, a_f:2, #_e:1
+           charles karlˈes→tʃˈarlz
+           charlie kˈarlje→tʃˈarlʲi
+           charter kartˈer→tʃˈartər
+           chavez kavˈez→tʃˈavez
+     24  a → e           contexts b_r:2, k_t:2, m_n:2, r_t:2, ɡ_j:1, #_n:1
+           abigail ˌabiɡˈaɪl→ˈabiɡeɪl
+           anderson ˌandersˈon→ˈendərsən
+           bank bˈaŋk→bˈenk
+           barack baɾˈakk→bˈeɾak
+     24  ∅ → h           contexts ɡ_a:14, ɡ_e:10
+           evghenia evɡˈenja→ˌevɡhenˈia
+           evgheniei ˌevɡenˈieɪ→ˌevɡhenˈieɪ
+           evghenii evɡˈeniɪ→ˌevɡhenˈiɪ
+           evgheniile ˌevɡenˈiɪle→ˌevɡhenˈiile
+     23  o → ə           contexts s_n:10, t_n:4, d_n:3, l_w:2, m_n:1, r_r:1
+           anderson ˌandersˈon→ˈendərsən
+           ashton aʃtˈon→ˈaʃtən
+           below belˈow→bilˈəʊ
+           carson karsˈon→kˈarsən
+     21  n → ∅           contexts n_a:5, a_n:3, n_#:3, n_e:3, n_i:2, i_n:2
+           anna ˈanna→ˈana
+           annan annˈan→anˈan
+           bonn bˈonn→bˈon
+           danna dˈanna→dˈana
+     17  w → ∅           contexts n_u:3, d_u:2, t_u:2, ɡ_e:2, k_i:2, k_a:2
+           ambiguu ambˈiɡwu→ambˈiɡuu
+           asiduu asˈidwu→asˈiduu
+           atuu ˈatwu→atˈuu
+           discontinuu dˌiskontˈinwu→dˌiskontˈinuu
+     16  a → ə           contexts m_n:5, ɡ_m:2, b_r:1, k_r:1, l_s:1, w_r:1
+           barnett barnˈet→bərnˈet
+           birmingham bˌirmiŋɡˈam→bˈərmiŋɡəm
+           blockmans blokkmˈans→blˈokməns
+           bucharest bˌukaɾˈest→bjˈukəɾest
+     16  ∅ → d           contexts #_ʒ:15, i_ʒ:1
+           jackson ʒakksˈon→dʒaksˈon
+           jamie ʒˈamje→dʒˈemʲi
+           jeanşi ʒˈeanʃʲʲ→dʒˈinʃʲʲ
+           jeff ʒˈef→dʒˈef
+     15  d → ∅           contexts a_d:6, a_ʒ:2, n_#:2, u_ʒ:1, #_ʒ:1, e_d:1
+           bruges brudʒˈes→brˈuʒ
+           gadget ɡaddʒˈet→ɡadʒˈet
+           gadgetul ɡaddʒˈetul→ɡadʒˈetul
+           gadgetului ɡaddʒˈetuluɪ→ɡadʒˈetuluɪ
+     14  u → a           contexts d_s:3, r_m:3, k_p:2, b_s:1, ɡ_r:1, h_m:1
+           airbus ˈaɪrbus→ˈeərbas
+           creditcup krˌeditkˈup→krˈeditkap
+           duster dustˈer→dˈaster
+           eurocup ˌeuɾokˈup→jˈuɾokap
+     14  ɡ → ∅           contexts o_d:5, ɡ_#:3, ɡ_a:2, i_n:1, o_l:1, o_n:1
+           avignon ˌaviɡnˈon→ˌavinjˈon
+           bergoglio berɡˈoɡljo→berɡˈoljo
+           bologna bolˈoɡna→bolˈonja
+           clegg klˈeɡɡ→klˈeɡ
+     14  sj → zi         contexts t_e:7, t_a:6, i_o:1
+           eurovision ˌeuɾˌovisjˈon→ˌeuɾˌoviziˈon
+           hertziana hertsjˈana→hˌertziˈana
+           hertziano hertsjˈano→hˌertziˈano
+           hertzianul hertsjˈanul→hˌertziˈanul
+     13  wks → uɡz       contexts a_i:13
+           auxiliar ˌaʊksiljˈar→ˌauɡzˌiliˈar
+           auxiliara ˌaʊksiljˈaɾa→ˌauɡzˌiliˈaɾa
+           auxiliare ˌaʊksiljˈaɾe→ˌauɡzˌiliˈaɾe
+           auxiliarei ˌaʊksiljˈaɾeɪ→ˌauɡzˌiliˈaɾeɪ
+     13  o → ɔ           contexts e_a:13
+           leoaica leoˈaikˌa→leˈɔajka
+           leoaice leoˈaitʃˌe→leˈɔajtʃe
+           leoaicele leoˈaitʃˌele→leˈɔajtʃele
+           leoaicelor leoˈaitʃˌelor→leˈɔajtʃelor
+     12  ∅ → koli        contexts i_l:11, ʃ_l:1
+           agricolilor aɡrˈiʲlor→aɡrˈikolilor
+           cavernicolilor kˌavernˈiʲlor→kˌavernˈikolilor
+           etilenglicolilor ˌetileŋɡlˈiʲlor→ˌetilˌeŋɡlikˈolilor
+           legumicolilor lˌeɡumˈiʲlor→lˌeɡumˈikolilor
+     12  ow → u          contexts f_r:2, k_r:1, r_p:1, l_r:1, m_r:1, r_d:1
+           carrefour kˌarefˈoʊr→kˈarfur
+           courtois kˌoʊrtoˈis→kurtˈɔa
+           fourierism fˌoʊɾjeɾˈism→fˌuɾieɾˈism
+           groupama ɡroʊpˈama→ɡrupˈama
+     12  e → j           contexts ɡ_o:9, k_o:2, #_u:1
+           eurocup ˌeuɾokˈup→jˈuɾokap
+           gheomotoace ɡˌeomotˈɔatʃe→ɡjˌomotˈɔatʃe
+           gheomotoacele ɡˌeomotɔatʃˈele→ɡjˌomotˈɔatʃele
+           gheomotoacelor ɡˌeomotɔatʃˈelor→ɡjˌomotˈɔatʃelor
+     12  ∅ → io          contexts n_j:6, d_j:6
+           minioina mˌinjoˈina→mˌiniˈojna
+           minioine mˌinjoˈine→mˌiniˈojne
+           minioinei mˌinjoˈineɪ→mˌiniˈojneɪ
+           minioinele mˌinjoinˈele→mˌiniˈojnele
+     12  oi → ∅          contexts j_n:12
+           minioina mˌinjoˈina→mˌiniˈojna
+           minioine mˌinjoˈine→mˌiniˈojne
+           minioinei mˌinjoˈineɪ→mˌiniˈojneɪ
+           minioinele mˌinjoinˈele→mˌiniˈojnele
+     12  ∅ → jk          contexts o_i:12
+           stoichiometric stˌoikjomˈetrik→stˌojkiomˈetrik
+           stoichiometrica stˌoikjomˈetrikˌa→stˌojkiomˈetrika
+           stoichiometrice stˌoikjomˈetritʃˌe→stˌojkiomˈetritʃe
+           stoichiometricei stˌoikjomˈetritʃˌeɪ→stˌojkiomˈetritʃeɪ
+     12  kj → ∅          contexts i_o:12
+           stoichiometric stˌoikjomˈetrik→stˌojkiomˈetrik
+           stoichiometrica stˌoikjomˈetrikˌa→stˌojkiomˈetrika
+           stoichiometrice stˌoikjomˈetritʃˌe→stˌojkiomˈetritʃe
+           stoichiometricei stˌoikjomˈetritʃˌeɪ→stˌojkiomˈetritʃeɪ
+     10  b → p           contexts o_t:5, a_s:3, o_s:2
+           absciziuni ˌabstʃizjˈunʲʲ→ˌapstʃiziˈunʲʲ
+           abstragi abstrˈadʒʲ→apstrˈadʒʲ
+           abstrăgeaţi ˌabstrədʒˈatsʲʲ→ˌapstrədʒˈatsʲʲ
+           obsceni obstʃˈenʲʲ→opstʃˈenʲʲ
+     10  z → ts          contexts n_#:3, l_h:1, a_#:1, o_a:1, a_a:1, n_ɡ:1
+           alzheimer ˌalzheimˈer→altshˈaɪmər
+           benz bˈenz→bˈents
+           graz ɡrˈaz→ɡrˈats
+           konstanz konstˈanz→konstˈants
+     10  ∅ → u           contexts u_#:10
+           ambiguu ambˈiɡwu→ambˈiɡuu
+           asiduu asˈidwu→asˈiduu
+           atuu ˈatwu→atˈuu
+           discontinuu dˌiskontˈinwu→dˌiskontˈinuu
+     10  ə → e           contexts k_r:4, ʒ_r:4, t_r:2
+           brokeri brˈokərˌi→brˈokeɾʲʲ
+           brokerii brˈokərˌiɪ→brˈokeɾiɪ
+           brokerul brˈokərul→brˈokeɾul
+           brokerului brˈokəruluɪ→brˈokeɾuluɪ
+     10  k → ʃ           contexts t_#:4, t_u:2, #_a:1, r_o:1, i_a:1, o_a:1
+           catchului kˈatkuluɪ→kˈatʃuluɪ
+           champs kˈamps→ʃˈamp
+           fitch fˈitk→fˈitʃ
+           kerchove kerkˈove→kerʃˈov
+      9  s → ʃ           contexts o_#:3, #_t:3, e_n:1, n_t:1, e_#:1
+           albicios ˌalbitʃˈos→ˌalbitʃˈoʃ
+           bătrânicios bˌətrɨnitʃˈos→bˌətrɨnitʃˈoʃ
+           chesnoiu kesnˈoiʊ→keʃnˈoju
+           lichtenstein lˌiktensteˈin→lˈihtənʃtaɪn
+      9  k → h           contexts e_t:3, a_#:3, i_t:2, o_l:1
+           anderlecht ˌanderlˈekt→ˈanderleht
+           bach bˈak→bˈah
+           bechtel bektˈel→bˈehtel
+           hecht hˈekt→hˈeht
+      9  ∅ → j           contexts ʃ_o:2, n_o:1, n_a:1, b_u:1, m_u:1, a_i:1
+           avignon ˌaviɡnˈon→ˌavinjˈon
+           bologna bolˈoɡna→bolˈonja
+           bucharest bˌukaɾˈest→bjˈukəɾest
+           camus kamus→kamjˈu
+      9  je → i          contexts d_#:2, l_#:1, d_t:1, m_l:1, r_d:1, f_#:1
+           charlie kˈarlje→tʃˈarlʲi
+           dieter djetˈer→dˈitər
+           emiel emjˈel→emˈil
+           freddie frˈedje→frˈedʲi
+      9  ∅ → jt          contexts e_i:9
+           kuweitianule kˌuweˌitjanˈule→kˌuveɪtiˈanule
+           kuweitianului kˌuweitjˈanuluɪ→kˌuveɪtiˈanuluɪ
+           kuweitiene kˌuweitjˈene→kˌuveɪtiˈene
+           kuweitienei kˌuweitjˈeneɪ→kˌuveɪtiˈeneɪ
+      9  tj → ∅          contexts i_e:7, i_a:2
+           kuweitianule kˌuweˌitjanˈule→kˌuveɪtiˈanule
+           kuweitianului kˌuweitjˈanuluɪ→kˌuveɪtiˈanuluɪ
+           kuweitiene kˌuweitjˈene→kˌuveɪtiˈene
+           kuweitienei kˌuweitjˈeneɪ→kˌuveɪtiˈeneɪ
+      8  oo → u          contexts l_m:1, b_k:1, h_d:1, h_v:1, p_l:1, m_d:1
+           bloomberg blˌoombˈerɡ→blˈumberɡ
+           bookfest bˌookfˈest→bˈukfest
+           hood hoˈod→hˈud
+           hoover hˌoovˈer→hˈuver
+      7  o → a           contexts r_w:1, k_m:1, k_w:1, l_w:1, t_w:1, h_w:1
+           brown brˈown→brˈaʊn
+           commonwealth kˌomonwˈealth→kˈamənwelth
+           council koʊntʃˈil→kaʊnsˈil
+           flowers flowˈers→flˈawərs
+      7  t → ∅           contexts d_#:2, l_#:1, n_#:1, n_p:1, s_l:1, r_#:1
+           delavault dˌelavˈaʊlt→dˌeolavˈol
+           laurent lˌauɾˈent→loɾˈan
+           montpellier mˌontpeljˈer→mˌonpeliˈe
+           nestle nˈestle→neslˈe
+      7  ɡ → dʒ          contexts a_f:6, e_ɡ:1
+           peggy pˈeɡɡi→pˈedʒɡi
+           stagflaţia staɡflˈatsja→stadʒflˈatsia
+           stagflaţiei stˌaɡflatsˈieɪ→stadʒflˈatsieɪ
+           stagflaţii staɡflˈatsiɪ→stadʒflˈatsiɪ
+      6  ei → aj         contexts h_m:2, t_n:2, r_n:1, r_b:1
+           alzheimer ˌalzheimˈer→altshˈaɪmər
+           bahrein bˌahreˈin→bahrˈaɪn
+           freiburg frˌeibˈurɡ→frˈaɪburɡ
+           lichtenstein lˌiktensteˈin→lˈihtənʃtaɪn
+      6  tʃe → s         contexts i_#:2, n_#:2, n_p:1, n_t:1
+           francepress frˌantʃeprˈes→fransprˈes
+           maurice maˈuɾitʃˌe→mˈoɾis
+           prince prˈintʃe→prˈins
+           princeton prˌintʃetˈon→prˈinston
+      6  ee → i          contexts r_n:2, r_m:1, r_t:1, w_n:1, r_d:1
+           freeman frˌeemˈan→frˈimən
+           freetown frˌeetˈown→frˈitaʊn
+           green ɡreˈen→ɡrˈin
+           greenpeace ɡrˌeenpˈeatʃe→ɡrinpˈis
+      6  dʒj → ɡ         contexts #_a:6
+           giaca dʒjˈaka→ɡˈaka
+           giace dʒjˈatʃe→ɡˈatʃe
+           giacele dʒjatʃˈele→ɡˈatʃele
+           giacelor dʒjatʃˈelor→ɡˈatʃelor
+      6  tʃ → k          contexts a_i:4, a_e:2
+           neneacile nˌeneatʃˈile→nenˈeakile
+           neneacilor nˌeneatʃˈilor→nenˈeakilor
+           poleacele pˌoleatʃˈele→polˈeakele
+           poleacelor pˌoleatʃˈelor→polˈeakelor
+      5  wiw → uju       contexts r_l:2, k_l:1, r_#:1, p_#:1
+           amăruiul ˌaməɾwˈiʊl→ˌaməɾˈujul
+           amăruiului ˌaməɾwˈiʊluɪ→ˌaməɾˈujuluɪ
+           cuiule kwˈiʊle→kˈujule
+           gruiu ɡrwˈiʊ→ɡrˈuju
+      5  tʃ → s          contexts n_i:2, r_e:1, #_e:1, #_i:1
+           barcelona bˌartʃelˈona→bˌarselˈona
+           center tʃentˈer→sˈentər
+           citroen tʃˌitroˈen→sˌitroˈen
+           council koʊntʃˈil→kaʊnsˈil
+      5  a → ej          contexts l_k:1, d_l:1, l_b:1, ʃ_k:1, w_d:1
+           blake blˈake→blˈeɪk
+           inverdale ˌinverdˈale→ˌinvərdˈeɪl
+           labour labˈoʊr→lˈeɪbər
+           shakespeare ʃˌakespˈeaɾe→ʃˈeɪkspiər
+      5  es → ∅          contexts ʒ_#:2, l_#:2, d_#:1
+           bruges brudʒˈes→brˈuʒ
+           gilles dʒilˈes→ʒˈil
+           limoges lˌimodʒˈes→limˈoʒ
+           lourdes loʊrdˈes→lˈurd
+      5  s → ∅           contexts o_#:2, u_#:1, p_#:1, a_z:1
+           camus kamus→kamjˈu
+           champs kˈamps→ʃˈamp
+           garos ɡaɾˈos→ɡaɾˈo
+           garros ɡarˈos→ɡaɾˈo
+      5  ea → i          contexts s_#:1, h_t:1, ʒ_n:1, l_r:1, t_m:1
+           chelsea kˈelsea→tʃˈelsi
+           heath hˈeath→hˈith
+           jeanşi ʒˈeanʃʲʲ→dʒˈinʃʲʲ
+           lear lˈear→lˈir
+      5  aw → o          contexts r_f:1, d_s:1, v_l:1, m_ɡ:1, p_l:1
+           crawfort krawfˈort→krˈofort
+           dawson dawsˈon→dˈosən
+           delavault dˌelavˈaʊlt→dˌeolavˈol
+           maugham maʊɡˈam→mˈoɡəm
+      5  e → a           contexts m_n:4, #_n:1
+           endre ˈendre→ˈandre
+           manageri mˈenedʒˌəri→mˈanadʒeɾʲʲ
+           managerii mˈenedʒˌəriɪ→mˈanadʒeɾiɪ
+           managerul mˈenedʒˌərul→mˈanadʒeɾul
+      5  f → ph          contexts e_r:2, u_o:1, #_i:1, e_o:1
+           euphorion ˌeufoɾjˈon→ˌeuphˌoɾiˈon
+           mezonephrosul mˌezonefrˈosul→mˌezonephrˈosul
+           mezonephrosului mˌezonefrˈosuluɪ→mˌezonephrˈosuluɪ
+           phi fˈi→phˈi
+      5  u → iw          contexts ʃ_#:4, ʒ_l:1
+           giuleştenii dʒˌuleʃtˈeniɪ→dʒˌiʊleʃtˈeniɪ
+           mijlociu miʒlˈotʃu→mˌiʒlotʃˈiʊ
+           pilafciu pilˈaftʃu→pˌilaftʃˈiʊ
+           semimijlociu sˌemimiʒlˈotʃu→sˌemimˌiʒlotʃˈiʊ
+      4  ʒ → h           contexts #_o:2, e_a:1, #_u:1
+           alejandro ˌaleʒˈandro→ˌalehˈandro
+           jorge ʒˈordʒe→hˈorhe
+           jose ʒˈose→hˈose
+           julio ʒˈuljo→hˈulio

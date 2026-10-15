@@ -1,0 +1,13 @@
+// Manual pronunciation overrides for Romanian, edited by hand.
+// Entries here win over ro_listx (generated from RoLEX), ro_list and ro_rules.
+// After editing run: espeak/src/compile_ro.sh
+//
+// Format: word<TAB>phonemes, using eSpeak phoneme names (see ro_listx for examples):
+//   '  primary stress before the stressed vowel     ,  secondary stress
+//   @ = ă   y = â/î   I^ = final non-syllabic i   ea Oa = diphthongs   * = tap r
+//   |  separates phonemes that would otherwise merge (e|a, not the diphthong ea)
+// Write ş ţ with cedilla, like the other eSpeak files.
+// Check a word with: espeak-ng --path=espeak/bin/ro -v ro -q -x --ipa "word"
+//
+// Example:
+// copii	k'opiI
