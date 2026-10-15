@@ -93,6 +93,9 @@
         ci (o      tS
         cii        tSiI
         ch         k
+        ce (a      tS        // matcha: RoLEX, e only marks the affricate: ceas, ceai
+        ci (u      tS        // matcha: RoLEX, ciupi, artificiu
+        che (a     kj        // matcha: RoLEX, cheamă, ureche -> urechea
     @@) col (_     =kol
     @@) coli (_S1t =I^
     @@) cole (_S1t e
@@ -173,6 +176,9 @@
         g (i       dZ
         gii        dZiI
         gh         g
+        ge (a      dZ        // matcha: RoLEX, gean, mergea
+        gi (u      dZ        // matcha: RoLEX, giulgiu
+        ghe (a     gj        // matcha: RoLEX, gheată, agheasmă
      &) gii (_     dZ'iI
      &) gi (A_     dZi
 
@@ -421,7 +427,7 @@
      _) ui         uI
         ui (_      'uI
      r) ui (n      ui
-        ui (e      wi
+        ui (e      uj        // matcha: RoLEX, alcătuiesc, was wi
     V&) ui (_N     u'i
 
   dest) ul         ul

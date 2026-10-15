@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Compile the Romanian eSpeak-ng dictionary from espeak/src/ro into espeak/bin/ro.
 #
-# Use this after editing any file in espeak/src/ro (ro_rules, ro_list, ro_manual, ...).
-# If you edited ro_manual, run build_ro_extra.sh instead (it regenerates ro_extra and
-# then calls this script).
+# espeak-ng reads these from espeak/src/ro (later files win for the same word):
+#   ro_rules  letter-to-sound rules (from espeak-ng 1.51)
+#   ro_listx  generated from RoLEX by build_ro_listx.sh, do not edit
+#   ro_list   eSpeak's hand-written exceptions (from espeak-ng 1.51)
+#   ro_emoji  emoji names (from espeak-ng 1.51)
+#   ro_extra  your manual overrides
+# To fix a single word: edit ro_extra, then run this script.
+# After editing ro_rules / ro_list run build_ro_listx.sh instead (it regenerates ro_listx
+# and then calls this script).
 #
 # espeak/bin/ro is a complete, self-contained eSpeak-ng data directory for Romanian:
 #   phontab phonindex phondata phondata-manifest intonations   (copied from the system install)
@@ -48,7 +54,14 @@ cp "$system_data/lang/roa/ro" "$tmp_dir/lang/roa/"
 
 # espeak-ng compiles <lang>_rules, <lang>_list, <lang>_emoji and <lang>_extra
 # from the current directory and writes <lang>_dict into --path.
-(cd "$SRC_DIR" && espeak-ng --path="$tmp_dir" --compile=ro)
+(cd "$SRC_DIR" && espeak-ng --path="$tmp_dir" --compile=ro) 2>&1 | tee "$tmp_dir/compile.log" \
+    | grep -v "^Can't read dictionary file" || true
+# espeak-ng reports bad entries as "<line>: <message>" but still exits 0.
+if grep -E '^\s*[0-9]+: ' "$tmp_dir/compile.log"; then
+    echo "eSpeak reported errors (see lines above); espeak/bin/ro was NOT updated." >&2
+    exit 1
+fi
+rm "$tmp_dir/compile.log"
 
 rm -rf "$BIN_DIR"
 mkdir -p "$(dirname "$BIN_DIR")"
