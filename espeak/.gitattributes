@@ -1,0 +1,4 @@
+# Keep eSpeak files byte-exact regardless of core.autocrlf:
+# compiled data must not be touched, sources and scripts must stay LF.
+* text eol=lf
+bin/** -text
