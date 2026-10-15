@@ -93,7 +93,7 @@ model:
   # I suspected this may help when used in combination with use_mu_prior: false 
   downsampler: triangular
 
-  # changed from 0.84 to 0.9 at epoch 754
+  # changed from 0.94 to 0.9 at epoch 754
   prior_loss_threshold: 0.9
   # changed from 1.0 to 0.9 at epoch 754
   # changed from 0.9 to 0.7 at epoch 5354 because it dropped below 0.8 

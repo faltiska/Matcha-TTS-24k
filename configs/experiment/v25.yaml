@@ -1,0 +1,46 @@
+# @package _global_
+#
+# Changes compared to v24:
+# 1. Decoder attention blocks are Conformers (matcha/models/components/conformer.py) at every UNet level:
+#    macaron FFN / self-attention / convolution / FFN, adaLN-Zero timestep conditioning on all four sub-layers,
+#    QK-norm, rotary positions, SDPA with a boolean key mask, masked depthwise convolution, no batch statistics.
+#    With conformer_ff_mult 2 the Decoder has 58.7M parameters against 55.0M with transformer blocks.
+#    Trained from scratch: the Decoder weights are not compatible with v24.
+#    configs/model/decoder/default.yaml keeps transformer blocks, so v24 and its checkpoints are unaffected.
+#
+# Why all three block types are switched, not only some of them:
+#    With channels [384, 384] the UNet downsamples once, so its 12 attention blocks sit at two resolutions:
+#
+#      down_block_type  down level 0 (full res) + down level 1 (half res)   2 + 2 blocks
+#      mid_block_type   2 mid blocks (half res)                             4 blocks
+#      up_block_type    up level 0 (half res) + up level 1 (full res)       2 + 2 blocks
+#
+#    The down / mid / up split, inherited from the original Matcha and diffusers UNets, does not follow resolution,
+#    which is what drives compute cost and the local versus global trade-off. Mixing is valid, but:
+#     - mid only: cheapest, half-length sequences, the 31 frame kernel spans ~660 ms. It misses the full resolution
+#       levels, where clicks and frame-level choppiness are smoothed.
+#     - up only: the strongest partial option. The up path builds the output right before final_block, where fine
+#       detail and co-articulation are resolved, which is the Decoder's main job.
+#     - down only: hard to justify. The down path mostly encodes the input, and its features reach the up path
+#       through the skip connections anyway.
+#    All three are switched here because the parameter cost is small, and because transformer blocks have no
+#    positional information, so a mix would give positions to some levels only.
+#    Partial combinations are better used as ablations after v25: if it beats v24, "up only" and "mid only" tell
+#    where the gain comes from and whether it can be had cheaper. For those, a per-resolution setting
+#    (e.g. full_res_block_type / half_res_block_type) would be cleaner than the current per-stage one.
+
+defaults:
+  - v24
+  - _self_
+
+run_name: v25
+
+model:
+  decoder:
+    down_block_type: conformer
+    mid_block_type: conformer
+    up_block_type: conformer
+    # Hidden size multiplier of each of the two macaron FFNs.
+    conformer_ff_mult: 2
+    # Depthwise kernel, odd. 31 frames = 330 ms at full resolution, 660 ms at half resolution.
+    conformer_kernel_size: 31

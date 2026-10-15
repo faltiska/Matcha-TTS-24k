@@ -1,0 +1,135 @@
+[build-system]
+requires = ["setuptools", "wheel", "cython>=3.0.0", "numpy>=1.26.0", "packaging"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matcha-tts"
+version = "0.1.0"
+requires-python = ">=3.13"
+# Runtime dependencies for inference (matcha.cli, matcha.server). The Docker image installs only these,
+# from uv.lock, via `uv sync --no-default-groups`. Training-only packages live in the `train` group below.
+dependencies = [
+    # torch 2.15.0+cu134 is published only in the test channel for now, see [tool.uv.sources] below.
+    # When 2.15.0 reaches the stable index, change the torch index from test/cu134 to cu134.
+    # The README note about the 2.12 pin will need updating then too.
+    # There are no cu134 builds of torchaudio/torchcodec yet; their cu132 builds work with torch cu134.
+    # torchaudio +cu132 builds are published only in the test channel.
+    "torch==2.15.0+cu134",
+    "torchaudio==2.11.0+cu132",
+    # triton backs torch.compile at inference, and is needed by super-monotonic-align in training.
+    # torch happens to pull it on linux/py<3.15, but keep it explicit so it is not accidental.
+    "triton",
+    "torchdiffeq",
+    "phonemizer",
+    "nemo_text_processing",
+    "vocos",
+    "av",
+    # Lightning checkpoints pickle hparams as omegaconf/hydra objects (e.g. hydra._internal.target_policy),
+    # so torch.load needs both installed even though inference never runs hydra.
+    "hydra-core",
+    "omegaconf",
+    "librosa",
+    "numpy",
+    "einops",
+    "inflect",
+    "scipy",
+    "diffusers",
+    "parse",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+]
+
+[dependency-groups]
+train = [
+    "torchcodec==0.17.0+cu132",
+    "lightning",
+    "torchmetrics",
+    "torch-ema",
+    "hydra-colorlog",
+    "hydra-optuna-sweeper",
+    "rich",
+    "pytest",
+    "tensorboard",
+    "setuptools",
+    "pymcd",
+    "super-monotonic-align @ git+https://github.com/supertone-inc/super-monotonic-align.git",
+]
+
+[tool.uv]
+# Plain `uv sync` keeps installing everything (inference + training) in the local venv.
+default-groups = ["train"]
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-test-cu132"
+url = "https://download.pytorch.org/whl/test/cu132"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-test-cu134"
+url = "https://download.pytorch.org/whl/test/cu134"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-test-cu134" }]
+# torch 2.15 needs triton~=3.9.0, which is not on PyPI yet. Drop this line once it is.
+triton = [{ index = "pytorch-test-cu134" }]
+torchcodec = [{ index = "pytorch-cu132" }]
+torchaudio = [{ index = "pytorch-test-cu132" }]
+
+[tool.setuptools.packages.find]
+include = ["matcha*"]
+
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311', 'py312', 'py313']
+exclude = '''
+
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+  )/
+  | foo.py           # also separately exclude a file named foo.py in
+                     # the root of the project
+)
+'''
+
+[tool.pytest.ini_options]
+addopts = [
+  "--color=yes",
+  "--durations=0",
+  "--strict-markers",
+  "--doctest-modules",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::UserWarning",
+]
+log_cli = "True"
+markers = [
+  "slow: slow tests",
+]
+minversion = "6.0"
+testpaths = "tests/"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: nocover",
+    "raise NotImplementedError",
+    "raise NotImplementedError()",
+    "if __name__ == .__main__.:",
+]
