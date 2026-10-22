@@ -104,21 +104,11 @@ Measured on the v22 checkpoint, at the acoustic accuracy the previous training r
 durations by about as much as the genuine rhythm error itself. Roughly half of what the rhythm loss measured
 was not rhythm error.
 
-### Why the acoustic loss weights each mel bin
-
-The main model's prior loss multiplies every mel bin by a fixed perceptual weight before measuring error,
-biasing it towards the frequencies human hearing is most sensitive to. The frozen encoder being distilled was
-trained under that weighting, so the acoustic loss uses the same weighting.
-
-Without it the Style Encoder would spread its capacity evenly across all 100 bins and trade error between
-them differently than the model it has to reproduce.
-
 ### Reading the charts
 
 `error_quantiles/acoustic_*` and `error_quantiles/rhythm_*` are the per-element absolute errors that drive the
-two losses. Percentiles run from p25 to p100, matching the main model's diagnostics. The acoustic ones are
-measured on the perceptually weighted values, the same ones the loss sees, so `acoustic_p100` can be read
-directly as a threshold value.
+two losses. Percentiles run from p25 to p100, matching the main model's diagnostics. `acoustic_p100` can be
+read directly as a threshold value.
 
 `error_quantiles/acoustic_emb_dist_*` and `error_quantiles/rhythm_emb_dist_*` show how far the predicted
 vectors land from the stored ones. They are not optimized. Nothing pulls a predicted vector towards a stored

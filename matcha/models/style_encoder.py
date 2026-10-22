@@ -154,7 +154,7 @@ class StyleEncoderLightningModule(LightningModule):
          Using the real encoder embedding here keeps acoustic error out of the rhythm loss; see the
          comment in _compute_losses for why that matters.
       5. Calculate losses:
-            Acoustic loss: smooth L1(mu_x_pred, mu_x_real), both perceptually weighted per mel bin
+            Acoustic loss: smooth L1(mu_x_pred, mu_x_real)
             Rhythm loss: smooth L1(logw_pred, logw_real)
 
     The two losses are added into one number for the optimizer but do not interact, the same way the main
@@ -300,17 +300,9 @@ class StyleEncoderLightningModule(LightningModule):
         # autograd only builds a graph through the Duration Predictor.
         _, logw_pred, _ = self.matcha.encoder(x, x_lengths, real_speaker_emb_enc, pred_speaker_emb_dur)
 
-        # The main model's prior loss weights every mel bin by perceptual_mel_weights before measuring error,
-        # biasing it towards the frequencies human hearing is most sensitive to. The frozen encoder we are
-        # distilling was trained under that weighting, so the same weighting is applied here. Without it the
-        # Style Encoder would spread its limited capacity evenly across all mel bins and trade error between
-        # them differently than the model it has to reproduce.
-        weighted_mu_x_pred = mu_x_pred * self.matcha.perceptual_mel_weights
-        weighted_mu_x_real = mu_x_real * self.matcha.perceptual_mel_weights
-
         # Acoustic loss - gradients flow back to pred_speaker_emb_enc
         acoustic_loss = masked_smooth_l1_loss(
-            weighted_mu_x_pred, weighted_mu_x_real, x_mask, beta=self.hparams.acoustic_loss_threshold
+            mu_x_pred, mu_x_real, x_mask, beta=self.hparams.acoustic_loss_threshold
         )
 
         # Rhythm loss - gradients flow back to pred_speaker_emb_dur
@@ -339,9 +331,8 @@ class StyleEncoderLightningModule(LightningModule):
                 # error_quantiles/acoustic_* and error_quantiles/rhythm_* are the per-element absolute
                 # errors that drive acoustic_loss and rhythm_loss: how far the frozen Matcha encoder's mel
                 # output and predicted durations drift when fed a predicted speaker embedding instead of a
-                # real one. The acoustic errors are measured on the perceptually weighted tensors, the same
-                # ones the loss sees, so acoustic_p100 can be read directly as the acoustic_loss_threshold.
-                acoustic_errors = torch.abs(weighted_mu_x_pred - weighted_mu_x_real)[x_mask.expand_as(mu_x_pred).bool()]
+                # real one. acoustic_p100 can be read directly as the acoustic_loss_threshold.
+                acoustic_errors = torch.abs(mu_x_pred - mu_x_real)[x_mask.expand_as(mu_x_pred).bool()]
                 self._log_quantiles("acoustic", acoustic_errors, bs)
                 rhythm_errors = torch.abs(logw_pred - logw_real)[x_mask.bool()]
                 self._log_quantiles("rhythm", rhythm_errors, bs)

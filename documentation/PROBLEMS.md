@@ -131,13 +131,15 @@ I also used that to find the right ODE solver and the right number of steps for 
 The standard MCD test uses only 13 coefficients, which does not cover all frequencies properly, so my script uses 30,
 computed at 24KHz.
 
-23. The prior loss was giving equal importance to every frequency, but the ear is not equally sensitive to all of them.
+23. ~~The prior loss was giving equal importance to every frequency, but the ear is not equally sensitive to all of them.
 It is most sensitive around 3 to 4KHz, and much less at the very low and very high end.
 I now weight each mel bin in the Prior Loss by how sensitive the ear is at that frequency, following the equal-loudness
 contour (ISO 226), as described in "A Perceptually Motivated Loss Function for Speech Enhancement Based on
 Equal-Loudness Contours" (2025). I lowered the top of the curve a bit more, since the human voice does not reach those
 frequencies. The weights only range from 0.7 to 1.3, so the loss is nudged towards the important bins without starving 
-the extremes; the high frequencies still carry timbre and speaker identity.
+the extremes; the high frequencies still carry timbre and speaker identity.~~
+
+I tried this, and then removed it in v24, as it appeared to cause artifacts in some male voices. I can only describe them as a "sore throat", a coarseness in male voices, especially speaker 4 (Brian). I do not have any test that detects it. Neither MCD nor UTMOS capture this aspect, and subjective tests are the only way to assess the presence of those artifacts, but in subjective tests I am fairly sure the Brian sounds better after I trained without it.
 
 24. Decoder was spending equal training time on every part of the trajectory from noise to destination.
 Not all parts matter equally. I measured the Decoder's error along the trajectory: near the destination it is 75 times

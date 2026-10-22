@@ -9,7 +9,6 @@ from matcha.models.components.flow_matching import CFM
 from matcha.models.components.decoder_ema import paired_flow_matching_losses
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import DEFAULT_DOWNSAMPLER, generate_path, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
-from matcha.utils.perceptual_mel_weights import build_perceptual_mel_weights
 from super_monotonic_align import maximum_path as maximum_path_gpu 
 
 log = logging.getLogger(__name__)
@@ -79,14 +78,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.prior_loss = prior_loss
         self.duration_loss = duration_loss
         self.plot_mel_on_validation_end = plot_mel_on_validation_end
-
-        # Fixed, per-mel-bin weight that biases the prior loss towards the frequency range where human
-        # hearing is most sensitive (see build_perceptual_mel_weights). Shaped (1, n_feats, 1) so it
-        # broadcasts directly over (batch, n_feats, time) mels. The leading dimension of size 1 stands in
-        # for a future per-speaker dimension (n_spks, n_feats, 1), selected by speaker id, once per-speaker
-        # weights are precomputed from each speaker's own data.
-        perceptual_mel_weights = build_perceptual_mel_weights(n_feats, f_min, f_max)
-        self.register_buffer("perceptual_mel_weights", perceptual_mel_weights.view(1, n_feats, 1), persistent=False)
 
         if n_spks > 1:
             self.speaker_embeddings_enc = torch.nn.Embedding(n_spks, spk_emb_dim)
@@ -217,14 +208,12 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # but I could remove the constants without affecting the meaning of the loss.
             #   prior_loss = torch.sum(((y - mu_y) ** 2) * y_mask)
             threshold = self.hparams.prior_loss_threshold
-            # perceptual_mel_weights biases the loss towards the mel bins the human ear is most sensitive
-            # to, without adding a second competing loss term (see build_perceptual_mel_weights).
-            y_fine_weighted = y_fine * y_fine_mask * self.perceptual_mel_weights
-            mu_y_fine_weighted = mu_y_fine * y_fine_mask * self.perceptual_mel_weights
+            y_fine_masked = y_fine * y_fine_mask
+            mu_y_fine_masked = mu_y_fine * y_fine_mask
             if self.hparams.prior_loss_per_phoneme:
-                prior_loss = per_phoneme_prior_loss(y_fine_weighted, mu_y_fine_weighted, attn_fine, x_mask, threshold)
+                prior_loss = per_phoneme_prior_loss(y_fine_masked, mu_y_fine_masked, attn_fine, x_mask, threshold)
             else:
-                prior_loss = F.huber_loss(y_fine_weighted, mu_y_fine_weighted, delta=threshold, reduction='sum')
+                prior_loss = F.huber_loss(y_fine_masked, mu_y_fine_masked, delta=threshold, reduction='sum')
                 prior_loss = prior_loss / torch.sum(y_fine_mask)
 
             if self.hparams.log_diagnostics:

@@ -209,6 +209,25 @@ speaker_014 MCD   6.12 dB  5.96 dB  5.92 dB  5.89 dB  5.86 dB  5.86 dB  5.82 dB 
 -------------------------------------------------------------------------------------------------------------------
 Average MCD v2:   4.83 dB  4.70 dB  4.63 dB  4.60 dB  4.52 dB  4.49 dB  4.47 dB  4.45 dB  4.45 dB  4.42 dB  4.41 dB
 
+V24       epoch     1089b    1194b    1249b
+speaker_000 MCD   4.79 dB  4.78 dB  4.76 dB
+speaker_001 MCD   3.35 dB  3.34 dB  3.27 dB
+speaker_002 MCD   3.67 dB  3.66 dB  3.68 dB
+speaker_003 MCD   2.78 dB  2.78 dB  2.77 dB
+speaker_004 MCD   4.69 dB  4.71 dB  4.67 dB
+speaker_005 MCD   3.82 dB  3.80 dB  3.83 dB
+speaker_006 MCD   4.05 dB  4.06 dB  4.07 dB
+speaker_007 MCD   5.12 dB  5.11 dB  5.10 dB
+speaker_008 MCD   4.99 dB  4.98 dB  5.01 dB
+speaker_009 MCD   4.70 dB  4.67 dB  4.71 dB
+speaker_010 MCD   4.10 dB  4.14 dB  4.10 dB
+speaker_011 MCD   5.07 dB  5.02 dB  4.98 dB
+speaker_012 MCD   4.09 dB  4.11 dB  4.09 dB
+speaker_013 MCD   5.89 dB  5.96 dB  5.87 dB
+speaker_014 MCD   5.84 dB  5.84 dB  5.88 dB
+----------------- -------------------------
+Average MCD v2:   4.46 dB  4.46 dB  4.45 dB
+
 """
 
 
