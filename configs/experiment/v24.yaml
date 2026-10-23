@@ -11,7 +11,11 @@
 
 # 4. Reduced speaker embedding dim
 
-# 5. Added the ability to compute Encoder loss with "one vote per phoneme" instead of "one vote per frame" 
+# 5. Added the ability to compute Encoder loss with "one vote per phoneme" instead of "one vote per frame". 
+# Not used yet, just coded.
+
+# 6. Removed the perceptual weighting mechanism from Encoder loss (from epoch 749)
+
 
 run_name: v24
 

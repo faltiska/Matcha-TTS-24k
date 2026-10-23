@@ -1,10 +1,5 @@
 """
-Combined validation script: MCD (24 kHz, 30 coefficients) + UTMOS, sharing a single inference pass.
-
-Running mcd_validate_v2.py and utmos_validate.py separately means loading the model twice and
-running inference over all samples twice. Since both scripts pick the same samples per speaker
-and generate the same waveform via the same pipeline() call, this script generates each waveform
-once and feeds it to both scorers.
+Validation script: MCD (24 kHz, 30 coefficients).
 
 MCD (reference-based, lower is better):
   Identical to mcd_validate_v2.py. Uses a subclass of Calculate_MCD that overrides:
@@ -14,68 +9,56 @@ MCD (reference-based, lower is better):
   MCD values from this script are NOT directly comparable to mcd_validate.py (the 13-coefficient,
   22050 Hz variant) values, because a different order and sample rate produce a different cepstral scale.
 
-UTMOS (reference-free, higher is better, 1-5 scale):
-  https://arxiv.org/abs/2204.02152
-  https://github.com/sarulab-speech/UTMOS22
-  Predicted naturalness score. Production-quality TTS usually lands above 4.0. The model is
-  downloaded on first run via torch.hub from tarepan/SpeechMOS and cached under ~/.cache/torch/hub.
-
-  UTMOSv2 (SLT 2024) was tried and rejected: it costs about 1 s per utterance against v1's ~0.05 s,
-  roughly 7x the total runtime, because it runs four 512x512 mel images through EfficientNetV2-S
-  alongside wav2vec2 instead of a single wav2vec2 pass. On the v23 epoch 1014 checkpoint it ranked
-  all 15 speakers in the same order as v1, so the extra cost bought nothing for checkpoint tracking.
-  Batching to recover the time does not work either: predict() needs equal-length input, and the
-  zero padding shifts scores by up to 0.76 MOS. v2's strength is ranking different systems against
-  each other (VoiceMOS 2024), which is not what this script does.
-
-Both scorers pick SAMPLES_PER_SPEAKER samples per speaker, starting at SAMPLE_OFFSET, from validate.csv,
+Picks SAMPLES_PER_SPEAKER samples per speaker, starting at SAMPLE_OFFSET, from validate.csv,
 forcing scale_correction to 1.0 for every voice before running.
 
 Usage:
     python -m matcha.utils.validate --checkpoint your.ckpt
     python -m matcha.utils.validate --checkpoint your.ckpt --steps 8 --solver euler
-    python -m matcha.utils.validate --checkpoint your.ckpt --skip-utmos
-    python -m matcha.utils.validate --checkpoint your.ckpt --skip-mcd
 
-See mcd_validate_v2.py and utmos_validate.py for historical per-version measurement tables.
+See mcd_validate_v2.py for historical per-version measurement tables.
 
-V23       epoch       234      334      434      609      634      714      734      739      764     1069     1139     1299     1313
-speaker_000 MCD   5.19 dB  5.05 dB  4.93 dB  4.85 dB  4.87 dB  4.87 dB  4.90 dB  4.88 dB  4.81 dB  
-speaker_001 MCD   3.65 dB  3.51 dB  3.45 dB  3.39 dB  3.43 dB  3.31 dB  3.39 dB  3.33 dB  3.31 dB  
-speaker_002 MCD   4.00 dB  3.90 dB  3.83 dB  3.70 dB  3.75 dB  3.73 dB  3.71 dB  3.74 dB  3.66 dB  
-speaker_003 MCD   3.17 dB  2.93 dB  2.87 dB  2.77 dB  2.88 dB  2.78 dB  2.85 dB  2.79 dB  2.74 dB  
-speaker_004 MCD   5.12 dB  4.89 dB  4.80 dB  4.68 dB  4.76 dB  4.72 dB  4.69 dB  4.69 dB  4.67 dB  
-speaker_005 MCD   4.01 dB  3.90 dB  3.86 dB  3.81 dB  3.88 dB  3.87 dB  3.84 dB  3.86 dB  3.88 dB  
-speaker_006 MCD   4.33 dB  4.27 dB  4.19 dB  4.09 dB  4.16 dB  4.16 dB  4.11 dB  4.11 dB  4.09 dB  
-speaker_007 MCD   5.32 dB  5.20 dB  5.18 dB  5.17 dB  5.14 dB  5.09 dB  5.14 dB  5.12 dB  5.09 dB  
-speaker_008 MCD   5.26 dB  5.13 dB  5.07 dB  4.98 dB  5.03 dB  5.05 dB  5.03 dB  4.97 dB  4.93 dB  
-speaker_009 MCD   4.95 dB  4.88 dB  4.82 dB  4.77 dB  4.79 dB  4.69 dB  4.79 dB  4.71 dB  4.70 dB  
-speaker_010 MCD   4.32 dB  4.19 dB  4.14 dB  4.12 dB  4.15 dB  4.11 dB  4.09 dB  4.16 dB  4.18 dB  
-speaker_011 MCD   5.18 dB  5.15 dB  4.96 dB  4.90 dB  4.90 dB  4.92 dB  4.93 dB  4.93 dB  4.90 dB  
-speaker_012 MCD   4.31 dB  4.28 dB  4.18 dB  4.11 dB  4.15 dB  4.14 dB  4.17 dB  4.14 dB  4.12 dB  
-speaker_013 MCD   6.23 dB  6.11 dB  5.98 dB  6.03 dB  5.99 dB  6.01 dB  6.03 dB  6.03 dB  6.04 dB  
-speaker_014 MCD   6.05 dB  5.99 dB  5.92 dB  5.92 dB  5.94 dB  5.89 dB  5.93 dB  5.91 dB  5.87 dB  
----------------------------------------------------------------------------------------------------
-Average MCD v2:   4.74 dB  4.62 dB  4.55 dB  4.49 dB  4.52 dB  4.49 dB  4.51 dB  4.49 dB  4.47 dB 
+V23       epoch       234      334      434      609      634      714      734      739      764     5229  
+speaker_000 MCD   5.19 dB  5.05 dB  4.93 dB  4.85 dB  4.87 dB  4.87 dB  4.90 dB  4.88 dB  4.81 dB  4.35 dB  
+speaker_001 MCD   3.65 dB  3.51 dB  3.45 dB  3.39 dB  3.43 dB  3.31 dB  3.39 dB  3.33 dB  3.31 dB  3.58 dB  
+speaker_002 MCD   4.00 dB  3.90 dB  3.83 dB  3.70 dB  3.75 dB  3.73 dB  3.71 dB  3.74 dB  3.66 dB  4.11 dB  
+speaker_003 MCD   3.17 dB  2.93 dB  2.87 dB  2.77 dB  2.88 dB  2.78 dB  2.85 dB  2.79 dB  2.74 dB  3.29 dB  
+speaker_004 MCD   5.12 dB  4.89 dB  4.80 dB  4.68 dB  4.76 dB  4.72 dB  4.69 dB  4.69 dB  4.67 dB  4.31 dB  
+speaker_005 MCD   4.01 dB  3.90 dB  3.86 dB  3.81 dB  3.88 dB  3.87 dB  3.84 dB  3.86 dB  3.88 dB  3.29 dB  
+speaker_006 MCD   4.33 dB  4.27 dB  4.19 dB  4.09 dB  4.16 dB  4.16 dB  4.11 dB  4.11 dB  4.09 dB  4.22 dB  
+speaker_007 MCD   5.32 dB  5.20 dB  5.18 dB  5.17 dB  5.14 dB  5.09 dB  5.14 dB  5.12 dB  5.09 dB  4.31 dB  
+speaker_008 MCD   5.26 dB  5.13 dB  5.07 dB  4.98 dB  5.03 dB  5.05 dB  5.03 dB  4.97 dB  4.93 dB  5.35 dB  
+speaker_009 MCD   4.95 dB  4.88 dB  4.82 dB  4.77 dB  4.79 dB  4.69 dB  4.79 dB  4.71 dB  4.70 dB  4.52 dB  
+speaker_010 MCD   4.32 dB  4.19 dB  4.14 dB  4.12 dB  4.15 dB  4.11 dB  4.09 dB  4.16 dB  4.18 dB  3.33 dB  
+speaker_011 MCD   5.18 dB  5.15 dB  4.96 dB  4.90 dB  4.90 dB  4.92 dB  4.93 dB  4.93 dB  4.90 dB  4.79 dB  
+speaker_012 MCD   4.31 dB  4.28 dB  4.18 dB  4.11 dB  4.15 dB  4.14 dB  4.17 dB  4.14 dB  4.12 dB  3.64 dB  
+speaker_013 MCD   6.23 dB  6.11 dB  5.98 dB  6.03 dB  5.99 dB  6.01 dB  6.03 dB  6.03 dB  6.04 dB  6.04 dB  
+speaker_014 MCD   6.05 dB  5.99 dB  5.92 dB  5.92 dB  5.94 dB  5.89 dB  5.93 dB  5.91 dB  5.87 dB  5.16 dB  
+----------------------------------------------------------------------------------------------------------
+Average MCD v2:   4.74 dB  4.62 dB  4.55 dB  4.49 dB  4.52 dB  4.49 dB  4.51 dB  4.49 dB  4.47 dB  4.29 dB 
 
-V23         epoch       234      334      434      609      634      714      734      739      764     1069     1139     1299     1313
-speaker_000 UTMOS   5.19 dB  5.05 dB  4.93 dB  4.85 dB  4.87 dB  4.87 dB  4.90 dB  4.88 dB  4.81 dB  
-speaker_001 UTMOS   3.65 dB  3.51 dB  3.45 dB  3.39 dB  3.43 dB  3.31 dB  3.39 dB  3.33 dB  3.31 dB  
-speaker_002 UTMOS   4.00 dB  3.90 dB  3.83 dB  3.70 dB  3.75 dB  3.73 dB  3.71 dB  3.74 dB  3.66 dB  
-speaker_003 UTMOS   3.17 dB  2.93 dB  2.87 dB  2.77 dB  2.88 dB  2.78 dB  2.85 dB  2.79 dB  2.74 dB  
-speaker_004 UTMOS   5.12 dB  4.89 dB  4.80 dB  4.68 dB  4.76 dB  4.72 dB  4.69 dB  4.69 dB  4.67 dB  
-speaker_005 UTMOS   4.01 dB  3.90 dB  3.86 dB  3.81 dB  3.88 dB  3.87 dB  3.84 dB  3.86 dB  3.88 dB  
-speaker_006 UTMOS   4.33 dB  4.27 dB  4.19 dB  4.09 dB  4.16 dB  4.16 dB  4.11 dB  4.11 dB  4.09 dB  
-speaker_007 UTMOS   5.32 dB  5.20 dB  5.18 dB  5.17 dB  5.14 dB  5.09 dB  5.14 dB  5.12 dB  5.09 dB  
-speaker_008 UTMOS   5.26 dB  5.13 dB  5.07 dB  4.98 dB  5.03 dB  5.05 dB  5.03 dB  4.97 dB  4.93 dB  
-speaker_009 UTMOS   4.95 dB  4.88 dB  4.82 dB  4.77 dB  4.79 dB  4.69 dB  4.79 dB  4.71 dB  4.70 dB  
-speaker_010 UTMOS   4.32 dB  4.19 dB  4.14 dB  4.12 dB  4.15 dB  4.11 dB  4.09 dB  4.16 dB  4.18 dB  
-speaker_011 UTMOS   5.18 dB  5.15 dB  4.96 dB  4.90 dB  4.90 dB  4.92 dB  4.93 dB  4.93 dB  4.90 dB  
-speaker_012 UTMOS   4.31 dB  4.28 dB  4.18 dB  4.11 dB  4.15 dB  4.14 dB  4.17 dB  4.14 dB  4.12 dB  
-speaker_013 UTMOS   6.23 dB  6.11 dB  5.98 dB  6.03 dB  5.99 dB  6.01 dB  6.03 dB  6.03 dB  6.04 dB  
-speaker_014 UTMOS   6.05 dB  5.99 dB  5.92 dB  5.92 dB  5.94 dB  5.89 dB  5.93 dB  5.91 dB  5.87 dB  
----------------------------------------------------------------------------------------------------
-Average UTMOS:      4.74 dB  4.62 dB  4.55 dB  4.49 dB  4.52 dB  4.49 dB  4.51 dB  4.49 dB  4.47 dB 
+
+V24       epoch         279      479      749    1089b    1474b    1574b    1634b    1739b
+speaker_000 MCD     4.36 dB  4.25 dB  4.19 dB  4.08 dB  4.05 dB  4.08 dB  3.98 dB  4.00 dB
+speaker_001 MCD     3.44 dB  3.38 dB  3.30 dB  3.27 dB  3.25 dB  3.32 dB  3.23 dB  3.21 dB
+speaker_002 MCD     3.88 dB  3.75 dB  3.71 dB  3.64 dB  3.63 dB  3.69 dB  3.61 dB  3.61 dB
+speaker_003 MCD     2.81 dB  2.75 dB  2.73 dB  2.70 dB  2.68 dB  2.71 dB  2.71 dB  2.68 dB
+speaker_004 MCD     4.61 dB  4.34 dB  4.24 dB  4.21 dB  4.18 dB  4.19 dB  4.16 dB  4.19 dB
+speaker_005 MCD     3.31 dB  3.22 dB  3.15 dB  3.18 dB  3.14 dB  3.14 dB  3.10 dB  3.12 dB
+speaker_006 MCD     3.95 dB  3.79 dB  3.82 dB  3.77 dB  3.75 dB  3.81 dB  3.76 dB  3.76 dB
+speaker_007 MCD     3.92 dB  3.82 dB  3.77 dB  3.76 dB  3.72 dB  3.77 dB  3.73 dB  3.70 dB
+speaker_008 MCD     5.05 dB  4.94 dB  4.86 dB  4.87 dB  4.85 dB  4.94 dB  4.84 dB  4.81 dB
+speaker_009 MCD     4.17 dB  4.07 dB  4.03 dB  4.00 dB  3.99 dB  4.03 dB  3.99 dB  3.99 dB
+speaker_010 MCD     3.34 dB  3.19 dB  3.18 dB  3.12 dB  3.07 dB  3.18 dB  3.09 dB  3.07 dB
+speaker_011 MCD     4.61 dB  4.34 dB  4.28 dB  4.31 dB  4.26 dB  4.28 dB  4.30 dB  4.28 dB
+speaker_012 MCD     3.31 dB  3.17 dB  3.11 dB  3.03 dB  3.04 dB  3.09 dB  2.99 dB  3.01 dB
+speaker_013 MCD     5.76 dB  5.70 dB  5.61 dB  5.58 dB  5.61 dB  5.65 dB  5.61 dB  5.54 dB
+speaker_014 MCD     4.92 dB  4.85 dB  4.83 dB  4.82 dB  4.82 dB  4.89 dB  4.78 dB  4.80 dB
+------------------------------------------------------------------------------------------
+Average MCD v2:     4.10 dB  3.97 dB  3.92 dB  3.89 dB  3.87 dB  3.92 dB  3.86 dB  3.85 dB
+
+
+
 """
 
 import warnings
@@ -91,7 +74,6 @@ import pysptk
 import soundfile as sf
 import torch
 import torchaudio as ta
-import torchaudio.functional as taf
 from pymcd.mcd import Calculate_MCD
 
 from matcha.inference import VOICES, DEFAULT_ODE_SOLVER, DEFAULT_NUM_STEPS, load_matcha, load_vocoder, pipeline
@@ -99,7 +81,6 @@ from matcha.utils.precompute_mels import _load_yaml_config, _resolve_path, parse
 
 SAMPLE_OFFSET = 10
 SAMPLES_PER_SPEAKER = 20
-UTMOS_SAMPLE_RATE = 16000
 
 
 class Calculate_MCD_24k(Calculate_MCD):
@@ -216,29 +197,13 @@ def compute_mcd(gen_wav: torch.Tensor, ref_wav_path: Path, mcd_toolbox: Calculat
     return mcd, duration_ratio
 
 
-def score_utmos(predictor, waveform: torch.Tensor, source_sr: int, device: torch.device) -> float:
-    wav = waveform.detach().cpu().float()
-    if wav.dim() == 2:
-        wav = wav.mean(dim=0)
-    elif wav.dim() > 2:
-        wav = wav.squeeze()
-    if source_sr != UTMOS_SAMPLE_RATE:
-        wav = taf.resample(wav, source_sr, UTMOS_SAMPLE_RATE)
-    wav = wav.unsqueeze(0).to(device)
-    with torch.no_grad():
-        score = predictor(wav, UTMOS_SAMPLE_RATE)
-    return float(score.squeeze().item())
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Combined MCD + UTMOS validation, sharing a single inference pass per sample")
+    parser = argparse.ArgumentParser(description="MCD validation")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
     parser.add_argument("--data-config", default="configs/data/corpus-24k.yaml")
     parser.add_argument("--vocoder", default="vocos", choices=["vocos"])
     parser.add_argument("--solver", type=str, default=DEFAULT_ODE_SOLVER)
     parser.add_argument("--steps", type=int, default=DEFAULT_NUM_STEPS)
-    parser.add_argument("--skip-mcd", action="store_true", help="Skip MCD scoring")
-    parser.add_argument("--skip-utmos", action="store_true", help="Skip UTMOS scoring")
     parser.add_argument("--c0", choices=["exclude", "include"], default="exclude",
                         help="Whether the MCD distance counts C0, the loudness coefficient. "
                              "Standard MCD excludes it, so the score reflects spectral shape rather than volume. "
@@ -247,9 +212,6 @@ def main():
                         help="Use the live Decoder weights even if the checkpoint holds their moving average.")
     args = parser.parse_args()
 
-    if args.skip_mcd and args.skip_utmos:
-        parser.error("--skip-mcd and --skip-utmos cannot both be set")
-
     ckpt_name = Path(args.checkpoint).stem
     print(f"Processing {ckpt_name}...")
 
@@ -257,24 +219,16 @@ def main():
     valid_filelist = _resolve_path(str(cfg["valid_filelist_path"]))
     sample_rate = int(cfg["sample_rate"])
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     model = load_matcha("custom_model", args.checkpoint, use_decoder_ema=not args.no_ema)
     model.decoder.solver = args.solver
     vocoder = load_vocoder(args.vocoder)
 
-    mcd_toolbox = Calculate_MCD_24k(MCD_mode="dtw", exclude_c0=args.c0 == "exclude") if not args.skip_mcd else None
-
-    predictor = None
-    if not args.skip_utmos:
-        predictor = torch.hub.load("tarepan/SpeechMOS:v1.2.0", "utmos22_strong", trust_repo=True)
-        predictor = predictor.to(device).eval()
+    mcd_toolbox = Calculate_MCD_24k(MCD_mode="dtw", exclude_c0=args.c0 == "exclude")
 
     for voice in VOICES:
         voice["scale_correction"] = 1.0
 
     speaker_mcd_scores: dict[str, tuple[float, float]] = {}  # voice_id -> (avg_mcd, avg_duration_ratio)
-    speaker_utmos_scores: dict[str, float] = {}
 
     for voice in VOICES:
         spk_id = int(voice["id"])
@@ -286,43 +240,23 @@ def main():
 
         mcd_scores = []
         duration_ratios = []
-        utmos_scores = []
         for text, gt_wav_path in samples:
             waveform = pipeline(model, vocoder, text, spk_id, None, args.steps)
-            if mcd_toolbox is not None:
-                mcd, duration_ratio = compute_mcd(waveform, gt_wav_path, mcd_toolbox, sample_rate)
-                mcd_scores.append(mcd)
-                duration_ratios.append(duration_ratio)
-            if predictor is not None:
-                utmos_scores.append(score_utmos(predictor, waveform, sample_rate, device))
+            mcd, duration_ratio = compute_mcd(waveform, gt_wav_path, mcd_toolbox, sample_rate)
+            mcd_scores.append(mcd)
+            duration_ratios.append(duration_ratio)
 
-        if mcd_scores:
-            speaker_mcd_scores[voice["id"]] = (sum(mcd_scores) / len(mcd_scores), sum(duration_ratios) / len(duration_ratios))
-        if utmos_scores:
-            speaker_utmos_scores[voice["id"]] = sum(utmos_scores) / len(utmos_scores)
-
-    reported_ids = [v["id"] for v in VOICES if v["id"] in speaker_mcd_scores or v["id"] in speaker_utmos_scores]
+        speaker_mcd_scores[voice["id"]] = (sum(mcd_scores) / len(mcd_scores), sum(duration_ratios) / len(duration_ratios))
 
     print()
-    for voice_id in reported_ids:
+    for voice_id, (avg_mcd, avg_ratio) in speaker_mcd_scores.items():
         label = f"speaker_{int(voice_id):03d}"
-        columns = [f"{label:<40}"]
-        if voice_id in speaker_mcd_scores:
-            columns.append(f"MCD: {speaker_mcd_scores[voice_id][0]:5.2f} dB")
-        if voice_id in speaker_utmos_scores:
-            columns.append(f"UTMOS: {speaker_utmos_scores[voice_id]:5.2f}")
-        if voice_id in speaker_mcd_scores:
-            columns.append(f"duration ratio: {speaker_mcd_scores[voice_id][1]:.2f}")
-        print("   ".join(columns))
+        print(f"{label:<40}   MCD: {avg_mcd:5.2f} dB   duration ratio: {avg_ratio:.2f}")
 
     print("-" * 85)
-    columns = [f"{'Average':<40}"]
     if speaker_mcd_scores:
         all_mcds = [mcd for mcd, _ in speaker_mcd_scores.values()]
-        columns.append(f"MCD: {sum(all_mcds) / len(all_mcds):5.2f} dB")
-    if speaker_utmos_scores:
-        columns.append(f"UTMOS: {sum(speaker_utmos_scores.values()) / len(speaker_utmos_scores):5.2f}")
-    print("   ".join(columns))
+        print(f"{'Average':<40}   MCD: {sum(all_mcds) / len(all_mcds):5.2f} dB")
 
     print()
     print(f"Completed {ckpt_name}")
