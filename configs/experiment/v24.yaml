@@ -16,6 +16,9 @@
 
 # 6. Removed the perceptual weighting mechanism from Encoder loss (from epoch 749)
 
+# 7. Moved to pytorch 2.15.0+cu134, removed linux drivers completely, deleted py cache
+
+ 8. Changed timestep sampling distribution to location 1.1 / scale 1.0
 
 run_name: v24
 

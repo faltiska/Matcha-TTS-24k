@@ -2,7 +2,9 @@
 Validation script: MCD (24 kHz, 30 coefficients).
 
 MCD (reference-based, lower is better):
-  Identical to mcd_validate_v2.py. Uses a subclass of Calculate_MCD that overrides:
+  Similar to mcd_validate_v2.py except it excludes C0 (loudness) from the distance calculation and the FFT is 
+  1024 instead of 512 which lowers the pitch floor to 70Hz instead of 144Hz.
+  Uses a subclass of Calculate_MCD that overrides:
     - SAMPLING_RATE: 24000 Hz  (matches the corpus and the model, avoids resampling to 22050)
     - order:         30        (captures the full perceptually relevant cepstral range, vs the default 13)
     - alpha:         0.66      (frequency warping coefficient tuned for 24 kHz, vs the default 0.65 for 22050 Hz)
@@ -13,30 +15,39 @@ Picks SAMPLES_PER_SPEAKER samples per speaker, starting at SAMPLE_OFFSET, from v
 forcing scale_correction to 1.0 for every voice before running.
 
 Usage:
-    python -m matcha.utils.validate --checkpoint your.ckpt
-    python -m matcha.utils.validate --checkpoint your.ckpt --steps 8 --solver euler
+    python -m matcha.utils.mcd_validate_v3 --checkpoint your.ckpt
+    python -m matcha.utils.mcd_validate_v3 --checkpoint your.ckpt --steps 4 --solver midpoint
 
 See mcd_validate_v2.py for historical per-version measurement tables.
 
-V23       epoch       234      334      434      609      634      714      734      739      764     5229  
-speaker_000 MCD   5.19 dB  5.05 dB  4.93 dB  4.85 dB  4.87 dB  4.87 dB  4.90 dB  4.88 dB  4.81 dB  4.35 dB  
-speaker_001 MCD   3.65 dB  3.51 dB  3.45 dB  3.39 dB  3.43 dB  3.31 dB  3.39 dB  3.33 dB  3.31 dB  3.58 dB  
-speaker_002 MCD   4.00 dB  3.90 dB  3.83 dB  3.70 dB  3.75 dB  3.73 dB  3.71 dB  3.74 dB  3.66 dB  4.11 dB  
-speaker_003 MCD   3.17 dB  2.93 dB  2.87 dB  2.77 dB  2.88 dB  2.78 dB  2.85 dB  2.79 dB  2.74 dB  3.29 dB  
-speaker_004 MCD   5.12 dB  4.89 dB  4.80 dB  4.68 dB  4.76 dB  4.72 dB  4.69 dB  4.69 dB  4.67 dB  4.31 dB  
-speaker_005 MCD   4.01 dB  3.90 dB  3.86 dB  3.81 dB  3.88 dB  3.87 dB  3.84 dB  3.86 dB  3.88 dB  3.29 dB  
-speaker_006 MCD   4.33 dB  4.27 dB  4.19 dB  4.09 dB  4.16 dB  4.16 dB  4.11 dB  4.11 dB  4.09 dB  4.22 dB  
-speaker_007 MCD   5.32 dB  5.20 dB  5.18 dB  5.17 dB  5.14 dB  5.09 dB  5.14 dB  5.12 dB  5.09 dB  4.31 dB  
-speaker_008 MCD   5.26 dB  5.13 dB  5.07 dB  4.98 dB  5.03 dB  5.05 dB  5.03 dB  4.97 dB  4.93 dB  5.35 dB  
-speaker_009 MCD   4.95 dB  4.88 dB  4.82 dB  4.77 dB  4.79 dB  4.69 dB  4.79 dB  4.71 dB  4.70 dB  4.52 dB  
-speaker_010 MCD   4.32 dB  4.19 dB  4.14 dB  4.12 dB  4.15 dB  4.11 dB  4.09 dB  4.16 dB  4.18 dB  3.33 dB  
-speaker_011 MCD   5.18 dB  5.15 dB  4.96 dB  4.90 dB  4.90 dB  4.92 dB  4.93 dB  4.93 dB  4.90 dB  4.79 dB  
-speaker_012 MCD   4.31 dB  4.28 dB  4.18 dB  4.11 dB  4.15 dB  4.14 dB  4.17 dB  4.14 dB  4.12 dB  3.64 dB  
-speaker_013 MCD   6.23 dB  6.11 dB  5.98 dB  6.03 dB  5.99 dB  6.01 dB  6.03 dB  6.03 dB  6.04 dB  6.04 dB  
-speaker_014 MCD   6.05 dB  5.99 dB  5.92 dB  5.92 dB  5.94 dB  5.89 dB  5.93 dB  5.91 dB  5.87 dB  5.16 dB  
-----------------------------------------------------------------------------------------------------------
-Average MCD v2:   4.74 dB  4.62 dB  4.55 dB  4.49 dB  4.52 dB  4.49 dB  4.51 dB  4.49 dB  4.47 dB  4.29 dB 
+All the figures below were taken with heun3 / 5 steps. 
+This version of the script shows better results with heun3 / 5 than with midpoint / 4, 
+which agrees with my subjective tests. The results from V2 were always better with midpoint / 4,
+which is why I did not trust those results too much.
 
+V23       epoch      5229  
+speaker_000 MCD   4.35 dB  
+speaker_001 MCD   3.58 dB  
+speaker_002 MCD   4.11 dB  
+speaker_003 MCD   3.29 dB  
+speaker_004 MCD   4.31 dB  
+speaker_005 MCD   3.29 dB  
+speaker_006 MCD   4.22 dB  
+speaker_007 MCD   4.31 dB  
+speaker_008 MCD   5.35 dB  
+speaker_009 MCD   4.52 dB  
+speaker_010 MCD   3.33 dB  
+speaker_011 MCD   4.79 dB  
+speaker_012 MCD   3.64 dB  
+speaker_013 MCD   6.04 dB  
+speaker_014 MCD   5.16 dB  
+-------------------------
+Average MCD:      4.29 dB 
+
+I do not know why the v24 figures are lower. And I don't think I can hear the difference
+in subjective tests. But the training losses are lower than in v23. Claude Opus could not explain 
+this either. I have captured all changes made in v24 in the config file, v24.yaml, and we reviewed 
+them but we still don't have an explanation.  
 
 V24       epoch         279      479      749    1089b    1474b    1574b    1634b    1739b
 speaker_000 MCD     4.36 dB  4.25 dB  4.19 dB  4.08 dB  4.05 dB  4.08 dB  3.98 dB  4.00 dB
@@ -55,9 +66,7 @@ speaker_012 MCD     3.31 dB  3.17 dB  3.11 dB  3.03 dB  3.04 dB  3.09 dB  2.99 d
 speaker_013 MCD     5.76 dB  5.70 dB  5.61 dB  5.58 dB  5.61 dB  5.65 dB  5.61 dB  5.54 dB
 speaker_014 MCD     4.92 dB  4.85 dB  4.83 dB  4.82 dB  4.82 dB  4.89 dB  4.78 dB  4.80 dB
 ------------------------------------------------------------------------------------------
-Average MCD v2:     4.10 dB  3.97 dB  3.92 dB  3.89 dB  3.87 dB  3.92 dB  3.86 dB  3.85 dB
-
-
+Average MCD   :     4.10 dB  3.97 dB  3.92 dB  3.89 dB  3.87 dB  3.92 dB  3.86 dB  3.85 dB
 
 """
 
