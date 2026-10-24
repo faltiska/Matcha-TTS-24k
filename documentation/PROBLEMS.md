@@ -139,7 +139,10 @@ Equal-Loudness Contours" (2025). I lowered the top of the curve a bit more, sinc
 frequencies. The weights only range from 0.7 to 1.3, so the loss is nudged towards the important bins without starving 
 the extremes; the high frequencies still carry timbre and speaker identity.~~
 
-I tried this, and then removed it in v24, as it appeared to cause artifacts in some male voices. I can only describe them as a "sore throat", a coarseness in male voices, especially speaker 4 (Brian). I do not have any test that detects it. Neither MCD nor UTMOS capture this aspect, and subjective tests are the only way to assess the presence of those artifacts, but in subjective tests I am fairly sure the Brian sounds better after I trained without it.
+I tried this, and then removed it in v24 after some AB testing. Quality in v24 is much better than v23 in general, but,
+even though I cannot attribute it to the removal of the perceptual weighting, I can at least say with confidence that
+removing the perceptual weighing did not have any negative effect (measured or subjective).  I removed it basically 
+because it was doing nothing. 
 
 24. Decoder was spending equal training time on every part of the trajectory from noise to destination.
 Not all parts matter equally. I measured the Decoder's error along the trajectory: near the destination it is 75 times
