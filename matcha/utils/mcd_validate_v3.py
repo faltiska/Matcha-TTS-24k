@@ -49,24 +49,24 @@ in subjective tests. But the training losses are lower than in v23. Claude Opus 
 this either. I have captured all changes made in v24 in the config file, v24.yaml, and we reviewed 
 them but we still don't have an explanation.  
 
-V24       epoch         279      479      749    1089b    1474b    1574b    1634b    1739b
-speaker_000 MCD     4.36 dB  4.25 dB  4.19 dB  4.08 dB  4.05 dB  4.08 dB  3.98 dB  4.00 dB
-speaker_001 MCD     3.44 dB  3.38 dB  3.30 dB  3.27 dB  3.25 dB  3.32 dB  3.23 dB  3.21 dB
-speaker_002 MCD     3.88 dB  3.75 dB  3.71 dB  3.64 dB  3.63 dB  3.69 dB  3.61 dB  3.61 dB
-speaker_003 MCD     2.81 dB  2.75 dB  2.73 dB  2.70 dB  2.68 dB  2.71 dB  2.71 dB  2.68 dB
-speaker_004 MCD     4.61 dB  4.34 dB  4.24 dB  4.21 dB  4.18 dB  4.19 dB  4.16 dB  4.19 dB
-speaker_005 MCD     3.31 dB  3.22 dB  3.15 dB  3.18 dB  3.14 dB  3.14 dB  3.10 dB  3.12 dB
-speaker_006 MCD     3.95 dB  3.79 dB  3.82 dB  3.77 dB  3.75 dB  3.81 dB  3.76 dB  3.76 dB
-speaker_007 MCD     3.92 dB  3.82 dB  3.77 dB  3.76 dB  3.72 dB  3.77 dB  3.73 dB  3.70 dB
-speaker_008 MCD     5.05 dB  4.94 dB  4.86 dB  4.87 dB  4.85 dB  4.94 dB  4.84 dB  4.81 dB
-speaker_009 MCD     4.17 dB  4.07 dB  4.03 dB  4.00 dB  3.99 dB  4.03 dB  3.99 dB  3.99 dB
-speaker_010 MCD     3.34 dB  3.19 dB  3.18 dB  3.12 dB  3.07 dB  3.18 dB  3.09 dB  3.07 dB
-speaker_011 MCD     4.61 dB  4.34 dB  4.28 dB  4.31 dB  4.26 dB  4.28 dB  4.30 dB  4.28 dB
-speaker_012 MCD     3.31 dB  3.17 dB  3.11 dB  3.03 dB  3.04 dB  3.09 dB  2.99 dB  3.01 dB
-speaker_013 MCD     5.76 dB  5.70 dB  5.61 dB  5.58 dB  5.61 dB  5.65 dB  5.61 dB  5.54 dB
-speaker_014 MCD     4.92 dB  4.85 dB  4.83 dB  4.82 dB  4.82 dB  4.89 dB  4.78 dB  4.80 dB
-------------------------------------------------------------------------------------------
-Average MCD   :     4.10 dB  3.97 dB  3.92 dB  3.89 dB  3.87 dB  3.92 dB  3.86 dB  3.85 dB
+V24       epoch       124      279      479      749    1089b    1474b    1634b    1739b    1834b    2004b
+speaker_000 MCD   4.64 dB  4.36 dB  4.25 dB  4.19 dB  4.08 dB  4.05 dB  3.98 dB  4.00 dB  3.98 dB  4.00 dB
+speaker_001 MCD   3.63 dB  3.44 dB  3.38 dB  3.30 dB  3.27 dB  3.25 dB  3.23 dB  3.21 dB  3.20 dB  3.16 dB
+speaker_002 MCD   4.08 dB  3.88 dB  3.75 dB  3.71 dB  3.64 dB  3.63 dB  3.61 dB  3.61 dB  3.58 dB  3.53 dB
+speaker_003 MCD   3.06 dB  2.81 dB  2.75 dB  2.73 dB  2.70 dB  2.68 dB  2.71 dB  2.68 dB  2.64 dB  2.63 dB
+speaker_004 MCD   4.93 dB  4.61 dB  4.34 dB  4.24 dB  4.21 dB  4.18 dB  4.16 dB  4.19 dB  4.07 dB  4.02 dB
+speaker_005 MCD   3.52 dB  3.31 dB  3.22 dB  3.15 dB  3.18 dB  3.14 dB  3.10 dB  3.12 dB  3.04 dB  3.11 dB
+speaker_006 MCD   4.01 dB  3.95 dB  3.79 dB  3.82 dB  3.77 dB  3.75 dB  3.76 dB  3.76 dB  3.73 dB  3.71 dB
+speaker_007 MCD   4.14 dB  3.92 dB  3.82 dB  3.77 dB  3.76 dB  3.72 dB  3.73 dB  3.70 dB  3.70 dB  3.71 dB
+speaker_008 MCD   5.19 dB  5.05 dB  4.94 dB  4.86 dB  4.87 dB  4.85 dB  4.84 dB  4.81 dB  4.79 dB  4.81 dB
+speaker_009 MCD   4.32 dB  4.17 dB  4.07 dB  4.03 dB  4.00 dB  3.99 dB  3.99 dB  3.99 dB  3.98 dB  3.96 dB
+speaker_010 MCD   3.58 dB  3.34 dB  3.19 dB  3.18 dB  3.12 dB  3.07 dB  3.09 dB  3.07 dB  3.06 dB  3.04 dB
+speaker_011 MCD   4.64 dB  4.61 dB  4.34 dB  4.28 dB  4.31 dB  4.26 dB  4.30 dB  4.28 dB  4.21 dB  4.22 dB
+speaker_012 MCD   3.60 dB  3.31 dB  3.17 dB  3.11 dB  3.03 dB  3.04 dB  2.99 dB  3.01 dB  2.95 dB  2.97 dB
+speaker_013 MCD   6.01 dB  5.76 dB  5.70 dB  5.61 dB  5.58 dB  5.61 dB  5.61 dB  5.54 dB  5.56 dB  5.55 dB
+speaker_014 MCD   5.09 dB  4.92 dB  4.85 dB  4.83 dB  4.82 dB  4.82 dB  4.78 dB  4.80 dB  4.76 dB  4.76 dB
+----------------------------------------------------------------------------------------------------------
+Average MCD v3:   4.30 dB  4.10 dB  3.97 dB  3.92 dB  3.89 dB  3.87 dB  3.86 dB  3.85 dB  3.82 dB  3.81 dB
 
 """
 
