@@ -257,6 +257,10 @@ def pipeline(model, vocoder, text, speaker=0, voice_mix=None, n_timesteps=DEFAUL
     primary_speaker_id = voice_mix[0][0] if voice_mix is not None else speaker
     language = next(v["lang"] for v in VOICES if v["id"] == str(primary_speaker_id))
     text_processed = process_text(text, language)
+    # Training runs in bf16-mixed, but inference must not use bf16. Production runs on an AWS g4dn instance
+    # with an NVIDIA T4 (Turing, compute capability 7.5), whose tensor cores support FP16/INT8/INT4 but not BF16.
+    # Native BF16 starts with Ampere (sm_80).
+    # Without an explicit dtype, CUDA autocast defaults to fp16, which is what the T4 needs.
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(
             text_processed["x"],
