@@ -20,7 +20,8 @@ Sometimes I need to test a checkpoint while training still runs.
 I start a server app which loads the model into memory and waits for POST requests that trigger inference. 
 I have enough GPU VRAM to both tasks. The inference request works fine 99% of the time.
 Once in a while, both processes freeze like they are waiting for one another. 
-If I stop the server with kill -9, the trainer continues.
+If I stop the server with kill -9, the trainer continues. I found that it is because of available memory.
+If I keep max_frames_per_batch low enough, and the trainer does not use more than 17Gb of RAM, everything works.
 
 
 ## Inference
