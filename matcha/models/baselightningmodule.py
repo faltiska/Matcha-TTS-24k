@@ -204,6 +204,7 @@ class BaseLightningClass(LightningModule, ABC):
 
     METRIC_PRIOR = "prior"
     METRIC_DURATION = "duration"
+    METRIC_DECODER = "decoder"
     MAE_TRAIN_KEY = "mae/train_{}"
     MAE_VAL_KEY = "mae/val_{}"
 

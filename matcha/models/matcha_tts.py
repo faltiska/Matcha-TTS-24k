@@ -59,6 +59,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         log_diagnostics=True,
         prior_loss_threshold=0.08,
         duration_loss_threshold=0.15,
+        decoder_loss_threshold=None,
         plot_mel_on_validation_end=False,
         downsampler=DEFAULT_DOWNSAMPLER,
         sample_rate=None,
@@ -241,7 +242,23 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # We want the Encoder to learn how to produce mels that match the ground truth.
         decoder_condition = mu_y.detach()
         if is_training_step:
-            diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=decoder_condition)
+            # Huber applies to the training loss only. Validation stays on MSE, so its metrics remain comparable
+            # with the runs trained on MSE.
+            huber_threshold = self.hparams.decoder_loss_threshold
+            if not self.hparams.log_diagnostics:
+                diff_loss = self.decoder.compute_loss(
+                    x1=y, mask=y_mask, mu=decoder_condition, huber_threshold=huber_threshold
+                )
+                return diff_loss, dur_loss, prior_loss, None, None
+
+            diff_loss, pred_velocity, target_velocity = self.decoder.compute_loss(
+                x1=y, mask=y_mask, mu=decoder_condition, return_prediction=True, huber_threshold=huber_threshold
+            )
+            # The errors from all the timesteps in the batch are pooled into a single distribution.
+            with torch.no_grad():
+                self._log_diagnostics(
+                    pred_velocity, target_velocity, y_mask.expand_as(target_velocity), self.METRIC_DECODER, is_training_step
+                )
             return diff_loss, dur_loss, prior_loss, None, None
 
         if self.decoder_ema is None:

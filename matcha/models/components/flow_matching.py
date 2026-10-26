@@ -51,12 +51,11 @@ SWAY_SAMPLING_COEFFICIENT = -1.0
 # trunc_normal_ (torch 2.12) draws normal values, then redraws only the ones outside the range, repeating until
 # none are left. 
 # 2.5 cuts about 1.2% of the normal tail (std 0.95), 2.0 about 4.6% (std 0.88), 1.7 about 8.9% (std 0.82).
-# I chose 1.5 after listening tests. About 13% of the noise values are redrawn (std 0.74)
 # Claude Opus says this is a well known trick for generative models.
 # BigGAN. Brock, Donahue, Simonyan, "Large Scale GAN Training for High Fidelity Natural Image Synthesis", ICLR 2019, arXiv:1809.11096, section 3.1, "Trading off variety and fidelity with the Truncation Trick".
 # StyleGAN. Karras, Laine, Aila, arXiv:1812.04948. It also has a "truncation trick", but a different one: it pulls the latent towards the average in W space instead of truncating the input noise.
 # Glow. Kingma & Dhariwal, arXiv:1807.03039. This is a normalizing flow, so technically closer to your model. It uses temperature, i.e. scaling the noise down, not truncating it.
-NOISE_TRUNCATION = 1.5
+NOISE_TRUNCATION = 2.0
 
 # A position near the end of the trajectory where to measure the validation loss, for the 
 # sub_loss/val_diff_late_epoch validation metric. 
@@ -155,7 +154,7 @@ class BASECFM(torch.nn.Module, ABC):
         trajectory = odeint(ode_func, x, t_span, method=self.solver)
         return trajectory[-1]
 
-    def compute_loss(self, x1, mask, mu, sample_late_trajectory=False):
+    def compute_loss(self, x1, mask, mu, sample_late_trajectory=False, return_prediction=False, huber_threshold=None):
         """Computes diffusion loss
 
         Args:
@@ -167,9 +166,12 @@ class BASECFM(torch.nn.Module, ABC):
                 This serves as the conditioning signal for the flow matching process.
                 shape: (batch_size, n_feats, mel_timesteps)
             sample_late_trajectory (boolean, optional): Used for the late-trajectory validation metric
+            return_prediction (boolean, optional): Also return the predicted and the target velocity,
+                used for the error diagnostics.
+            huber_threshold (float, optional): Huber delta. None computes MSE.
         Returns:
-            loss: conditional flow matching loss (L1 distance between predicted and target flow)
-            y: conditional flow - interpolated sample between noise and target at time t
+            loss: conditional flow matching loss (MSE or Huber between predicted and target flow)
+            pred, u: only when return_prediction is true, the predicted and the target velocity
                 shape: (batch_size, n_feats, mel_timesteps)
         """
         b = mu.shape[0]
@@ -202,8 +204,17 @@ class BASECFM(torch.nn.Module, ABC):
         # original_loss = F.mse_loss(pred, u, reduction="sum") / (torch.sum(mask) * u.shape[1])
         # Applying the mask to both the prediction and the target, ensures the loss is based only
         # on the actual speech frames and the padding does not contribute to the loss:
-        loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / (torch.sum(mask) * u.shape[1])
-        
+        loss_normalizer = torch.sum(mask) * u.shape[1]
+        if huber_threshold is None:
+            loss = F.mse_loss(pred * mask, u * mask, reduction="sum") / loss_normalizer
+        else:
+            # PyTorch's Huber is 0.5 * e^2 below the threshold. Doubling it makes it equal to MSE there, so
+            # the loss curves stay comparable to the MSE runs. Above the threshold the gradient stops growing
+            # and stays at 2 * threshold.
+            loss = 2.0 * F.huber_loss(pred * mask, u * mask, delta=huber_threshold, reduction="sum") / loss_normalizer
+
+        if return_prediction:
+            return loss, pred, u
         return loss
 
 

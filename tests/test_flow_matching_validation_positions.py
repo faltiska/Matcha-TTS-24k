@@ -63,3 +63,37 @@ def test_late_reading_pins_every_sample_to_the_late_position():
     (recorded,) = cfm.estimator.recorded_timesteps
     assert recorded.shape == (BATCH_SIZE,)
     assert torch.allclose(recorded, torch.full_like(recorded, LATE_TRAJECTORY_T))
+
+
+def test_return_prediction_gives_the_same_loss_plus_the_velocities_it_was_computed_from():
+    """The Decoder diagnostics read the predicted and target velocities; they must be the ones behind the loss."""
+    cfm = make_cfm()
+    x1 = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mu = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mask = torch.ones(BATCH_SIZE, 1, N_FRAMES)
+
+    loss, pred, u = cfm.compute_loss(x1=x1, mask=mask, mu=mu, return_prediction=True)
+
+    assert pred.shape == u.shape == x1.shape
+    assert torch.allclose(loss, torch.mean((pred - u) ** 2))
+
+
+def test_huber_matches_mse_below_the_threshold_and_grows_linearly_above_it():
+    cfm = make_cfm()  # the estimator predicts zeros, so the error equals the target velocity u
+    x1 = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mu = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mask = torch.ones(BATCH_SIZE, 1, N_FRAMES)
+
+    torch.manual_seed(0)
+    mse, pred, u = cfm.compute_loss(x1=x1, mask=mask, mu=mu, return_prediction=True)
+    above_every_error = (pred - u).abs().max().item() + 1.0
+    torch.manual_seed(0)
+    huber_wide = cfm.compute_loss(x1=x1, mask=mask, mu=mu, huber_threshold=above_every_error)
+    assert torch.allclose(huber_wide, mse)
+
+    delta = 0.5
+    torch.manual_seed(0)
+    huber = cfm.compute_loss(x1=x1, mask=mask, mu=mu, huber_threshold=delta)
+    error = (pred - u).abs()
+    expected = torch.where(error < delta, error ** 2, 2 * delta * (error - 0.5 * delta)).mean()
+    assert torch.allclose(huber, expected)

@@ -22,6 +22,9 @@ duration_loss: true
 log_diagnostics: true
 prior_loss_threshold: 0.08
 duration_loss_threshold: 0.15
+# Huber delta for the Decoder's training loss; null trains on MSE. Validation always reports MSE.
+# Set it from the abs_error_quantiles/decoder_* charts, e.g. the p99 value.
+decoder_loss_threshold: null
 
 # Use box_downsample. See matcha/utils/model.py.
 downsampler: box
