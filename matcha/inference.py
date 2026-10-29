@@ -58,7 +58,7 @@ class MatchaTTSInfer(nn.Module):
         # `downsampler` comes from the checkpoint hyperparameters, so synthesis always uses the filter
         # the model was trained with. Compiled for the same reason as in training: eager runs it as
         # several pointwise kernels, and the triangular filter in particular is far slower that way.
-        self.downsample = torch.compile(get_downsampler("box"), dynamic=True)
+        self.downsample = torch.compile(get_downsampler(downsampler), dynamic=True)
 
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))

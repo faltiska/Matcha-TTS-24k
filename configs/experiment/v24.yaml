@@ -36,7 +36,7 @@ data:
 #
 # Implemented Huber for the Decoder and resumed from 1739b again
 #ckpt_path: logs/train/v24/checkpoint_epoch=789.ckpt
-ckpt_path: logs/train/v24/checkpoint_epoch=939c.ckpt
+ckpt_path: logs/train/v24/checkpoint_epoch=1134c.ckpt
 
 #
 # Fine-tuning instructions: 
@@ -60,7 +60,7 @@ model:
   # changed from 1.0 to 0.9 at epoch 789
   duration_loss_threshold: 0.9
   # 20% of the errors are below 0.031, 50% below 0.09, 75% - 0.2, 90% - 0.39, 95% - 0.55, 99% - 0.98, and the rest are below 4.1
-  decoder_loss_threshold: 1.0
+  decoder_loss_threshold: 3.0
 
   # Exponential moving average of the Decoder weights; null turns it off. See matcha/models/components/decoder_ema.py.
   # A value of 0.9999 averages roughly the last 10000 steps; At ~480 optimizer steps per epoch, that is ~21 epochs.

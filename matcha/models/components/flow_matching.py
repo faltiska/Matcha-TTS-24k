@@ -55,7 +55,7 @@ SWAY_SAMPLING_COEFFICIENT = -1.0
 # BigGAN. Brock, Donahue, Simonyan, "Large Scale GAN Training for High Fidelity Natural Image Synthesis", ICLR 2019, arXiv:1809.11096, section 3.1, "Trading off variety and fidelity with the Truncation Trick".
 # StyleGAN. Karras, Laine, Aila, arXiv:1812.04948. It also has a "truncation trick", but a different one: it pulls the latent towards the average in W space instead of truncating the input noise.
 # Glow. Kingma & Dhariwal, arXiv:1807.03039. This is a normalizing flow, so technically closer to your model. It uses temperature, i.e. scaling the noise down, not truncating it.
-NOISE_TRUNCATION = 2.0
+NOISE_TRUNCATION = None
 
 # A position near the end of the trajectory where to measure the validation loss, for the 
 # sub_loss/val_diff_late_epoch validation metric. 
