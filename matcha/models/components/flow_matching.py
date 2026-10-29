@@ -16,6 +16,17 @@ from .ode_solver_wrapper import OdeSolverWrapper
 # positive values towards the mel end. The mapping stays monotonic between -1.0 and 2 / (pi - 2).
 SWAY_SAMPLING_COEFFICIENT = -1.0
 
+# Truncates the inference starting noise to [-NOISE_TRUNCATION, NOISE_TRUNCATION] standard deviations.
+# None disables truncation.
+# trunc_normal_ (torch 2.12) draws normal values, then redraws only the ones outside the range, repeating until
+# none are left. 
+# 2.5 cuts about 1.2% of the normal tail (std 0.95), 2.0 about 4.6% (std 0.88), 1.7 about 8.9% (std 0.82).
+# Claude Opus says this is a well known trick for generative models.
+# BigGAN. Brock, Donahue, Simonyan, "Large Scale GAN Training for High Fidelity Natural Image Synthesis", ICLR 2019, arXiv:1809.11096, section 3.1, "Trading off variety and fidelity with the Truncation Trick".
+# StyleGAN. Karras, Laine, Aila, arXiv:1812.04948. It also has a "truncation trick", but a different one: it pulls the latent towards the average in W space instead of truncating the input noise.
+# Glow. Kingma & Dhariwal, arXiv:1807.03039. This is a normalizing flow, so technically closer to your model. It uses temperature, i.e. scaling the noise down, not truncating it.
+NOISE_TRUNCATION = 2.5
+
 class BASECFM(torch.nn.Module, ABC):
     def __init__(
         self,
@@ -57,10 +68,16 @@ class BASECFM(torch.nn.Module, ABC):
         # The author addressed this in GitHub Issue #141, arguing that mu is concatenated to the input of the UNet/Decoder. 
         # Because the model "sees" mu at every step, the author found that it can learn to find the data just as well starting from.
         # He noted that in practice, they didn't see much difference in quality when switching between the two. 
-        if self.use_mu_prior:
-            z = mu + torch.randn_like(mu, generator=generator)
+        if NOISE_TRUNCATION is None:
+            noise = torch.randn_like(mu, generator=generator)
         else:
-            z = torch.randn_like(mu, generator=generator)
+            noise = torch.nn.init.trunc_normal_(
+                torch.empty_like(mu), a=-NOISE_TRUNCATION, b=NOISE_TRUNCATION, generator=generator
+            )
+        if self.use_mu_prior:
+            z = mu + noise
+        else:
+            z = noise
         
         t_span = self.build_step_grid(n_timesteps, mu.device)
         return self.solve(z, t_span=t_span, mu=mu, mask=mask)
