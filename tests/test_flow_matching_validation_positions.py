@@ -97,3 +97,50 @@ def test_huber_matches_mse_below_the_threshold_and_grows_linearly_above_it():
     error = (pred - u).abs()
     expected = torch.where(error < delta, error ** 2, 2 * delta * (error - 0.5 * delta)).mean()
     assert torch.allclose(huber, expected)
+
+
+def make_cfm_with_late_band(band):
+    cfm_params = SimpleNamespace(solver="euler", sigma_min=1e-4, use_mu_prior=False, extra_late_timestep_band=band)
+    cfm = BASECFM(n_feats=N_FEATS, cfm_params=cfm_params)
+    cfm.estimator = TimestepRecordingEstimator()
+    return cfm
+
+
+def test_late_timestep_doubles_the_batch_and_draws_the_second_half_inside_the_band():
+    band = (0.75, 0.935)
+    cfm = make_cfm_with_late_band(band)
+    x1 = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mu = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mask = torch.ones(BATCH_SIZE, 1, N_FRAMES)
+
+    for _ in range(16):
+        loss, pred, u = cfm.compute_loss(x1=x1, mask=mask, mu=mu, return_prediction=True, add_late_timestep=True)
+        assert pred.shape == u.shape == (2 * BATCH_SIZE, N_FEATS, N_FRAMES)
+        # Both copies target the same mel, each from its own noise.
+        assert not torch.allclose(u[:BATCH_SIZE], u[BATCH_SIZE:])
+        # The loss is the mean over both readings.
+        assert torch.allclose(loss, torch.mean((pred - u) ** 2))
+
+    for recorded in cfm.estimator.recorded_timesteps:
+        assert recorded.shape == (2 * BATCH_SIZE,)
+        late = recorded[BATCH_SIZE:]
+        assert late.min() >= band[0] and late.max() <= band[1]
+
+
+def test_late_timestep_is_off_without_a_band_without_the_flag_and_for_the_pinned_reading():
+    x1 = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mu = torch.randn(BATCH_SIZE, N_FEATS, N_FRAMES)
+    mask = torch.ones(BATCH_SIZE, 1, N_FRAMES)
+
+    no_band = make_cfm_with_late_band(None)
+    no_band.compute_loss(x1=x1, mask=mask, mu=mu, add_late_timestep=True)
+
+    band_without_flag = make_cfm_with_late_band((0.75, 0.935))
+    band_without_flag.compute_loss(x1=x1, mask=mask, mu=mu)
+
+    pinned = make_cfm_with_late_band((0.75, 0.935))
+    pinned.compute_loss(x1=x1, mask=mask, mu=mu, sample_late_trajectory=True, add_late_timestep=True)
+
+    for cfm in (no_band, band_without_flag, pinned):
+        (recorded,) = cfm.estimator.recorded_timesteps
+        assert recorded.shape == (BATCH_SIZE,)

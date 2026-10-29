@@ -247,14 +247,22 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             huber_threshold = self.hparams.decoder_loss_threshold
             if not self.hparams.log_diagnostics:
                 diff_loss = self.decoder.compute_loss(
-                    x1=y, mask=y_mask, mu=decoder_condition, huber_threshold=huber_threshold
+                    x1=y, mask=y_mask, mu=decoder_condition, huber_threshold=huber_threshold, add_late_timestep=True
                 )
                 return diff_loss, dur_loss, prior_loss, None, None
 
             diff_loss, pred_velocity, target_velocity = self.decoder.compute_loss(
-                x1=y, mask=y_mask, mu=decoder_condition, return_prediction=True, huber_threshold=huber_threshold
+                x1=y,
+                mask=y_mask,
+                mu=decoder_condition,
+                return_prediction=True,
+                huber_threshold=huber_threshold,
+                add_late_timestep=True,
             )
             # The errors from all the timesteps in the batch are pooled into a single distribution.
+            # With cfm.extra_late_timestep_band set, the late readings are pooled in too, and the mask is doubled to match.
+            if pred_velocity.shape[0] != y_mask.shape[0]:
+                y_mask = torch.cat([y_mask, y_mask], dim=0)
             with torch.no_grad():
                 self._log_diagnostics(
                     pred_velocity, target_velocity, y_mask.expand_as(target_velocity), self.METRIC_DECODER, is_training_step

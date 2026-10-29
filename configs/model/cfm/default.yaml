@@ -7,3 +7,10 @@ sigma_min: 1e-4
 
 # Start the ODE from prior+noise (true) or pure white noise (false).
 use_mu_prior: true
+
+# Training only. [low, high]: every utterance is also trained at a second timestep drawn uniformly from this band,
+# with its own noise, on top of the regular logit-normal draw. The loss is the mean of both readings.
+# Doubles the Decoder's compute and activation memory per step. null disables it.
+# 0.935 is the highest position heun3/8 queries with sway -1.0 (see LATE_TRAJECTORY_T in flow_matching.py).
+# Example: extra_late_timestep_band: [0.75, 0.935]
+extra_late_timestep_band: null

@@ -58,7 +58,7 @@ class MatchaTTSInfer(nn.Module):
         # `downsampler` comes from the checkpoint hyperparameters, so synthesis always uses the filter
         # the model was trained with. Compiled for the same reason as in training: eager runs it as
         # several pointwise kernels, and the triangular filter in particular is far slower that way.
-        self.downsample = torch.compile(get_downsampler(downsampler), dynamic=True)
+        self.downsample = torch.compile(get_downsampler("box"), dynamic=True)
 
         stats = data_statistics or {}
         self.register_buffer("mel_mean", torch.tensor(stats.get("mel_mean", 0.0)))
@@ -260,7 +260,7 @@ def pipeline(model, vocoder, text, speaker=0, voice_mix=None, n_timesteps=DEFAUL
     # Training runs in bf16-mixed, but inference must not use bf16. Production runs on an AWS g4dn instance
     # with an NVIDIA T4 (Turing, compute capability 7.5), whose tensor cores support FP16/INT8/INT4 but not BF16.
     # Native BF16 starts with Ampere (sm_80).
-    # Without an explicit dtype, CUDA autocast defaults to fp16, which is what the T4 needs.
+    # Without an explicit dtype, CUDA autocast defaults to fp16.
     with torch.autocast(device_type="cuda"):
         output = model.synthesise(
             text_processed["x"],

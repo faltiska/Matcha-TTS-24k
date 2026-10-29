@@ -1,0 +1,119 @@
+# @package _global_
+#
+# Changes compared to v23:
+# 1. Duration jitter before decoding (used in late v23 epochs too, lowers diffusion validation loss)
+
+# 2. Make the time embedding dimension 4 times smaller in the Decoder: time_embed_dim = channels[0]
+# it just encodes one scalar, there may be no need for a larger value. 
+# This will reduce the decoder size by 10m params.
+
+# 3. Decoder params averaging.
+
+# 4. Reduced speaker embedding dim
+
+# 5. Added the ability to compute Encoder loss with "one vote per phoneme" instead of "one vote per frame". 
+# Not used yet, just coded.
+
+# 6. Removed the perceptual weighting mechanism from Encoder loss (from epoch 749)
+
+# 7. Moved to pytorch 2.15.0+cu134, removed linux drivers completely, deleted py cache
+
+# 8. Changed timestep sampling distribution to location 1.1 / scale 1.0 (as done in the later part of the v23 training)
+
+run_name: v24
+
+defaults:
+  - override /data: corpus-24k
+
+data:
+  num_workers: 8
+  max_frames_per_batch: 80000
+
+ckpt_path: null
+
+#
+# Fine-tuning instructions: 
+# - reduce LR 
+# - freeze prior 
+# - set all dropouts to 0
+# - set weights decay to 0
+# - run validation every 1 epoch
+# - save checkpoints every 1 epoch
+#
+
+model:
+  spk_emb_dim: 64
+  prior_loss: true
+  duration_loss: true
+  log_diagnostics: true
+  downsampler: triangular
+
+  # changed from 0.9 to 0.8 at epoch 789 but prior loss 100 percentile got worse; I should leave it at 0.9 from now on.
+  prior_loss_threshold: 0.9
+  # changed from 1.0 to 0.9 at epoch 789
+  duration_loss_threshold: 0.9
+  # 20% of the errors are below 0.031, 50% below 0.09, 75% - 0.2, 90% - 0.39, 95% - 0.55, 99% - 0.98, and the rest are below 4.1
+  decoder_loss_threshold: 1.0
+
+  # Exponential moving average of the Decoder weights; null turns it off. See matcha/models/components/decoder_ema.py.
+  # A value of 0.9999 averages roughly the last 10000 steps; At ~480 optimizer steps per epoch, that is ~21 epochs.
+  # Inference and the validation scripts use the averaged weights unless they are run with --no-ema.
+  decoder_ema_decay: 0.9999
+
+  # Duration jitter before decoding
+  alignment_jitter: true
+
+  # One vote per phoneme in the prior loss instead of one per frame. Keep false until durations are learned.
+  # Turn on at epoch 789
+  prior_loss_per_phoneme: false
+  
+  encoder:
+    encoder_params:
+      # Head dim: n_channels / n_heads = 64, divisible by 8
+      n_channels: 384
+      # 384 * 3 = 1152
+      filter_channels: 1152
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 5
+      # 0.1 reduces the train to validate gap, keeping the same validation loss value as 0.05
+      p_dropout: 0.1
+      
+      prenet: true
+      # should not go over 3, it affects prior loss
+      # 5 is slightly worse, 7 is considerably worse 
+      prenet_kernel_size: 3
+    
+    duration_predictor_params:
+      # head dim is filter_channels_dp / n_heads = 64, divisible by 8
+      filter_channels_dp: 384
+      n_heads: 6
+      n_layers: 4
+      kernel_size: 3
+      # 0.15 reduces the train to validate gap, but increases the validation loss value compared to 0.1 
+      p_dropout: 0.1
+  
+  decoder:
+    # The rule for divisibility by num_heads applies to the second figure only
+    channels: [384, 384]
+    attention_head_dim: 64
+    num_heads: 6
+    num_mid_blocks: 2
+    # 0.15 reduces the train to validate gap, I think, I did not test extensively. 
+    dropout: 0.15
+  
+  cfm:
+    use_mu_prior: false
+    extra_late_timestep_band: [0.75, 0.935]
+
+  optimizer:
+# Epoch 0 
+    lr: 8e-5
+    weight_decay: 1e-4
+
+callbacks:
+  model_checkpoint:
+    every_n_epochs: 5
+
+trainer:
+  check_val_every_n_epoch: 5

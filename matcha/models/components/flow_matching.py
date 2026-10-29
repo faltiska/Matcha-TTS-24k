@@ -85,6 +85,15 @@ class BASECFM(torch.nn.Module, ABC):
         self.solver = cfm_params.solver
         self.sigma_min = getattr(cfm_params, "sigma_min", 1e-4)
         self.use_mu_prior = getattr(cfm_params, "use_mu_prior", False)
+        # [low, high] band for a second, late-only timestep per utterance during training; None disables it.
+        # See compute_loss and configs/model/cfm/default.yaml.
+        late_band = getattr(cfm_params, "extra_late_timestep_band", None)
+        if late_band is None:
+            self.extra_late_timestep_band = None
+        else:
+            low, high = (float(value) for value in late_band)
+            assert 0.0 <= low < high <= 1.0, f"extra_late_timestep_band must satisfy 0 <= low < high <= 1, got {late_band}"
+            self.extra_late_timestep_band = (low, high)
 
         self.estimator = None
 
@@ -154,7 +163,16 @@ class BASECFM(torch.nn.Module, ABC):
         trajectory = odeint(ode_func, x, t_span, method=self.solver)
         return trajectory[-1]
 
-    def compute_loss(self, x1, mask, mu, sample_late_trajectory=False, return_prediction=False, huber_threshold=None):
+    def compute_loss(
+        self,
+        x1,
+        mask,
+        mu,
+        sample_late_trajectory=False,
+        return_prediction=False,
+        huber_threshold=None,
+        add_late_timestep=False,
+    ):
         """Computes diffusion loss
 
         Args:
@@ -169,10 +187,14 @@ class BASECFM(torch.nn.Module, ABC):
             return_prediction (boolean, optional): Also return the predicted and the target velocity,
                 used for the error diagnostics.
             huber_threshold (float, optional): Huber delta. None computes MSE.
+            add_late_timestep (boolean, optional): Training only. When extra_late_timestep_band is set, every
+                utterance is also trained at a second timestep drawn uniformly from that band, with its own noise.
+                The loss is the mean over both readings. Ignored when the band is None or with sample_late_trajectory.
         Returns:
             loss: conditional flow matching loss (MSE or Huber between predicted and target flow)
             pred, u: only when return_prediction is true, the predicted and the target velocity
-                shape: (batch_size, n_feats, mel_timesteps)
+                shape: (batch_size, n_feats, mel_timesteps), or (2 * batch_size, ...) with the late reading,
+                the regular readings first.
         """
         b = mu.shape[0]
 
@@ -183,6 +205,19 @@ class BASECFM(torch.nn.Module, ABC):
         else:
             normal_sample = torch.randn([b, 1, 1], device=mu.device, dtype=mu.dtype)
             t = torch.sigmoid(normal_sample * TIMESTEP_SAMPLING_SCALE + TIMESTEP_SAMPLING_LOCATION)
+
+        # The late reading is a second copy of the batch, stacked along the batch dimension, so the Decoder runs
+        # once on 2b utterances instead of twice on b. Each copy gets its own t and, below, its own noise.
+        # The regular draw still covers the whole trajectory, so the early and middle positions keep being trained.
+        # The Encoder output (mu) is detached by the caller and computed once, so only the Decoder pays for this:
+        # about twice the Decoder compute and activation memory.
+        if add_late_timestep and self.extra_late_timestep_band is not None and not sample_late_trajectory:
+            low, high = self.extra_late_timestep_band
+            t_late = low + (high - low) * torch.rand([b, 1, 1], device=mu.device, dtype=mu.dtype)
+            t = torch.cat([t, t_late], dim=0)
+            x1 = torch.cat([x1, x1], dim=0)
+            mask = torch.cat([mask, mask], dim=0)
+            mu = torch.cat([mu, mu], dim=0)
 
         # Start from mu + noise or pure noise depending on use_mu_prior (see cfm yaml), must match inference.
         if self.use_mu_prior:
