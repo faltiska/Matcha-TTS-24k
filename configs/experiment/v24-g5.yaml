@@ -27,10 +27,10 @@ defaults:
 
 data:
   num_workers: 8
-  max_frames_per_batch: 50000
+  max_frames_per_batch: 40000
 
 # Path on the EC2 instance; locally the same file is under logs/ec2/ (see ec2-training.md, step 4.1)
-ckpt_path: logs/train/v24/runs/2026-10-28_11-35-09/checkpoints/checkpoint_epoch=114.ckpt
+ckpt_path: logs/train/v24/runs/2026-10-29_13-43-55/checkpoints/checkpoint_epoch=224.ckpt
 
 #
 # Fine-tuning instructions: 
