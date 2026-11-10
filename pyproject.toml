@@ -9,9 +9,12 @@ requires-python = ">=3.13"
 # Runtime dependencies for inference (matcha.cli, matcha.server). The Docker image installs only these,
 # from uv.lock, via `uv sync --no-default-groups`. Training-only packages live in the `train` group below.
 dependencies = [
-    # Pinned: torch 2.14 measured 30-40% slower in training than 2.12.1, so stay on 2.12.
-    # torchaudio +cu132 builds are published only in the test channel, see [tool.uv.sources] below.
-    "torch==2.12.1+cu132",
+    # torch 2.15.0+cu134 is published only in the test channel for now, see [tool.uv.sources] below.
+    # When 2.15.0 reaches the stable index, change the torch index from test/cu134 to cu134.
+    # The README note about the 2.12 pin will need updating then too.
+    # There are no cu134 builds of torchaudio/torchcodec yet; their cu132 builds work with torch cu134.
+    # torchaudio +cu132 builds are published only in the test channel.
+    "torch==2.15.0+cu134",
     "torchaudio==2.11.0+cu132",
     # triton backs torch.compile at inference, and is needed by super-monotonic-align in training.
     # torch happens to pull it on linux/py<3.15, but keep it explicit so it is not accidental.
@@ -39,7 +42,7 @@ dependencies = [
 
 [dependency-groups]
 train = [
-    "torchcodec==0.16.0+cu132",
+    "torchcodec==0.17.0+cu132",
     "lightning",
     "torchmetrics",
     "torch-ema",
@@ -67,8 +70,15 @@ name = "pytorch-test-cu132"
 url = "https://download.pytorch.org/whl/test/cu132"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-test-cu134"
+url = "https://download.pytorch.org/whl/test/cu134"
+explicit = true
+
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu132" }]
+torch = [{ index = "pytorch-test-cu134" }]
+# torch 2.15 needs triton~=3.9.0, which is not on PyPI yet. Drop this line once it is.
+triton = [{ index = "pytorch-test-cu134" }]
 torchcodec = [{ index = "pytorch-cu132" }]
 torchaudio = [{ index = "pytorch-test-cu132" }]
 
