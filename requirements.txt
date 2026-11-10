@@ -32,3 +32,4 @@ pymcd
 fastapi
 uvicorn[standard]
 pydantic
+conformer
