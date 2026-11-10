@@ -1,19 +1,20 @@
 ## Environment preparation
 
 ```bash
-# Replace `.venv` with another name, such as `.venv-pt214`, when testing an upgrade.
 uv venv .venv --python 3.13
 source .venv/bin/activate
 uv sync --active
+python -c "import torch; print(torch.__version__)"   # expect 2.15.0+cu134
 ```
 To refresh the lock and install newer allowed versions of the complete dependency set, run:
 ```commandline
 uv lock --upgrade
 uv sync
 ```
-Note: `torch`, `torchaudio` and `torchcodec` are pinned to exact `+cu132` builds in `pyproject.toml`,
-so `uv lock --upgrade` will not move them. torch 2.14 measured 30-40% slower in training than 2.12.1.
-To try a newer torch, relax the pins in a separate venv (`uv venv .venv-pt214`) and benchmark before adopting.
+Note: `torch` is pinned to `2.15.0+cu134`, and `torchaudio` and `torchcodec` to exact `+cu132` builds 
+(there are no cu134 builds of them yet, and the cu132 ones work with torch cu134), so `uv lock --upgrade` will not move them.
+torch 2.15 and the triton it needs come from the PyTorch test channel (`pytorch-test-cu134` in `pyproject.toml`).
+Move them to the stable cu134 index once 2.15 is published there.
 
 ## A note on running inference and training at the same time
 Sometimes I need to test a checkpoint while training still runs. 
