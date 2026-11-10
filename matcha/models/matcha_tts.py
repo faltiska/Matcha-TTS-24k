@@ -6,7 +6,7 @@ import logging
 from matcha.models.baselightningmodule import BaseLightningClass
 from matcha.text.symbols import N_VOCAB
 from matcha.models.components.flow_matching import CFM
-from matcha.models.components.decoder_ema import paired_flow_matching_losses
+from matcha.models.components.decoder_ema import paired_flow_matching_losses, read_flow_matching_losses
 from matcha.models.components.text_encoder import TextEncoder
 from matcha.utils.model import DEFAULT_DOWNSAMPLER, generate_path, get_downsampler, sequence_mask, LOG_DURATION_OFFSET
 from super_monotonic_align import maximum_path as maximum_path_gpu 
@@ -245,45 +245,27 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             # Huber applies to the training loss only. Validation stays on MSE, so its metrics remain comparable
             # with the runs trained on MSE.
             huber_threshold = self.hparams.decoder_loss_threshold
-            if not self.hparams.log_diagnostics:
-                diff_loss = self.decoder.compute_loss(
-                    x1=y, mask=y_mask, mu=decoder_condition, huber_threshold=huber_threshold, add_late_timestep=True
-                )
-                return diff_loss, dur_loss, prior_loss, None, None
-
-            diff_loss, pred_velocity, target_velocity = self.decoder.compute_loss(
-                x1=y,
-                mask=y_mask,
-                mu=decoder_condition,
-                return_prediction=True,
-                huber_threshold=huber_threshold,
-                add_late_timestep=True,
+            diff_loss = self.decoder.compute_loss(
+                x1=y, mask=y_mask, mu=decoder_condition, huber_threshold=huber_threshold, add_late_timestep=True
             )
-            # The errors from all the timesteps in the batch are pooled into a single distribution.
-            # With cfm.extra_late_timestep_band set, the late readings are pooled in too, and the mask is doubled to match.
-            if pred_velocity.shape[0] != y_mask.shape[0]:
-                y_mask = torch.cat([y_mask, y_mask], dim=0)
-            with torch.no_grad():
-                self._log_diagnostics(
-                    pred_velocity, target_velocity, y_mask.expand_as(target_velocity), self.METRIC_DECODER, is_training_step
-                )
             return diff_loss, dur_loss, prior_loss, None, None
 
+        late_mask = y_mask.expand(-1, y.shape[1], -1)
         if self.decoder_ema is None:
-            diff_loss = self.decoder.compute_loss(x1=y, mask=y_mask, mu=decoder_condition)
-            # A second reading of the same loss, pinned to the end of the trajectory, for validation only.
-            late_diff_loss = self.decoder.compute_loss(
-                    x1=y,
-                    mask=y_mask,
-                    mu=decoder_condition,
-                sample_late_trajectory=True,
-                )
+            diff_loss, late_diff_loss, late_pred, late_target = read_flow_matching_losses(
+                self.decoder, y, y_mask, decoder_condition
+            )
+            self._log_val_error_quantiles(late_pred, late_target, late_mask, self.METRIC_DECODER_LATE)
             return diff_loss, dur_loss, prior_loss, late_diff_loss, None
 
-        (diff_loss, late_diff_loss), ema_diff_losses = paired_flow_matching_losses(
+        live_readings, ema_readings = paired_flow_matching_losses(
             self.decoder, list(self.decoder_ema.parameters()), y, y_mask, decoder_condition
         )
-        return diff_loss, dur_loss, prior_loss, late_diff_loss, ema_diff_losses
+        diff_loss, late_diff_loss, _, _ = live_readings
+        ema_diff_loss, ema_late_diff_loss, ema_late_pred, ema_late_target = ema_readings
+        # Logged for the EMA weights only, which inference uses, matching sub_loss/val_diff_late_epoch.
+        self._log_val_error_quantiles(ema_late_pred, ema_late_target, late_mask, self.METRIC_DECODER_LATE)
+        return diff_loss, dur_loss, prior_loss, late_diff_loss, (ema_diff_loss, ema_late_diff_loss)
 
     # The fraction of its own frames a token may hand over to a neighbour, never less than one frame.
     # One fine frame is 5.3ms, half a frame at the resolution the Decoder works at.

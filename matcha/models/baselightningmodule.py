@@ -204,7 +204,9 @@ class BaseLightningClass(LightningModule, ABC):
 
     METRIC_PRIOR = "prior"
     METRIC_DURATION = "duration"
-    METRIC_DECODER = "decoder"
+    # The Decoder's velocity error at the fixed late timestep, logged on validation only.
+    METRIC_DECODER_LATE = "decoder_late"
+    ERROR_QUANTILES = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
     MAE_TRAIN_KEY = "mae/train_{}"
     MAE_VAL_KEY = "mae/val_{}"
 
@@ -234,19 +236,35 @@ class BaseLightningClass(LightningModule, ABC):
             batch_size = predictions.shape[0]
             train_abs_error = torch.abs(predictions - targets)[mask.bool()]
             self.log(self.MAE_TRAIN_KEY.format(metric_name), train_abs_error.mean(), on_step=False, on_epoch=True, batch_size=batch_size)
-
-            quantiles = [0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0]
-            quantiles_tensor = torch.tensor(quantiles, device=predictions.device)
-            sorted_errors = torch.sort(train_abs_error).values
-            n = sorted_errors.numel()
-            indices = (quantiles_tensor * (n - 1)).long().clamp(0, n - 1)
-            q = sorted_errors[indices]
-            for i, p in enumerate(quantiles):
-                self.log(f"abs_error_quantiles/{metric_name}_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
+            self._log_abs_error_quantiles(train_abs_error, metric_name, batch_size)
         else:
             batch_size = predictions.shape[0]
             valid_abs_error = torch.abs(predictions - targets)[mask.bool()]
             self.log(self.MAE_VAL_KEY.format(metric_name), valid_abs_error.mean(), on_step=False, on_epoch=True, batch_size=batch_size)
+
+    def _log_abs_error_quantiles(self, abs_error, metric_name, batch_size):
+        """
+        Logs the quantiles of a flat tensor of absolute errors, as abs_error_quantiles/{metric_name}_{p}.
+        The quantiles are computed per batch, and Lightning averages them over the epoch.
+        """
+        quantiles_tensor = torch.tensor(self.ERROR_QUANTILES, device=abs_error.device)
+        sorted_errors = torch.sort(abs_error).values
+        n = sorted_errors.numel()
+        indices = (quantiles_tensor * (n - 1)).long().clamp(0, n - 1)
+        q = sorted_errors[indices]
+        for i, p in enumerate(self.ERROR_QUANTILES):
+            self.log(f"abs_error_quantiles/{metric_name}_{p}", q[i], on_step=False, on_epoch=True, batch_size=batch_size)
+
+    @torch.no_grad()
+    def _log_val_error_quantiles(self, predictions, targets, mask, metric_name):
+        """
+        Logs the validation absolute error quantiles, as abs_error_quantiles/val_{metric_name}_{p}.
+        Used for the Decoder's velocity error at the fixed late timestep (LATE_TRAJECTORY_T), on validation only.
+        """
+        if not self.hparams.log_diagnostics:
+            return
+        abs_error = torch.abs(predictions - targets)[mask.bool()]
+        self._log_abs_error_quantiles(abs_error, f"val_{metric_name}", predictions.shape[0])
 
     def log_mae_gap(self, metrics, metric_name):
         if not self.hparams.log_diagnostics:

@@ -102,7 +102,7 @@ def swap_weights(first_weights: list[torch.Tensor], second_weights: list[torch.T
 def paired_flow_matching_losses(cfm, ema_weights, x1, mask, mu):
     """
     Reads the flow matching loss and its late-trajectory variant for the live Decoder and for the EMA Decoder,
-    on the same batch.
+    on the same batch. Returns (live_readings, ema_readings), each as returned by read_flow_matching_losses.
 
     The random timestep and noise move the loss far more than the difference between the two weight sets does,
     so the EMA readings must replay exactly the draws of the live readings for the two to be comparable.
@@ -131,7 +131,13 @@ def paired_flow_matching_losses(cfm, ema_weights, x1, mask, mu):
 
 
 def read_flow_matching_losses(cfm, x1, mask, mu):
+    """
+    Returns (diff_loss, late_diff_loss, late_pred, late_target).
+    The late reading's predicted and target velocities feed the late-trajectory error quantiles.
+    """
     diff_loss = cfm.compute_loss(x1=x1, mask=mask, mu=mu)
     # A second reading of the same loss, pinned to the end of the trajectory, for validation only.
-    late_diff_loss = cfm.compute_loss(x1=x1, mask=mask, mu=mu, sample_late_trajectory=True)
-    return diff_loss, late_diff_loss
+    late_diff_loss, late_pred, late_target = cfm.compute_loss(
+        x1=x1, mask=mask, mu=mu, sample_late_trajectory=True, return_prediction=True
+    )
+    return diff_loss, late_diff_loss, late_pred, late_target

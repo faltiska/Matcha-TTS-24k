@@ -55,9 +55,16 @@ class MatchaTTSInfer(nn.Module):
         # Don't use mode "reduce-overhead", it triggers recompilation during inference, depending on input length 
         self.encoder = torch.compile(self.encoder, dynamic=True)
         self.decoder.estimator = torch.compile(self.decoder.estimator, dynamic=True)
+        
         # `downsampler` comes from the checkpoint hyperparameters, so synthesis always uses the filter
         # the model was trained with. Compiled for the same reason as in training: eager runs it as
         # several pointwise kernels, and the triangular filter in particular is far slower that way.
+        #
+        # I think I hear fewer artifacts if I force it to box, even if it was trained with triangular.
+        # MCD tests agree with this, a little bit. 
+        # On v24 epoch checkpoint_epoch=1389, MCD v3 is: (3.83 dB with box, 3.84 dB with triangular)
+        # downsampler = "box"  
+        
         self.downsample = torch.compile(get_downsampler(downsampler), dynamic=True)
 
         stats = data_statistics or {}

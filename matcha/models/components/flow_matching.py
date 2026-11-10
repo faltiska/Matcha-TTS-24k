@@ -55,7 +55,11 @@ SWAY_SAMPLING_COEFFICIENT = -1.0
 # BigGAN. Brock, Donahue, Simonyan, "Large Scale GAN Training for High Fidelity Natural Image Synthesis", ICLR 2019, arXiv:1809.11096, section 3.1, "Trading off variety and fidelity with the Truncation Trick".
 # StyleGAN. Karras, Laine, Aila, arXiv:1812.04948. It also has a "truncation trick", but a different one: it pulls the latent towards the average in W space instead of truncating the input noise.
 # Glow. Kingma & Dhariwal, arXiv:1807.03039. This is a normalizing flow, so technically closer to your model. It uses temperature, i.e. scaling the noise down, not truncating it.
+# My subjective tests show that 2.1 is the best option and MCD v3 actually agrees. MCD v2 does not, but that is a problem with v2.
+# On v24 epoch checkpoint_epoch=1389, MCD v3 is: (1.5 -> 3.83 dB, 2.0-2.1 -> 3.78 Db, 2.5 -> 3.80 dB, None: 3.84 dB)
+# 2.1 combined with a forced box downsampler, lowers the MCD to 3.77 dB
 NOISE_TRUNCATION = None
+# NOISE_TRUNCATION = 2.1
 
 # A position near the end of the trajectory where to measure the validation loss, for the 
 # sub_loss/val_diff_late_epoch validation metric. 
