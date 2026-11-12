@@ -9,7 +9,9 @@ Test classes:
   (silence padding, output shape, per-language smoke) rather than exact IPA snapshots,
   which drift every time NeMo or eSpeak releases an update.
 - TestPhonemizerOutputSymbols: documents which punctuation survives to the model
-- TestPhonemeIds: id-list integrity, including voiced-phoneme tuple expansion
+- TestPhonemeIds: id-list integrity
+- TestInsertSeparators: the separator rules, one case per situation, on real eSpeak output written by hand
+- TestSeparatorRulesOnEspeakOutput: the separator rules checked on live eSpeak output for every supported language
 
 Run with:
   pytest tests/test_phonemizers.py
@@ -17,14 +19,17 @@ Run with:
 import pytest
 from matcha.text.phonemizers import (
     cleanup_text,
+    insert_separators,
     normalize_text,
     multilingual_phonemizer,
+    phonemizers,
 )
 from matcha.text.symbols import (
-    PRE_ID,
-    POST_ID,
     N_VOCAB,
+    SEPARATOR_ID,
+    annotation_ids,
     symbol_to_id,
+    symbols,
     voiced_phoneme_ids,
 )
 
@@ -258,32 +263,153 @@ class TestPhonemeIds:
         for token_id in ids:
             assert 0 <= token_id < N_VOCAB
 
-    def test_voiced_phonemes_expand_to_three_ids(self):
-        """
-        Each voiced phoneme p in the displayed phonemes string is bracketed by '‹' '›' and
-        contributes the triple (PRE_ID + p, p, POST_ID + p) to the id list.
-        Each non-voiced symbol contributes a single id.
-        We verify the contract by reconstructing the expected id list from the phonemes string.
-        """
+    def test_displayed_phonemes_match_ids(self):
         phonemes, ids = multilingual_phonemizer("Hello world.", "en-us")
+        assert phonemes == "".join(symbols[token_id] for token_id in ids)
 
-        expected_ids = []
-        char_index = 0
-        while char_index < len(phonemes):
-            char = phonemes[char_index]
-            if char == '‹':
-                voiced_phoneme = phonemes[char_index + 1]
-                voiced_phoneme_id = symbol_to_id[voiced_phoneme]
-                assert voiced_phoneme_id in voiced_phoneme_ids
-                expected_ids.extend([
-                    PRE_ID + voiced_phoneme_id,
-                    voiced_phoneme_id,
-                    POST_ID + voiced_phoneme_id,
-                ])
-                # Skip past the closing '›' as well
-                char_index += 3
-            else:
-                expected_ids.append(symbol_to_id[char])
-                char_index += 1
 
-        assert ids == expected_ids
+def with_separators(espeak_output):
+    """Runs the separator rules on an eSpeak output string and returns the result as a string."""
+    espeak_ids = [symbol_to_id[symbol] for symbol in espeak_output]
+    return "".join(symbols[token_id] for token_id in insert_separators(espeak_ids))
+
+
+class TestInsertSeparators:
+    """
+    One case per situation. Inputs are eSpeak outputs, with the leading space the phonemizer adds. A few are short
+    fragments built around annotation contexts found in the training corpus (stress between two vowels, Italian
+    length mark before stress, Romanian palatalization around secondary stress).
+    In the expected strings, "|" is the separator and " " is the word gap.
+    """
+
+    def test_between_two_phonemes(self):
+        assert with_separators(" nɛkst") == " |n|ɛ|k|s|t"
+
+    def test_around_word_gap(self):
+        assert with_separators(" deɪ wiː") == " |d|e|ɪ| |w|iː"
+
+    def test_before_final_punctuation(self):
+        assert with_separators(" fˈʌn.") == " |fˈʌ|n|."
+
+    def test_after_comma(self):
+        assert with_separators(" həlˈoʊ, wˈɜːld!") == " |h|ə|lˈo|ʊ|, |wˈɜːl|d|!"
+
+    def test_not_between_punctuation_and_word_gap(self):
+        assert with_separators(" dʒ, ˈeɪt") == " |d|ʒ|, ˈe|ɪ|t"
+
+    def test_not_around_stress_inside_word(self):
+        assert with_separators(" tjˈuːzdeɪ") == " |t|jˈuːz|d|e|ɪ"
+
+    def test_not_around_secondary_stress(self):
+        assert with_separators(" sˌʌm") == " |sˌʌ|m"
+
+    def test_not_between_word_gap_and_stress(self):
+        assert with_separators(" ˈʌðə") == " ˈʌ|ð|ə"
+
+    def test_not_around_stress_between_two_vowels(self):
+        assert with_separators(" ɐˈa") == " |ɐˈa"
+
+    def test_not_around_length_mark_inside_word(self):
+        assert with_separators(" nˈiːd") == " |nˈiːd"
+
+    def test_not_between_length_mark_and_word_gap(self):
+        assert with_separators(" wiː nˈiːd") == " |w|iː |nˈiːd"
+
+    def test_not_between_length_mark_and_punctuation(self):
+        assert with_separators(" juː?") == " |j|uː?"
+
+    def test_italian_double_consonant_length_mark(self):
+        assert with_separators(" nˈɔtːe.") == " |nˈɔ|tːe|."
+
+    def test_italian_length_mark_before_stress_is_kept_as_a_run(self):
+        assert with_separators(" fatːˈo") == " |f|a|tːˈo"
+
+    def test_english_syllabic_consonant_mark(self):
+        assert with_separators(" bˈʌʔn̩ ænd") == " |bˈʌ|ʔ|n̩ |æ|n|d"
+
+    def test_french_nasal_vowel_mark(self):
+        assert with_separators(" œ̃ bˈɔ̃ vˈɛ̃.") == " |œ̃ |bˈɔ̃ |vˈɛ̃."
+
+    def test_french_liaison_hyphen_is_punctuation(self):
+        assert with_separators(" le-z amˈi") == " |l|e|-|z| |a|mˈi"
+
+    def test_romanian_doubled_palatalization_is_kept_as_a_run(self):
+        assert with_separators(" lˈupʲʲ ʃi") == " |lˈu|pʲʲ |ʃ|i"
+
+    def test_romanian_annotation_run_with_stress_is_kept(self):
+        assert with_separators(" mʲˌʲa") == " |mʲˌʲa"
+
+    def test_diphthong_halves_are_separated(self):
+        assert with_separators(" tˈaɪmz") == " |tˈa|ɪ|m|z"
+
+    def test_affricate_halves_are_separated(self):
+        assert with_separators(" tʃˈɜːtʃ") == " |t|ʃˈɜːt|ʃ"
+
+    def test_leading_space_alone(self):
+        assert with_separators(" ") == " "
+
+    def test_no_separator_before_first_symbol(self):
+        assert with_separators("a") == "a"
+
+    def test_espeak_symbols_are_kept_in_order(self):
+        espeak_output = " ɪn sˌʌm fˈɔːm ɔːɹ ˈʌðə wiː nˈiːd fˈʌn."
+        espeak_ids = [symbol_to_id[symbol] for symbol in espeak_output]
+        ids_without_separators = [token_id for token_id in insert_separators(espeak_ids) if token_id != SEPARATOR_ID]
+        assert ids_without_separators == espeak_ids
+
+
+# Sentences chosen to produce stress marks, length marks, nasal vowels, syllabic consonants, palatalization,
+# double consonants, diphthongs, affricates, liaison and every kind of punctuation that survives to eSpeak's output.
+SENTENCES_BY_LANGUAGE = {
+    "en-us": ["Hello, world! Didn't you?", "The button and the rhythm.", "Church and judge; eight times: no."],
+    "en-gb": ["In some form or other we need fun.", "Next Tuesday we must vote."],
+    "fr-fr": ["Un bon vin blanc.", "Les amis arrivent, n'est-ce pas?"],
+    "ro": ["Lupi și pomi.", "Copii frumoși, mii de ani!"],
+    "it": ["Una bella ragazza, notte.", "Grazie mille, fatto!"],
+    "es": ["Hola mundo."],
+    "pt": ["Olá mundo, pão."],
+    "de": ["Hallo Welt, schön."],
+}
+
+
+class TestSeparatorRulesOnEspeakOutput:
+    """
+    Requires NeMo + eSpeak. Checks the three rules on live output instead of exact strings, which drift with every
+    eSpeak release: eSpeak's symbols are kept in order, and a separator sits between two neighbouring symbols
+    exactly when one of them is a voiced phoneme and neither is an annotation.
+    """
+
+    @pytest.mark.parametrize(
+        "text, language",
+        [(text, language) for language, texts in SENTENCES_BY_LANGUAGE.items() for text in texts],
+    )
+    def test_rules_hold(self, text, language):
+        _, ids = multilingual_phonemizer(text, language)
+        espeak_ids = [token_id for token_id in ids if token_id != SEPARATOR_ID]
+
+        language_code = language.split("-")[0]
+        espeak_input = cleanup_text(normalize_text(language_code, text))
+        espeak_output = " " + phonemizers[language].phonemize([espeak_input])[0].rstrip()
+        assert espeak_ids == [symbol_to_id[symbol] for symbol in espeak_output]
+
+        is_separator = [token_id == SEPARATOR_ID for token_id in ids]
+        assert not is_separator[0] and not is_separator[-1]
+        for position in range(1, len(ids) - 1):
+            if not is_separator[position]:
+                continue
+            left_id, right_id = ids[position - 1], ids[position + 1]
+            assert left_id != SEPARATOR_ID and right_id != SEPARATOR_ID, f"Two separators in a row in {text!r}"
+            assert needs_separator(left_id, right_id), f"Unneeded separator between {symbols[left_id]!r} and {symbols[right_id]!r}"
+
+        # Together with the checks above, an equal count means no needed separator is missing.
+        expected_separator_count = sum(
+            1 for left_id, right_id in zip(espeak_ids, espeak_ids[1:]) if needs_separator(left_id, right_id)
+        )
+        assert sum(is_separator) == expected_separator_count
+
+
+def needs_separator(left_id, right_id):
+    """The separator rule, written independently of the implementation under test."""
+    touches_a_voiced_phoneme = left_id in voiced_phoneme_ids or right_id in voiced_phoneme_ids
+    touches_an_annotation = left_id in annotation_ids or right_id in annotation_ids
+    return touches_a_voiced_phoneme and not touches_an_annotation

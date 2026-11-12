@@ -30,10 +30,9 @@ symbols = [separator] + list(_punctuation) + list(ipa_symbols)
 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 voiced_phoneme_ids = {symbol_to_id[s] for s in vowels + consonants if s in symbol_to_id}
+annotation_ids = {symbol_to_id[s] for s in pre_annotations + post_annotations}
 
+SEPARATOR_ID = symbol_to_id[separator]
 SPACE_ID = symbols.index(" ")
 
-PRE_ID = 200
-assert len(symbols) < PRE_ID
-POST_ID = 2 * PRE_ID
-N_VOCAB = 3 * PRE_ID
+N_VOCAB = len(symbols)
