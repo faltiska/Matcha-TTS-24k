@@ -10,12 +10,6 @@
 # 3. Decoder params averaging.
 
 # 4. Reduced speaker embedding dim 
-# !!!!!! 
-#  I think this caused bad Encoder artifacts.
-# Listen to "Next Tuesday we must vote." or "In some form or other we need fun." using Brian.
-# "Tuesday" and "other" are heavily distorted, and it comes from the Encoder mel, not from the Decoder.
-# I interrupted v24 because of this.
-# !!!!!! 
 
 # 5. Added the ability to compute Encoder loss with "one vote per phoneme" instead of "one vote per frame". 
 # Not used yet, just coded.
@@ -31,11 +25,25 @@
 # for each utterance, taken from a late band timestep, so that the Decoder loss always 
 # takes the quality on late timesteps in consideration.
 # !!!!!! 
-# I think Huber was not a good idea. I trained v24 on EC2 after implementing it, and I hear severe artifacts.
+# I think a small Huber threshold is not a good idea. 
+# I trained v24 on EC2 after implementing it, with a threshold of 0.55, and I hear severe artifacts.
 # I also compared later ckpts with early ones, and I think I head more clicks and pops.
-# To be on the safe side, I will train v25 with a large threshold so Huber behaves more like MSE. 
+# To be on the safe side, I will train v24 with a large threshold so Huber behaves more like MSE. 
 # !!!!!! 
 
+# 10. I also reduced the batch size to 20K frames and I think it had a good influence on the prior loss.
+# We can probably ignore this for now, it could be just a numerical artifact, not a real improvement.
+# I wrote it down so I don't forget.
+
+# 11. It is possible I should enable prior_loss_per_phoneme between epochs 100-200 or so.
+# I have trained with it from 789 to 1054, and it started to improve the alignments so
+# it helps, but 789 already has very well established alignments that are hard to shift.
+#  | Interval | Boundaries moved per 100 epochs |
+#  |---|---|
+#  | 124 → 279 | 2.6% |
+#  | 279 → 479 | 1.3% |
+#  | 479 → 789 | 0.7% |
+#  | 789 → 1054 (one vote per phoneme already on) | 0.8% |
 
 run_name: v24
 
@@ -47,15 +55,10 @@ data:
   max_frames_per_batch: 20000
 
 # Stopped using perceptual weights for the Encoder loss at epoch 789
-#
-# Reduced LR at 1739, went up to 2494. 
-# Training process is still running, suspended, see job 4.
-#
-# Implemented Huber for the Decoder and resumed from 1739b again
-#ckpt_path: logs/train/v24/checkpoint_epoch=789.ckpt
-# 
-# Resumed from 2444 just because the computer restarted. No params changed.
-ckpt_path: logs/train/v24/checkpoint_epoch=2444c.ckpt
+# After training up to 2444 with the above changes, I decided to start from 789 again, with a much larger Huber threshold.
+# The alignment improved a bit, see epoch 1054 in the ec2 train logs.
+# At that point, I realized I should probably resume from an even earlier point, like 124, when the alignment was not yet set in stone.
+ckpt_path: logs/train/v24/checkpoint_epoch=124.ckpt
 
 #
 # Fine-tuning instructions: 
@@ -91,7 +94,7 @@ model:
 
   # One vote per phoneme in the prior loss instead of one per frame. Keep false until durations are learned.
   # Turn on at epoch 789
-  prior_loss_per_phoneme: false
+  prior_loss_per_phoneme: true
   
   encoder:
     encoder_params:
@@ -134,11 +137,8 @@ model:
 
   optimizer:
 # Epoch 0 
-#    lr: 8e-5
-#    weight_decay: 1e-4
-# Epoch 1319 
-    lr: 4e-5
-    weight_decay: 5e-5
+    lr: 8e-5
+    weight_decay: 1e-4
 
 callbacks:
   model_checkpoint:

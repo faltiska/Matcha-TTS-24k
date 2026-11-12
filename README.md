@@ -11,10 +11,10 @@ To refresh the lock and install newer allowed versions of the complete dependenc
 uv lock --upgrade
 uv sync
 ```
-Note: `torch` is pinned to `2.15.0+cu134`, and `torchaudio` and `torchcodec` to exact `+cu132` builds 
-(there are no cu134 builds of them yet, and the cu132 ones work with torch cu134), so `uv lock --upgrade` will not move them.
-torch 2.15 and the triton it needs come from the PyTorch test channel (`pytorch-test-cu134` in `pyproject.toml`).
-Move them to the stable cu134 index once 2.15 is published there.
+Note: `torch` is pinned to `2.15.0+cu134`, `torchaudio` to `2.11.1+cu134` and `torchcodec` to `0.17.0+cu132`
+(there is no cu134 build of torchcodec yet, and the cu132 one works with torch cu134), so `uv lock --upgrade` will not move them.
+torch and torchaudio come from the stable cu134 index (`pytorch-cu134` in `pyproject.toml`), torchcodec from the
+stable cu132 index, triton from PyPI.
 
 ## A note on running inference and training at the same time
 Sometimes I need to test a checkpoint while training still runs. 

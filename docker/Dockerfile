@@ -19,7 +19,7 @@ COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 COPY --chown=appuser:appuser .cache ./.cache
 
 # Install only the inference dependencies ([project].dependencies), at the exact versions in uv.lock,
-# including the pinned +cu132 torch builds. --no-default-groups skips the `train` group.
+# including the pinned +cu134 torch and torchaudio builds. --no-default-groups skips the `train` group.
 # --no-install-project: the code is used straight from /app via PYTHONPATH.
 # UV_LINK_MODE=copy: the cache mount is on a different filesystem, so hardlinking is not possible.
 RUN --mount=type=cache,target=/uv-cache,uid=1001 \
