@@ -24,6 +24,10 @@ Written for the assistant, not as user documentation. Read `.amazonq/rules/assis
   can pause training when GPU is needed. Exclude `logs` and `.venv` from greps. Activate `.venv` before Python.
 - The user has tried external aligners (Montreal Forced Aligner, wav2vec2 phoneme models) and rejects them:
   the separator scheme is unique. Do not propose them again.
+- Code comments and docs describe the code as it is now, never its history (no mention of the old triple scheme in
+  v25 code). "Voiced phoneme" in this project means any vowel or consonant; do not nitpick that t is voiceless.
+- Prefer measuring on the existing checkpoints before recommending; the user asked for evidence twice, and one
+  recommendation (no separators at word gaps) was reversed by a measurement.
 
 ## Key facts about the setup
 - Fine mel: hop 128 at 24 kHz, 5.3 ms per frame. Alignment runs on fine mels with `super_monotonic_align`
@@ -170,11 +174,58 @@ around their own symbol's mean, neighbouring symbols inside a word differ by abo
   stress, the French liaison hyphen (`le-z`), diphthong and affricate halves (separated like any two phonemes).
 
 ### State of the code
-- Done: `symbols.py` (single separator id 0, `annotation_ids`, vocabulary of 147 symbols instead of 600),
-  `phonemizers.py`, tests in `tests/test_phonemizers.py` (hand-written case per situation, plus the rules checked on
-  live eSpeak output for every supported language). All 98 phonemizer tests pass. On the corpus the sequences are 72%
-  of their old length; the longest is 404 symbols.
-- Not done: regenerating the CSVs (`validate_corpus_ipa.py` rewrites them in place, so write new ones while v24 still
-  needs the old ids), updating the alignment diagnostic scripts (they assume phoneme triples), the new experiment config.
-- The working tree can no longer load v24 checkpoints (vocabulary size changed). The v24 versions of `symbols.py`
-  and `phonemizers.py` are in git HEAD.
+- Committed and pushed on branch `v25` (user did it, 12 Nov): `symbols.py` (single separator id 0, `annotation_ids`,
+  vocabulary of 147 symbols instead of 600), `phonemizers.py` (`insert_separators`, comment rewritten for the new
+  scheme only), `tests/test_phonemizers.py` (hand-written case per situation, plus the rules checked on live eSpeak
+  output for every supported language; 98 pass). On the corpus the sequences are 72% of their old length; the longest
+  is 404 symbols (rotary cache `max_seq_len = 4000` in `attention.py`, its comment still mentions the old scheme).
+- Branch `v24` (checked out after the commit) still has the old phonemizer; verified it produces the old ids, same as
+  the CSVs. Diagnostic scripts and this md are untracked and live in the working tree, so they follow branch switches.
+- Not done on v25: regenerating the CSVs (`validate_corpus_ipa.py` rewrites them in place; write new ones, or do it
+  only on v25 when v24 no longer needs the old ids), updating the alignment diagnostic scripts (they import
+  `PRE_ID`/`POST_ID` and assume triples: `alignment_diagnostics.phoneme_groups`, `vowel_core_positions`,
+  `symbol_label`, `measure_*`), the v25 experiment config.
+- Training reads phoneme ids from CSV column 5 (`text_mel_datamodule.py`, never re-phonemizes); the embedding size
+  comes from `symbols.N_VOCAB`. v25 code + old CSVs crash on the first batch (id out of range); v25 code cannot load
+  v24 checkpoints. The collate pads with id 0, which is now the separator; harmless because every Encoder layer is
+  masked by `x_lengths`, but keep it in mind if anything ever reads ids without the mask.
+
+## NEXT TASK: alignment noise (ticket 1), on branch v24, old phonemization scheme
+The user wants to test the noise trick on the old scheme first, so each change gets its own result, then start v25
+training with the new scheme. New chat session; plan with the user before coding.
+- Where: `MatchaTTS.find_alignment` in `matcha/models/matcha_tts.py` builds the score matrix (`log_prior`, shape
+  batch x symbols x fine frames) under `torch.no_grad()` and calls `maximum_path_gpu` (super_monotonic_align).
+  Noise goes onto that matrix before MAS, training steps only (never validation or the CPU diagnostics).
+- VITS2 recipe from memory, verify against the paper/code before proposing: Gaussian noise scaled by the standard
+  deviation of the score matrix times a noise scale that starts around 0.01 and decreases linearly per step
+  (about 2e-6 per step) to 0. Our scores are per fine frame and summed over 100 mel bins, so the scale must be checked
+  against our score spread rather than copied.
+- Do not confuse with `alignment_jitter` (already in the model): it moves boundaries after the duration losses, only
+  for the mel the Decoder is conditioned on. Noise on the score matrix changes the alignment the Encoder and the
+  Duration Predictor learn from.
+- Decisions to make with the user: noise strength and decay schedule (in epochs; ~480 optimizer steps per epoch at
+  20k frames per batch), whether to combine with ticket 3 (curriculum one vote per frame -> per symbol), whether to log
+  how many boundaries the noise moved.
+- The experiment means a new run from epoch 0 (noise is prevention, not correction). ~6 min per epoch locally, so
+  epoch 124 is ~12 h, 279 ~28 h. Compare against the first v24 run at 124 and 279 (one vote per frame, no noise) with
+  `compare_alignment_over_checkpoints.py` (tracks 4/1423, 4/1428), `measure_collapsed_vowels.py` and
+  `measure_alignment_by_symbol_class.py` (swollen stops are the most common error, see finding 9).
+- Second v24 run (from 124, one vote per symbol, `logs/train/v24/runs/2026-11-11_21-08-01/`) was at epoch 249 on
+  12 Nov 10:16; the user decides whether to stop it for the noise run.
+
+## Extra notes for the assistant (not yet elsewhere)
+- Languages per speaker: en-us 0, 1, 2, 3, 6, 10, 12; en-gb 4, 5, 11; ro 7; fr-fr 8, 9; it 13, 14.
+- Annotation inventory (train.csv): en stress 128k, length 55k, secondary stress 22k, syllabic 291; fr stress 23k,
+  nasal tilde 11k; ro stress 13k, secondary 6k, palatalization 2k; it stress 16k, length 2.7k (mostly on consonants,
+  double consonants; `ː` before stress 654).
+- Word boundaries, epoch 789, 50 train files per speaker: flowing boundaries (3692, no silent frame) give closing
+  separator / gap / opening separator 16 ms median each; gap at 1 frame only 5%. Boundaries with >= 100 ms silence
+  (94): silent frames on gap 26%, separators 37%, inside the neighbouring phoneme groups 35%; the gap holds most of
+  the pause in only 22%. So pauses are spread, and a third of them sits inside words: the main target for noise or
+  pause anchors, independent of the scheme.
+- Claims I made and corrected, do not repeat: "the three symbols at a word gap are almost identical" (I had only
+  compared them with silence; they differ like any neighbours); "the length mark takes over the long vowel's steady
+  part" (refuted: ~20%); "carry stress as a vowel feature" (against the user's principle).
+- The alignment cache `/tmp/alignments_789_train.pkl` was pickled from `__main__`; to load it elsewhere set
+  `__main__.AlignedUtterance` to the class from `measure_alignment_by_symbol_class` first. /tmp may be wiped.
+- CPU MAS + Encoder on 2100 files takes ~70 s on 8 threads, safe while training holds the GPU.
