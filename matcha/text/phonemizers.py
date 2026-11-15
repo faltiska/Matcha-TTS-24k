@@ -20,7 +20,7 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
-from matcha.text.symbols import symbol_to_id, voiced_phoneme_ids, PRE_ID, POST_ID
+from matcha.text.symbols import SEPARATOR_ID, annotation_ids, symbol_to_id, symbols, voiced_phoneme_ids
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -100,41 +100,46 @@ def multilingual_phonemizer(text, language):
     # symbols is what fixed it, not the amount of silence, because that is what I had in v19, when worked fine. 
     phonemes = " " + phonemizer.phonemize([text])[0].rstrip()
 
-    # Each phoneme sound has transitional sections at the start where the sound from the previous phoneme morphs into 
-    # the sound of the new one and at the end, where the phoneme morphs into the next one.   
-    # The Encoder must be able to find the middle section where each phoneme sounds like "itself".
-    # By adding separators between phonemes, we tell the Encoder there is something else there so it can 
-    # model the transitions too: phoneme - transition - phoneme - transition ...
-    # The original code was adding te same separator everywhere, but that means the model had to assign different 
-    # acoustic representations and different durations to the separator based on context. It's not great.
-    # Also, it added separators everywhere, in between an annotation and a punctuation, or between punctuation symbols.
-    # The transition sound is different based on surrounding phonemes so the right way to model this would be to
-    # create new symbols one for each distinct sequence of phonemes. Since there are about 100 voiced phonemes, 
-    # I would need 10K new symbols. A more realistic method would to add 2 new symbols for each voiced phoneme, which 
-    # would increase the diction ary size only by 200. 
-    # I could then replace each voiced phoneme P by a tuple of (Pre, P, Post), for example:
-    # (pre_æ, æ, post_æ), (pre_ð, ð, post_ð), (pre_ə, ə, post_ə), ...
-    # With this tokenization scheme, the model achieves the best quality I was able to get, except for one problem.
-    # Each phoneme will be at least 3 frames long, so 3 frames must be as short as a short consonant can be in real life.
-    # That is 5-15ms for stop consonants. It is true that listeners need the transitional sounds around that stop 
-    # consonant to understand it, otherwise it passes by unnoticed so the length of the phoneme plus transitional sound
-    # could be as long as 30-40ms. 
-    # Still., I found that the 10ms frame length (required by Vocos at 24KHz with a hop of 256) is too long to support 
-    # this tokenization scheme. But a 5ms frame length proved, in practice, to be perfect.
-    # The problem was that each pair of voiced phonemes was separated by 2 symbols in my new scheme:
-    #   pre1, p1, post1, pre2, p2, post2
-    # and 20ms for transitional sounds is too long. And because transitions to consonants can be shorter than 10ms.
+    # Each phoneme sound has transitional sections at the start, where the previous sound morphs into it, and at the
+    # end, where it morphs into the next one. The Encoder must find the middle section where each phoneme sounds
+    # like "itself", and it needs a symbol to which it can give each transition, otherwise the transitions are
+    # smeared over the phonemes. Separators are those symbols: phoneme - transition - phoneme - transition ...
+    #
+    # Separators are placed by these rules:
+    # 1. Everything eSpeak outputs is kept as is.
+    # 2. A single separator symbol is used everywhere.
+    # 3. A separator goes between two neighbouring symbols only when at least one of them is a voiced phoneme
+    #    (any vowel or consonant) and neither of them is an annotation (stress, length, nasal, palatalization, ...).
+    # The reasons:
+    # 1. Separators are only needed to model transitions: between two phonemes, and between a phoneme and silence.
+    #    Next to word gaps and punctuation they hold the fade-out of a word and the onset of the next one.
+    # 2. The Encoder can use annotation symbols to model transitions, so extra separators aren't needed next to them.
+    # 3. The Encoder can learn both an annotation's intended function and the sound it holds.
+    # A single separator symbol is enough because the Encoder sees the neighbours of every symbol, so its output for
+    # a separator already depends on the transition it sits in.
+    #
+    # The alignment gives every symbol at least one mel frame, so every separator adds to the shortest possible
+    # length of a word. Placing exactly one transition symbol between two phonemes keeps short consonants short.
+    # Example: eSpeak's " ɪn sˌʌm fˈɔːm." becomes " |ɪ|n| |sˌʌ|m| |fˈɔːm|."
+    espeak_ids = [symbol_to_id[phoneme] for phoneme in phonemes]
+    ids = insert_separators(espeak_ids)
+    displayed_phonemes = "".join(symbols[phoneme_id] for phoneme_id in ids)
 
+    return displayed_phonemes, ids
+
+
+def needs_separator_between(left_id, right_id):
+    touches_a_voiced_phoneme = left_id in voiced_phoneme_ids or right_id in voiced_phoneme_ids
+    touches_an_annotation = left_id in annotation_ids or right_id in annotation_ids
+    return touches_a_voiced_phoneme and not touches_an_annotation
+
+
+def insert_separators(espeak_ids):
+    """Returns the eSpeak symbol ids, unchanged and in order, with separators inserted by the rules above."""
     ids = []
-    debug_phonemes = []
-    for phoneme in phonemes:
-        phoneme_id = symbol_to_id[phoneme]
-        is_voiced_phoneme = phoneme_id in voiced_phoneme_ids
-        if is_voiced_phoneme:
-            ids.extend([PRE_ID + phoneme_id, phoneme_id, POST_ID + phoneme_id])
-            debug_phonemes.extend(['‹', phoneme, '›']) # this is just for display purposes
-        else:
-            ids.append(phoneme_id)
-            debug_phonemes.append(phoneme)
-
-    return ''.join(debug_phonemes), ids
+    for position, phoneme_id in enumerate(espeak_ids):
+        is_first_symbol = position == 0
+        if not is_first_symbol and needs_separator_between(espeak_ids[position - 1], phoneme_id):
+            ids.append(SEPARATOR_ID)
+        ids.append(phoneme_id)
+    return ids
