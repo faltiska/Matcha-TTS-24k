@@ -22,7 +22,7 @@ VOICES = [
     {"id":  "4", "lang": "en-gb", "gender": "male",   "name": "Brian",    "scale_correction": 1.00},
     {"id":  "5", "lang": "en-gb", "gender": "male",   "name": "Arthur",   "scale_correction": 1.00},
     {"id":  "6", "lang": "en-us", "gender": "female", "name": "Nicole",   "scale_correction": 1.00},
-    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Emil",     "scale_correction": 1.00},
+    {"id":  "7", "lang": "ro",    "gender": "male",   "name": "Andrei",   "scale_correction": 1.00},
     {"id":  "8", "lang": "fr-fr", "gender": "female", "name": "Denise",   "scale_correction": 1.00},
     {"id":  "9", "lang": "fr-fr", "gender": "male",   "name": "Henri",    "scale_correction": 1.00},
     {"id": "10", "lang": "en-us", "gender": "male",   "name": "Matthew",  "scale_correction": 1.00},
