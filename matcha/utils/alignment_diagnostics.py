@@ -15,8 +15,10 @@ import torch
 from omegaconf import OmegaConf
 
 from matcha.models.components.text_encoder import TextEncoder
-from matcha.text.symbols import N_VOCAB, PRE_ID, POST_ID, SPACE_ID, symbols, vowels
+from matcha.text.symbols import N_VOCAB, SPACE_ID, post_annotations, symbol_to_id, symbols, vowels
 from matcha.utils.model import LOG_DURATION_OFFSET
+
+post_annotation_ids = {symbol_to_id[s] for s in post_annotations}
 
 # MatchaTTS compiles the Text Encoder, so its weights sit under this prefix in the checkpoint state_dict.
 ENCODER_PREFIX = "encoder._orig_mod."
@@ -172,24 +174,24 @@ def rounded_predicted_durations(predicted_durations: torch.Tensor) -> np.ndarray
 
 
 def symbol_label(phoneme_id: int) -> str:
-    is_opening_separator = PRE_ID <= phoneme_id < POST_ID
-    is_closing_separator = phoneme_id >= POST_ID
-    if is_opening_separator:
-        return "<" + symbols[phoneme_id - PRE_ID]
-    if is_closing_separator:
-        return ">" + symbols[phoneme_id - POST_ID]
     return symbols[phoneme_id]
 
 
-def vowel_core_positions(phoneme_ids: List[int]) -> List[int]:
-    """Positions of the phoneme symbol of every vowel; its separators sit right before and after it."""
-    positions = []
+def vowel_spans(phoneme_ids: List[int]) -> List[Tuple[int, int]]:
+    """
+    First and last position of every vowel together with the annotations written right after it (length mark,
+    diacritics), which hold part of the vowel's sound. A stress mark written before the vowel is left out: it sits
+    in the transition from the previous phoneme.
+    """
+    spans = []
     for position, phoneme_id in enumerate(phoneme_ids):
-        is_phoneme_symbol = phoneme_id < PRE_ID
-        has_both_separators = 0 < position < len(phoneme_ids) - 1
-        if is_phoneme_symbol and has_both_separators and symbols[phoneme_id] in vowels:
-            positions.append(position)
-    return positions
+        if symbols[phoneme_id] not in vowels:
+            continue
+        last_position = position
+        while last_position + 1 < len(phoneme_ids) and phoneme_ids[last_position + 1] in post_annotation_ids:
+            last_position += 1
+        spans.append((position, last_position))
+    return spans
 
 
 class Segment(NamedTuple):
@@ -201,30 +203,16 @@ class Segment(NamedTuple):
 
 
 def phoneme_groups(phoneme_ids: List[int], durations: np.ndarray) -> List[Segment]:
-    """
-    One segment per phoneme group: the opening separator, the phoneme and the closing separator are merged,
-    because the model spreads a sound over all three. Stress marks, length marks, word gaps and punctuation
-    stay segments of their own.
-    """
+    """One segment per symbol. A separator is shared by its two neighbours, so it is not merged into either."""
     segments = []
     frame = 0
-    position = 0
-    while position < len(phoneme_ids):
-        phoneme_id = phoneme_ids[position]
-        starts_a_group = PRE_ID <= phoneme_id < POST_ID
-        if starts_a_group:
-            frames = int(durations[position:position + 3].sum())
-            label = symbols[phoneme_ids[position + 1]]
-            segments.append(Segment(frame, frames, label, position, position + 2))
-            position += 3
+    for position, phoneme_id in enumerate(phoneme_ids):
+        frames = int(durations[position])
+        if phoneme_id == SPACE_ID:
+            label = WORD_GAP_LABEL
         else:
-            frames = int(durations[position])
-            if phoneme_id == SPACE_ID:
-                label = WORD_GAP_LABEL
-            else:
-                label = symbols[phoneme_id]
-            segments.append(Segment(frame, frames, label, position, position))
-            position += 1
+            label = symbols[phoneme_id]
+        segments.append(Segment(frame, frames, label, position, position))
         frame += frames
     return segments
 

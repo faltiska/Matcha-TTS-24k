@@ -1,10 +1,10 @@
 """
 Measure, per speaker, how often the alignment squeezes a vowel down to the minimum length.
 
-Every voiced phoneme is written as three symbols (opening separator, phoneme, closing separator), and the
-alignment gives each symbol at least one fine frame of 5.3ms. A vowel whose three symbols get 3 frames in
-total lasts 16ms, which no speaker produces. Such vowels mark places where the alignment ran through the
-text without finding the sound, usually because a neighbouring symbol took over its audio.
+A vowel counts together with the length mark and diacritics written right after it. The alignment gives each
+symbol at least one fine frame of 5.3ms, and a vowel that gets 3 frames or fewer lasts 16ms or less, which no
+speaker produces. Such vowels mark places where the alignment ran through the text without finding the sound,
+usually because a neighbouring symbol took over its audio.
 
 The alignment is computed the same way training computes it: from the Encoder output of the checkpoint and
 the precomputed fine mel of each recording. It runs on the CPU, so it can be used while training holds the GPU.
@@ -30,7 +30,7 @@ from matcha.utils.alignment_diagnostics import (
     load_encoder,
     load_fine_mel,
     read_filelist,
-    vowel_core_positions,
+    vowel_spans,
 )
 
 # A vowel group at or below this many fine frames is shorter than any real vowel (3 frames = 16ms).
@@ -43,8 +43,8 @@ def count_collapsed_vowels(utterance: Utterance, durations: np.ndarray) -> Tuple
     collapsed_count = 0
     current_run = 0
     longest_run = 0
-    for position in vowel_core_positions(utterance.phoneme_ids):
-        vowel_frames = durations[position - 1] + durations[position] + durations[position + 1]
+    for first_position, last_position in vowel_spans(utterance.phoneme_ids):
+        vowel_frames = durations[first_position:last_position + 1].sum()
         vowel_count += 1
         if vowel_frames <= COLLAPSED_VOWEL_MAX_FRAMES:
             collapsed_count += 1

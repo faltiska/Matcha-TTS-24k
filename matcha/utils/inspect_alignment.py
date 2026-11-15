@@ -1,16 +1,20 @@
 """
 Inspect the alignment of one recording under one or more checkpoints.
 
-For each checkpoint it prints, per phoneme group, where the alignment places it on the ground truth recording
-and where the Duration Predictor would place it at inference. Groups squeezed to one frame per symbol are
-flagged. It also lists the silences found directly in the wav, which is what a listener hears as pauses.
+For each checkpoint it prints, per phoneme group, where the alignment search (MAS) places it on the ground truth
+recording and where the Duration Predictor (DP) would place it at inference. MAS durations are the model's own
+choice, not ground truth phoneme boundaries. Groups squeezed to one frame per symbol are flagged. It also lists the
+silences found directly in the wav, which is what a listener hears as pauses.
 
-Optional outputs, for the last checkpoint given:
-  --labels_dir  Audacity label tracks: the ground truth alignment (load on top of the corpus wav) and the
-                predicted durations (load on top of an inference wav made with the same checkpoint).
-  --wav_dir     Three renders through Vocos: the ground truth mel, the Encoder mel built with the ground truth
-                alignment, and the Encoder mel built with the predicted durations. Comparing the last two tells
-                Encoder sound errors apart from Duration Predictor errors.
+It then prints the same comparison per word, which is easier to read against a listening test.
+
+Optional outputs:
+  --labels_dir  For the last checkpoint given, Audacity label tracks: the MAS durations (load on top of the corpus
+                wav) and the DP durations (load on top of an inference wav made with the same checkpoint).
+  --wav_dir     Renders through Vocos: the ground truth mel once, then for every checkpoint the Encoder mel built
+                with the MAS durations and the Encoder mel built with the DP durations. File names carry the epoch.
+                Comparing the two renders of one checkpoint tells Encoder sound errors apart from DP errors;
+                comparing across checkpoints shows when either one changes.
 
 Runs on the CPU, so it can be used while training holds the GPU.
 
@@ -41,6 +45,7 @@ from matcha.utils.alignment_diagnostics import (
     rounded_predicted_durations,
     run_encoder,
     write_audacity_labels,
+    word_segments,
 )
 from matcha.utils.model import DEFAULT_DOWNSAMPLER, denormalize, generate_path, get_downsampler
 
@@ -79,7 +84,7 @@ def inner_silences(wav: np.ndarray) -> Tuple[float, float, List[Tuple[float, flo
 
 
 def print_alignment_table(utterance, aligned, predicted):
-    print(f"{'phoneme':>7}   {'ground truth alignment':>24}   {'predicted durations':>20}")
+    print(f"{'phoneme':>7}   {'MAS durations':>24}   {'DP durations':>20}")
     aligned_groups = phoneme_groups(utterance.phoneme_ids, aligned)
     predicted_groups = phoneme_groups(utterance.phoneme_ids, predicted)
     for aligned_group, predicted_group in zip(aligned_groups, predicted_groups):
@@ -98,34 +103,49 @@ def print_alignment_table(utterance, aligned, predicted):
         )
 
 
-def render_wavs(wav_dir: Path, utterance, encoder_frames, aligned, predicted, mel, loaded):
-    from vocos import Vocos
+def print_word_table(utterance, aligned, predicted):
+    print(f"\n{'word':>12}   {'MAS durations':>24}   {'DP durations':>24}")
+    aligned_words = word_segments(utterance, aligned)
+    predicted_words = word_segments(utterance, predicted)
+    for aligned_word, predicted_word in zip(aligned_words, predicted_words):
+        aligned_start = aligned_word.start_frame * FINE_FRAME_SECONDS
+        aligned_end = (aligned_word.start_frame + aligned_word.frames) * FINE_FRAME_SECONDS
+        predicted_start = predicted_word.start_frame * FINE_FRAME_SECONDS
+        predicted_end = (predicted_word.start_frame + predicted_word.frames) * FINE_FRAME_SECONDS
+        print(
+            f"{aligned_word.label:>12}   {aligned_start:6.3f} - {aligned_end:6.3f} s ({aligned_word.frames:3d})"
+            f"   {predicted_start:6.3f} - {predicted_end:6.3f} s ({predicted_word.frames:3d})"
+        )
 
+
+def write_wav(vocos, out_path: Path, fine_mel: torch.Tensor, loaded):
     statistics = loaded.hyper_parameters["data_statistics"]
     downsample = get_downsampler(loaded.hyper_parameters.get("downsampler", DEFAULT_DOWNSAMPLER))
-    vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz").eval()
-
-    def encoder_mel_with(durations):
-        durations_tensor = torch.from_numpy(durations)[None].float()
-        total_frames = int(durations.sum())
-        path_mask = torch.ones(1, len(durations), total_frames)
-        path = generate_path(durations_tensor, path_mask)[0]
-        return encoder_frames @ path
-
-    renders = {
-        "ground_truth": mel,
-        "encoder_ground_truth_alignment": encoder_mel_with(aligned),
-        "encoder_predicted_durations": encoder_mel_with(predicted),
-    }
-    prefix = utterance.relative_path.replace("/", "_")
     with torch.no_grad():
-        for name, fine_mel in renders.items():
-            standard_mel = downsample(fine_mel[None])
-            audio = vocos.decode(denormalize(standard_mel, statistics["mel_mean"], statistics["mel_std"]))[0].numpy()
-            peak = max(1.0, float(np.abs(audio).max()))
-            out_path = wav_dir / f"{prefix}_{name}.wav"
-            sf.write(out_path, audio / peak, SAMPLE_RATE)
-            print("wrote", out_path)
+        standard_mel = downsample(fine_mel[None])
+        audio = vocos.decode(denormalize(standard_mel, statistics["mel_mean"], statistics["mel_std"]))[0].numpy()
+    peak = max(1.0, float(np.abs(audio).max()))
+    sf.write(out_path, audio / peak, SAMPLE_RATE)
+    print("wrote", out_path)
+
+
+def encoder_mel_with(encoder_frames: torch.Tensor, durations: np.ndarray) -> torch.Tensor:
+    """Repeats each symbol's Encoder frame for its number of frames, as inference does before the Decoder."""
+    durations_tensor = torch.from_numpy(durations)[None].float()
+    total_frames = int(durations.sum())
+    path_mask = torch.ones(1, len(durations), total_frames)
+    path = generate_path(durations_tensor, path_mask)[0]
+    return encoder_frames @ path
+
+
+def render_encoder_wavs(vocos, wav_dir: Path, prefix: str, encoder_frames, aligned, predicted, loaded):
+    epoch_prefix = f"{prefix}_epoch{loaded.epoch:03d}"
+    renders = {
+        "encoder_mas_durations": encoder_mel_with(encoder_frames, aligned),
+        "encoder_dp_durations": encoder_mel_with(encoder_frames, predicted),
+    }
+    for name, fine_mel in renders.items():
+        write_wav(vocos, wav_dir / f"{epoch_prefix}_{name}.wav", fine_mel, loaded)
 
 
 def main():
@@ -134,7 +154,7 @@ def main():
     parser.add_argument("-u", "--utterance", required=True, help="Relative path as in the filelist, e.g. 4/1423")
     parser.add_argument("-c", "--checkpoints", required=True, nargs="+")
     parser.add_argument("--labels_dir", type=Path, default=None, help="Write Audacity label tracks here")
-    parser.add_argument("--wav_dir", type=Path, default=None, help="Write the three Vocos renders here")
+    parser.add_argument("--wav_dir", type=Path, default=None, help="Write the Vocos renders here, two per checkpoint plus the ground truth")
     parser.add_argument("--threads", type=int, default=8)
     args = parser.parse_args()
 
@@ -150,6 +170,14 @@ def main():
     silence_text = ", ".join(f"{start:.2f}-{end:.2f} s" for start, end in silences) or "none"
     print(f"wav: speech {speech_start:.2f} - {speech_end:.2f} s; silences inside the speech: {silence_text}")
 
+    prefix = utterance.relative_path.replace("/", "_")
+    vocos = None
+    if args.wav_dir is not None:
+        from vocos import Vocos
+
+        args.wav_dir.mkdir(parents=True, exist_ok=True)
+        vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz").eval()
+
     for checkpoint_path in args.checkpoints:
         loaded = load_encoder(checkpoint_path)
         encoder_frames, predicted_raw = run_encoder(loaded, utterance)
@@ -157,18 +185,20 @@ def main():
         predicted = rounded_predicted_durations(predicted_raw)
         print(f"\n== {checkpoint_path} (epoch {loaded.epoch})")
         print_alignment_table(utterance, aligned, predicted)
+        print_word_table(utterance, aligned, predicted)
+        if vocos is not None:
+            render_encoder_wavs(vocos, args.wav_dir, prefix, encoder_frames, aligned, predicted, loaded)
 
-    prefix = utterance.relative_path.replace("/", "_")
     if args.labels_dir is not None:
         args.labels_dir.mkdir(parents=True, exist_ok=True)
-        ground_truth_labels = args.labels_dir / f"{prefix}_ground_truth_labels.txt"
-        predicted_labels = args.labels_dir / f"{prefix}_predicted_labels.txt"
-        write_audacity_labels(ground_truth_labels, phoneme_groups(utterance.phoneme_ids, aligned))
-        write_audacity_labels(predicted_labels, phoneme_groups(utterance.phoneme_ids, predicted))
-        print(f"\nwrote {ground_truth_labels} and {predicted_labels} (epoch {loaded.epoch})")
-    if args.wav_dir is not None:
-        args.wav_dir.mkdir(parents=True, exist_ok=True)
-        render_wavs(args.wav_dir, utterance, encoder_frames, aligned, predicted, mel, loaded)
+        mas_labels = args.labels_dir / f"{prefix}_mas_labels.txt"
+        dp_labels = args.labels_dir / f"{prefix}_dp_labels.txt"
+        write_audacity_labels(mas_labels, phoneme_groups(utterance.phoneme_ids, aligned))
+        write_audacity_labels(dp_labels, phoneme_groups(utterance.phoneme_ids, predicted))
+        print(f"\nwrote {mas_labels} and {dp_labels} (epoch {loaded.epoch})")
+    if vocos is not None:
+        # The ground truth mel does not depend on the checkpoint; only the mel statistics are taken from it.
+        write_wav(vocos, args.wav_dir / f"{prefix}_ground_truth.wav", mel, loaded)
 
 
 if __name__ == "__main__":
