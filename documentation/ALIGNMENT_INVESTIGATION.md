@@ -10,20 +10,17 @@ ears), because the DP gives durations it learned from other sentences. As traini
 sentence's wrong MAS durations, and the error becomes audible and stable. MAS does not drift; the DP does. Details:
 "13 November: alignment search (MAS) or Duration Predictor (DP)?".
 
-WHERE WE STOPPED (13 Nov, 19:10; corpus work continued 14 Nov, see 'Missing comma detector: state'):
-- New phonemization scheme KEPT (user: voices sound much better, timbre and intonation). Still uncommitted on branch
-  `v24`; commit/branch decision open, ask the user.
-- The user brought corrected transcripts for speakers 0, 4, 11 from the corpus project, removed speaker 15, deleted
-  the old CSVs and regenerated `data/corpus-24k/train.csv` (34954 lines) and `validate.csv` (2623) with
-  `validate_corpus_ipa` on the NEW scheme (max id 144, separator id 0, every line has a mel, speakers 0-14). Training
-  now uses them directly: `python -m matcha.train +experiment=v24` (no `data=corpus-24k-v25`). Obsolete, deletion
-  offered but not yet approved: `configs/data/corpus-24k-v25.yaml`, `train.v25.csv`, `validate.v25.csv`.
-  `configs/experiment/v24.yaml` still checkpoints/validates every epoch (short-test setting).
-- Training is stopped; the user wants to finish corpus fixes before starting the next run from epoch 0. Done today
-  by him: commas in 13/0050 and 13/1146 (found by my pause list), Brian, Kai, Lewis via ASR, 11/1111 by ear.
-- Next topic: fixing MAS itself (see "Ideas for an alignment fix" below), with Lewis (11) as the test case.
-- Untracked review outputs in the project root: `mas_vs_dp/` (renders), `displaced_pauses.txt` (speakers 1-3,
-  5-10, 12-14), `unpunctuated_pauses_11.txt` (Lewis). In the corpus folder `metadata.4_review*.csv/txt` are obsolete.
+WHERE WE STOPPED (17 Nov):
+- The goal: several of Brian's (4) utterances are pronounced wrongly. We traced it to the alignment search (MAS)
+  squeezing vowels to one frame ("vowel collapse") around pauses the text does not mark, which the Duration Predictor
+  then learns. The open question is whether fixing the corpus alone removes the collapse; if not, fix MAS itself
+  (see "Ideas for an alignment fix").
+- Corpus fixes (missing commas, transcript errors, audio anomalies) are now done with tools in the corpus project,
+  see "Corpus fixes". The pause and comma tools of this project were deleted on 17 Nov; only the alignment and
+  collapsed-vowel checks remain here (see Tools).
+- Run b `logs/train/v24/runs/2026-11-16_21-09-01/` (all corpus fixes except speakers 10, 12, 14) was still training
+  at epoch 99; compared with run a in the 17 November section.
+- After corpus edits: bring the corpus over, rerun `validate_corpus_ipa`, then train.
 
 ## How to talk to the user
 - Structured answers: short sections, tables, plain language. No code variable names in prose ("Duration
@@ -46,7 +43,8 @@ WHERE WE STOPPED (13 Nov, 19:10; corpus work continued 14 Nov, see 'Missing comm
 - Plan first, implement after confirmation. GPU: training may run locally; CPU diagnostics are preferred. The user
   can pause training when GPU is needed. Exclude `logs` and `.venv` from greps. Activate `.venv` before Python.
 - The user has tried external aligners (Montreal Forced Aligner, wav2vec2 phoneme models) and rejects them:
-  the separator scheme is unique. Do not propose them again.
+  the separator scheme is unique. Do not propose them again. (MMS in the corpus project's `find_pauses.py` only
+  places words to find missing commas; it does not replace the model's alignment.)
 - Code comments and docs describe the code as it is now, never its history (no mention of the old triple scheme in
   v25 code). "Voiced phoneme" in this project means any vowel or consonant; do not nitpick that t is voiceless.
 - Prefer measuring on the existing checkpoints before recommending; the user asked for evidence twice, and one
@@ -139,39 +137,35 @@ WHERE WE STOPPED (13 Nov, 19:10; corpus work continued 14 Nov, see 'Missing comm
 - Superseded: the suggested check of the second run around epoch 350-400 (that run was stopped at 269).
 
 ## Tools
-- All in `matcha/utils/`, CPU only unless stated, safe while training holds the GPU. Committed in ace1aa9 in their
-  old-scheme form; `alignment_diagnostics.py` and `measure_collapsed_vowels.py` are now modified (uncommitted) for
-  the NEW scheme:
-  - `alignment_diagnostics.py`: shared helpers (load Encoder from a checkpoint, CPU MAS identical to the GPU
-    kernel, word segments, Audacity labels). New scheme: `symbol_label` = the symbol itself, `phoneme_groups` = one
-    segment per symbol (separators are shared, not merged), `vowel_spans` (replaces `vowel_core_positions`) = a vowel
-    plus the length mark and diacritics written right after it; a stress mark before the vowel is left out.
-  - `measure_collapsed_vowels.py -i <data yaml> -c <ckpt> [--split train] [--files_per_speaker N]`. New definition:
-    a vowel span of 3 frames or fewer. NOT comparable with the old triple-based numbers.
-  - `compare_alignment_over_checkpoints.py -i <data yaml> -c <ckpt...> --track 4/1423 4/1428`: collapse share,
-    duration error, word placement of tracked files, boundary movement per 100 epochs between consecutive checkpoints.
-    Works for the new scheme with `-i configs/data/corpus-24k.yaml`.
-  - `measure_alignment_noise.py` (untracked, GPU): noise sweep and pinned-path test (`--pin 4/1423:4:1.38:1.48
-    4/1428:1:1.19:1.42` = recording:word index:pause start:pause end; the word gap after that word is forced onto the
-    pause). Imports `count_collapsed_vowels`, so it follows whatever scheme `symbols.py` has.
-  - `inspect_alignment.py`: NEW scheme; per checkpoint, symbol and word tables of MAS vs DP durations, `--wav_dir`
-    renders the Encoder mel with MAS and with DP durations (file names `_encoder_mas_durations` / `_encoder_dp_durations`;
-    never call MAS output "ground truth"), `--labels_dir` writes `_mas_labels.txt` / `_dp_labels.txt`.
-  - `measure_pause_placement.py`: where MAS puts each pause and what it costs; `-u` single files, or a corpus sample /
-    all files with `--speakers`, `--list_displaced`, `--list_unpunctuated`.
-  - `align_with_text.py -u <utt> --text "<alternative>" -c <ckpt...>`: MAS and DP word placement with a changed text.
-  - `measure_alignment_by_symbol_class.py` still assumes the OLD scheme and fails to import.
-  - To read old-scheme checkpoints again, the old `symbols.py` and the old versions of the two modified scripts are
-    needed (e.g. `git stash`, or a worktree of commit aad0c56).
+- All in `matcha/utils/`, CPU only, safe while training holds the GPU. They read the current `symbols.py`, so they
+  only work with checkpoints of the current phonemization scheme.
+  - `alignment_diagnostics.py`: shared helpers (load the Encoder from a checkpoint, CPU MAS identical to the GPU
+    kernel, word segments, Audacity labels). `phoneme_groups` = one segment per symbol (separators are shared, not
+    merged), `vowel_spans` = a vowel plus the length mark and diacritics written right after it; a stress mark
+    before the vowel is left out.
+  - `measure_collapsed_vowels.py -i <data yaml> -c <ckpt> [--split train] [--files_per_speaker N]`: share of vowel
+    spans of 3 frames or fewer. Not comparable with the old triple-based numbers in the older sections.
+  - `compare_alignment_over_checkpoints.py -i configs/data/corpus-24k.yaml -c <ckpt...> --track 4/1423 4/1428`:
+    collapse share, duration error, word placement of tracked files, boundary movement per 100 epochs between
+    consecutive checkpoints.
+  - `inspect_alignment.py -i <data yaml> -u <utt> -c <ckpt...>`: per checkpoint, symbol and word tables of MAS vs DP
+    durations; `--wav_dir` renders the Encoder mel with MAS and with DP durations (`_encoder_mas_durations` /
+    `_encoder_dp_durations`; never call MAS output "ground truth"), `--labels_dir` writes `_mas_labels.txt` /
+    `_dp_labels.txt`. The user listens to these renders to judge an utterance.
+- Deleted on 17 Nov, still in commit 2456048 if ever needed: `measure_pause_placement.py` (where MAS puts each
+  pause, "pauses that move words", the old missing comma detector), `align_with_text.py` (MAS with a changed text),
+  `measure_alignment_noise.py` (noise sweep, pinned-path test), `measure_alignment_by_symbol_class.py` (old scheme
+  only). The sections below still quote their results.
+- The one-frame-run counts (files with >= 4 / >= 8 consecutive one-frame symbols) came from temporary scripts that
+  were never kept.
+- The render folders (`mas_vs_dp*/`), label tracks and review lists named in the sections below are gone from the
+  project root.
 - `/tmp/print_tb.py <tensorboard dir...>` prints the per-epoch duration / prior losses of runs side by side (temporary,
   /tmp may be wiped; ~20 lines with tensorboard's EventAccumulator).
 - Run naming: `*b.ckpt` in `logs/train/v24/` = second run (from 124, one vote per symbol). Compare 124→279 (first run)
   against 124→249b (second run): moved per 100 epochs 2.6% vs 4.2%; collapsed 1.9% vs 1.6%; duration error 0.113 vs
   0.110. 4/1428 at 249b: "Tuesday" now ends at 1.42 s, "we" starts at 1.43 s (correct word boundary), but the pause
-  1.19-1.42 s is still inside "Tuesday". 4/1423 unchanged.
-- Audacity label tracks in the project root: `4_1423_ground_truth_labels.txt` (epoch 1014),
-  `speaker_004_encoder_labels.txt` (inference durations), `4_1428_ground_truth_labels.txt` (new run epoch 244).
-  Format: start\tend\tlabel per phoneme group, `_` = word gap.
+  1.19-1.42 s is still inside "Tuesday". 4/1423 unchanged. (Later runs reuse letters: 099a/134a, 064b-099b, see 17 Nov.)
 
 ## Decision, 12 November: change the phonemization scheme first
 The alignment work (tickets above, re-check of 4/1423 and 4/1428 around epoch 350-400) is paused. We change the
@@ -225,7 +219,6 @@ around their own symbol's mean, neighbouring symbols inside a word differ by abo
   - `configs/experiment/v24.yaml`: checkpoints and validation every epoch (user's change for the short tests).
   - `matcha/utils/alignment_diagnostics.py` and `matcha/utils/measure_collapsed_vowels.py` rewritten for the new
     scheme (see Tools).
-  - Untracked: `configs/data/corpus-24k-v25.yaml`, `matcha/utils/measure_alignment_noise.py`.
 - Branch `v25` (commit 0046602 "A new phonemization scheme") branched from 838dba6, BEFORE the v24 commits ace1aa9 and
   aad0c56. It lacks the diagnostic scripts and this md, and has an older pyproject/uv.lock (torch from the test
   channel, torchaudio 2.11.0+cu132). Checking it out and running `uv sync` would change the venv. The phonemization
@@ -370,26 +363,11 @@ Conclusions:
   and d (the d closure), not the gap after "Tuesday"; MAS puts the pause there and shifts "uːz" onto j, "deɪ" onto
   the stress mark. Proposed next: test a capped (robust) MAS score on the CPU.
 
-## 13 November: corpus fix first (missing commas, transcript errors)
-- The user prefers fixing the corpus before changing MAS. Corpus project: `E:\Programare\Corpus` (WSL
-  `/mnt/e/Programare/Corpus`), Windows venv `.venv/Scripts/python.exe` with faster-whisper. Speakers are synthetic
-  voices (Polly, Azure, Kokoro); `metadata.N.csv` per speaker in `Training data/`.
-- Pipeline: `validate_corpus.py` (Whisper large-v3, now also writes `<stem>_asr_words.json` with word timings) →
-  `find_missing_commas.py` (audio-based pauses, per-speaker threshold, writes `<stem>_review.csv`) → assistant removes
-  benign differences with a log → the user diffs `metadata.N.csv` against `_review.csv` and edits the corpus HIMSELF.
-  Never modify `metadata.N.csv`. Pilot: speaker 4, check 4/1423 and 4/1428.
-- FOUND: the corpus already has "In some form or other, we need fun." and "Next Tuesday, we must vote." (the user
-  fixed Brian with ASR earlier), but `data/corpus-24k/*.csv` (and the v25 copies) hold the old text: 76 speaker-4
-  lines differ (66 train, 10 validate; 35 of them only commas); 10 matcha train lines no longer exist in the corpus.
-  So the model never trained on the Brian corrections. Regenerating the matcha CSVs is the user's decision.
-- Whisper run for speaker 4 done (10.6 min): `metadata.4_asr.csv`, `metadata.4_asr_words.json`.
-  `find_missing_commas.py` (Whisper word times) was later abandoned and deleted, see below.
-
 ## 13 November: why MAS misplaces a pause (mechanism)
 - The user rejects changing the corpus to work around a model flaw (commas only where a comma belongs; Brian's
   pauses are often emphasis, part of the voice). The Whisper-time based comma detector was unusable (Whisper word
   times 0.2-0.4 s off) and is abandoned; `find_missing_commas.py` was deleted; `metadata.4_review*` in the corpus are obsolete.
-- Test `matcha/utils/measure_pause_placement.py` (`-u` for single recordings): pauses = >= 80 ms below -50 dB inside the speech (matcha wavs). Reference position
+- Test with `measure_pause_placement.py` (deleted 17 Nov): pauses = >= 80 ms below -50 dB inside the speech (matcha wavs). Reference position
   = MAS on the mel with all pauses cut out (no silence left to mislead it).
 - With pauses cut out, MAS places every word of 4/1423 and 4/1428 CORRECTLY at 004c and 019c (form 0.56-0.84, or
   0.85-0.98, other 0.99-1.32, we 1.34; Tuesday 0.52-1.16, we 1.17). At 154c even the cut version is wrong: by then
@@ -411,24 +389,6 @@ Conclusions:
   pause goes to the nearest silence-like symbol. The user rejects changing the corpus to work around this model flaw;
   commas only where a comma truly belongs (Brian's emphasis pauses, e.g. before "pink", are the voice's character).
 
-## 13 November evening: full-corpus pause lists (019c, current CSVs)
-- `measure_pause_placement.py --files_per_speaker 0 --speakers ... --list_displaced <file>` and
-  `--list_unpunctuated <file>`. ~10 min for 12 speakers on the CPU.
-- Speakers 1-3, 5-10, 12-14: 30883 pauses; 439 displaced. "Likely fine" (149): MAS gave the pause to a punctuated
-  gap, the reference is one word late (e.g. "Max. I ⟨⟩ want"; mostly 1, 8, 9, 13). "Likely real" (290): 6 Nicole 172
-  (41 >= 150 ms), 3 Bella 75 (28), 12: 18, 9: 11, 8: 7, 1: 3, 13: 3, 5: 1; most are 80-120 ms at stop closures.
-  Isabella's 3: two real missing commas (user confirmed), 13/0482 "N A T O" spelled with a pause before O (no comma).
-  Jane's 3: two right after a full stop (reference late), one t-closure; nothing to fix.
-- Lewis (11): 81 pauses at punctuation (median 315 ms), 860 at plain spaces (226 >= 200 ms), 302 harmful (35%;
-  Brian 18%, Bella/Nicole 2-3%). Most are where no comma belongs ("acclaim for ⟨⟩ her", "intake to ⟨⟩ at least").
-  Options offered, none chosen: leave him (test case for a MAS fix), shorten unpunctuated pauses in his audio (on
-  copies), or leave him out. Unverified suspicion: his gaps are digital zero (noise gate); check before deciding.
-- Weakness of the reference position: when the words around a pause sound alike, the cut lands one word off. Example
-  11/1111: real pauses after "degree" (1.19 s, 160 ms) and "University" (2.54 s, 400 ms); my list said "in ⟨⟩
-  nineteen". In the lists the TIME is reliable, the words around ⟨⟩ can be off by one; tell the user to listen at
-  the time. 11/1111 with the user's commas ("degree, from Yale University, in"): at 019c MAS still puts the 400 ms
-  pause inside "in" (unlike Brian's sentences, the comma alone does not fix it in a model not trained on it).
-
 ## Ideas for an alignment fix (not tested, the user has not chosen)
 - Pause-cut MAS in training: run MAS on the mel without pauses, then give each pause to the space at the cut point
   (needs a better cut-point rule, see the 11/1111 weakness).
@@ -437,125 +397,41 @@ Conclusions:
 - Capped (robust) per-frame MAS score, so a silent frame cannot outweigh many phoneme frames.
 - Older tickets still open: soft alignment / forward-sum loss, curriculum, separate RAD-TTS-style aligner.
 
-## Missing comma detector
-Finds the places where a speaker pauses but the transcript has no punctuation. It is meant for voices whose pauses
-should be marked with a comma so the model learns where this voice pauses, whether or not the comma is grammatical.
-It is part of `matcha/utils/measure_pause_placement.py`, runs on the CPU (about 1 minute per 1500 recordings) and
-never modifies any transcript.
+## Corpus fixes (corpus project)
+Corpus project: `E:\Programare\Corpus` (WSL `/mnt/e/Programare/Corpus`), Windows venv `.venv/Scripts/python.exe`.
+Speakers are synthetic voices (Polly, Azure, Kokoro); `Training data/metadata.N.csv` per speaker. Read files there
+with the shell; the IDE file reader hung on that drive once.
+- `find_pauses.py`: the missing comma detector. Pauses come from the wav alone (5.3 ms frames, quieter than
+  `--silence_db`, at least `--min_pause_ms`, inside the speech); the transcript is force-aligned with Meta's MMS model
+  (`facebook/mms-1b-all`, CTC, one adapter per language), and each pause goes to the word gap it overlaps most.
+  Writes `<stem>_pauses_generic.txt` and `<stem>_commas_generic.csv` (identical to the input except the proposed
+  commas, for IntelliJ's diff). Its header explains how to choose the two values. Its `--matcha_list` option compares
+  with the list of this project's old detector, which no longer exists.
+- `validate_corpus.py` (Whisper large-v3) and `asr_review.py` with the rules in `ASR_diff_review.md`: checks that the
+  voice said what the transcript says.
+- `sync_splits.py`: brings the edits of `metadata.N.csv` into the train / validate splits.
+- `bookmark.md` holds the user's prompts for each of these; follow them (they say when `metadata.N.csv` may be
+  edited, and only after a backup). Remind the user to rerun `validate_corpus_ipa` here afterwards.
+- The user's rule for commas (decided on Bella, 14 Nov): a comma wherever the voice really pauses, so the model learns
+  "comma = pause" and a voice's quirk pauses do not leak into plain spaces at inference. Proposals are sorted into
+  expected and unexpected ones as described in the bookmark prompt.
+- Speaker audio, useful for choosing the values (pause level inside speech / values used):
 
-How the user uses it: he asks the assistant to run it for a speaker number, a target pause length in ms and a
-silence floor in dB. The assistant runs it, spot-checks the result (levels around a few listed pauses, odd entries,
-skipped files) and reports anything suspicious, instead of the user running the command himself.
+  | Speaker | Pauses inside speech | Length / floor used |
+  |---|---|---|
+  | 11 Lewis | digital zero (noise gate); comma pauses 170-200 ms | 110 ms / -90 dB |
+  | 4 Brian | ±1-4 LSB noise, -93..-105 dB RMS; at 110 ms half the hits were stop closures | 110 ms / -90 dB |
+  | 3 Bella | starts with a -67..-72 dB tail, decays to -80..-90 dB; comma pauses median 203 ms | 140 ms / -65 dB |
+  | 7 Andrei | -72..-94 dB; often does not pause at commas | 110 ms / -64 dB |
+  | 13 Isabella | -60..-80 dB; Italian double consonants look like pauses below ~150 ms | 200 ms / -75 dB |
+  | 2 Aria | -55..-70 dB noise floor, peaks 20-80 LSB | 120 ms / -60 dB, nothing found |
+  | 5 Arthur | constant -57..-61 dB noise floor, comma pauses median 299 ms | 110 ms / -50 dB, only closures |
+  | 6 Nicole | edges -50..-55 dB, middle -85..-90 dB; pauses at phrase boundaries in nearly every sentence | 200 ms / -50 dB (find_pauses) |
 
-How it works:
-- A pause is a stretch of at least the target length (`--min_pause_ms`) quieter than the silence floor
-  (`--silence_db`) inside the speech, measured directly in the wav on 5.3 ms frames.
-- Silence floor: the user measures pauses in Audacity as the visibly flat line with the waveform zoomed in, which is
-  digital zero. -90 dB matches that (checked on 11/0003: flat line ~60 ms, below -90 dB 64 ms). -50 dB is far too
-  generous: it adds the fade-out of the previous word (11/0003 read 139 ms).
-- To find which word gap a pause belongs to, the alignment search (Monotonic Alignment Search, MAS) of a trained
-  checkpoint is run on the mel twice: as in training, and with every pause cut out. The second one is the reference:
-  without silence it follows the speech alone.
-- A pause counts as covered when the reference or the normal MAS puts it at punctuation. Everything else is listed.
-
-Command (reads the corpus `metadata.N.csv` directly and phonemizes it on the fly):
-```
-source .venv/bin/activate
-python -m matcha.utils.measure_pause_placement -i configs/data/corpus-24k.yaml \
-    -c logs/train/v24/checkpoint_epoch=019c.ckpt --files_per_speaker 0 \
-    --transcript "/mnt/e/Programare/Corpus/Training data/metadata.11.csv" \
-    --list_missing_commas missing_commas_11.txt --min_pause_ms 110 --silence_db -90 \
-    --proposed_transcript "/mnt/e/Programare/Corpus/Training data/metadata.11_commas.csv"
-```
-`--proposed_transcript` writes a copy of the speaker's transcript that differs from it only by the proposed commas
-(same lines, same order, empty lines and line endings kept), for IntelliJ's diff view: corpus file left, proposal
-right, F7 jumps to the next proposal. A comma goes after the word before each listed pause, except for `[comma?]`
-pauses and lines whose words cannot be matched to the phonemized words. eSpeak joins short words ("of the"), so
-transcript words are matched to phonemized words by their phoneme counts. When the reference puts a pause inside a
-word, the comma goes one word earlier: checked against the user's hand-edited Lewis transcript, the reference was
-one word late in 262 of 297 such cases. On the uncorrected Lewis transcript, 862 of 925 proposed commas matched the
-user's own edits.
-To check the training filelist instead, leave out `--transcript` and add `--speakers <id>`.
-
-Requirements: the recordings must have precomputed mels in `data/corpus-24k/mels` (lines without one are skipped
-and listed), and the wavs are read from `data/corpus-24k/wav`, so all times refer to those wavs, not to the corpus
-copies (their leading silence differs, by about 0.03 s for speaker 11). Any checkpoint of the current phonemization
-scheme works; an early one (019c) is preferable, because a late one has learned the old misplacements.
-
-Output: one entry per recording, in recording order, with its transcript, then one line per unexplained pause: start
-time, length, a mark, and the words around the pause (⟨⟩ marks the pause). Marks:
-- none: the pause is at a space without punctuation, the main case;
-- `[word]`: the reference puts the pause inside a word, mostly a word gap it missed by one word;
-- `[comma?]`: a comma sits just before ⟨⟩ or one word earlier, so it probably already holds the pause.
-The time is reliable, the words around ⟨⟩ can be one word off (when neighbouring words sound alike, e.g. "University
-in"), so listen at the given time in Audacity before editing.
-
-### Missing comma detector: how the assistant runs it (instructions from the user)
-- The user asks with three values: speaker number, target pause length (ms), silence floor (dB). Run it with
-  `--transcript` on the corpus `metadata.N.csv`, `--list_missing_commas missing_commas_N.txt` in the matcha project
-  root and `--proposed_transcript` next to the corpus file (`metadata.N_commas.csv`). Never modify `metadata.N.csv`.
-- Before reporting, spot-check: a few listed pauses against the level profile of the wav (is the pause the flat
-  digital-zero line, or a word's fade-out / a stop closure?), lines skipped for missing mels or unmatched words, and
-  anything odd. Report the counts, a few example proposals and what to watch for.
-- Useful context for choosing the length: the speaker's own pause at written commas (Lewis: real commas 170-200 ms
-  at -90 dB). Below ~110 ms stop closures (before d, t, k, p, b, g) start to show up as pauses.
-- The user liked the detector as it is. When he asks for a different PRESENTATION, change only the presentation;
-  do not touch which pauses are detected without asking (he worried I had changed detection when I only changed
-  the word placement of the commas).
-- The diff file is the point: the user reviews `metadata.N.csv` (left) against `metadata.N_commas.csv` (right) in
-  IntelliJ and jumps with F7. It must stay byte-identical except for the proposed commas.
-
-### Missing comma detector: state (14 Nov)
-- Lewis (11) is DONE. The user added commas by ear wherever Lewis pauses, then with the detector at 110 ms / -90 dB.
-  At 90 ms the detector proposed 39 more lines; the user judged those as prosody (his real commas are 170-200 ms)
-  and left them. `metadata.11_commas.csv` and `missing_commas_11.txt` were regenerated at 110 ms (no proposals).
-- Speakers 0 and 4 were reviewed with Whisper ASR earlier; 13 got two commas (13/0050, 13/1146). Other speakers
-  not yet run through the detector. Candidates by displaced pauses: 6 Nicole, 3 Bella, 12 Michael (see the
-  13 November evening section).
-- Brian (4), 14 Nov, 110 ms / -90 dB, 019c, corpus file of 14 Nov 12:37: 225 pauses >= 80 ms, 33 listed in 29
-  recordings, 27 lines proposed, no skipped lines. All spot-checked pauses are digital near-zero (-95 to -105 dB),
-  but about half are stop closures (before k/t/p/b/d/tʃ: case, debt, taste, pasta, clean-up, bowl, keeper,
-  Edinburgh, try, looks), 112-139 ms, so for Brian 110 ms does not separate closures from phrase pauses; the next
-  sound does. Most `[word]` entries are closures inside the word, not missed gaps, so the one-word-earlier comma is
-  wrong there. eSpeak drops spaced dashes (4/0829 "slowly - very slowly -" has no punctuation id), so the model sees
-  no mark at those pauses. Awaiting the user's review.
-  CORRECTION (user, 4/0085 has no 110 ms silence): the detector uses the per-frame RMS level. Brian's closures and
-  pauses are not digital zero: about 1 sample in 6 is ±1-4 LSB (±2 = -84 dB peak), which averages to -93..-105 dB
-  RMS but is not the flat line in Audacity (±1 LSB = -90.3 dB). Lewis is noise-gated, so RMS and peak agreed there.
-  With "every sample within ±1 LSB" only 6 of the 33 stay >= 110 ms (0425, 0612, 1448, 0829 at 3.80, 0970, 1016);
-  4/0085 reads 107 ms. Switching the detector to a peak criterion = a detection change, ask first.
-- Aria (2), 14 Nov, 120 ms / -60 dB, 019c, corpus file of 14 Nov 15:54 (2217 lines, all with mels): 73 pauses,
-  63 at punctuation, 10 inside a word (all covered by MAS at punctuation), 0 listed, `metadata.2_commas.csv`
-  identical to the corpus file. Her pauses inside speech are NOT digital zero: a -55..-70 dB RMS floor, peaks
-  20-80 LSB, so at -60 dB a comma pause breaks into short pieces. Cross-check (to /tmp, deleted): -50 dB also lists
-  0; -45 dB lists 19, nearly all stop closures (act, talked, fact, verdict, architect). Nothing to fix for Aria.
-  Cosmetic: the summary line says "pauses of 80 ms or more" but counts with `--min_pause_ms`.
-- Isabella (13), 14 Nov, 200 ms / -75 dB, corpus file of 14 Nov 13:29 (1207 recordings, the other 6 lines are
-  markers/empty): 346 pauses, 330 at punctuation, 16 inside a word (covered), 0 listed, `metadata.13_commas.csv`
-  identical. Her pauses sit around -60..-80 dB (not digital zero), so -75 dB splits many of them; at -60 dB / 200 ms
-  916 pauses, still 0 listed. Cross-checks (to /tmp, deleted): 150 ms at -75 / -60 dB: 0; 100 ms / -60 dB: 7;
-  100 ms / -50 dB: 74, almost all Italian double-consonant closures (notte, detto, tutto, fatti, sette, attimo).
-  Only space-only candidates below 200 ms: 13/0480 3.98 s "volta ⟨⟩ e li" ~120 ms, 13/0486 3.80 s "romane ⟨⟩ e
-  alcuni" ~100 ms, 13/0532 5.84 s "zuppa ⟨⟩ e ne" ~100 ms. The two commas the user added earlier (13/0050 2.31 s
-  ~128 ms, 13/1146 ~107 ms) are also well under 200 ms.
-- Bella (3), 14 Nov, 200 ms / -75 dB, 019c, corpus file of 5 May (4298 lines, no skipped lines, 4.5 min):
-  1353 pauses, 244 at punctuation, 1109 listed in 1026 recordings (310 `[word]`, 3 `[comma?]`), 1024 lines
-  proposed; diff file verified identical except commas. Spot-checked 9: real silence (median -80..-86 dB RMS, peaks
-  12-17 LSB, not digital zero, loud speech right after), not closures. Her unpunctuated pauses are as long as her
-  comma pauses: lines with one comma, longest -75 dB silence median 203 ms; lines without inner punctuation median
-  155 ms, 26% >= 200 ms. MAS already puts 800 of 805 space-only pauses on their gap (5 displaced: 3/1372, 4044,
-  0853, 1669, 4204), so these pauses do not hurt her alignment. Spaced dashes get ", -" proposals (3/0794, 0804,
-  0805). Awaiting the user's decision (wholesale commas would change a quarter of her lines).
-  User's decision: add the commas anyway, so the model learns "comma = pause" and Bella's quirk pauses (her TTS
-  engine's) do not leak into plain spaces at inference. Rerun at 140 ms / -75 dB (files overwritten): 3464 pauses,
-  446 at punctuation, 3018 listed in 2240 recordings, 2237 lines proposed, 3/4129 unmatched (no comma). By length:
-  140-160 ms 531, 160-180 726, 180-200 652, 200+ 1109; `[word]` 12-17% below 200 ms. 14 random 140-199 ms entries:
-  all phrase-boundary pauses at the same level as the long ones (median -80..-84 dB, peaks 13-27 LSB), no closures;
-  most common next word "is" (348), "and" (216). Odd ones: 3/1639 "ten, point five", 3/3756 "to make, decisions".
-  13 displaced pauses (the 5 above plus 1078, 3738, 1174, 3965, 0855, 1120, 1922, 3509).
-- The matcha CSVs (`data/corpus-24k/train.csv`, `validate.csv`) do NOT yet contain the user's latest Lewis commas
-  (corpus file saved 14 Nov 12:00; CSVs from 13 Nov 17:27). Remind him to bring the corpus over and rerun
-  `validate_corpus_ipa` before training.
+  Below about 110 ms stop closures (before t, k, p, d, b, g) start to look like pauses.
+- eSpeak drops spaced dashes ("slowly - very slowly -" has no punctuation id), so the model sees no mark there.
+- Speaker 7 (Andrei) audio anomalies (noise after the speech, laughter, hard cuts) were found with a temporary scan
+  and fixed by the user on 16 Nov; stats, mels and CSVs regenerated then (mel_mean -4.669398, mel_std 6.485294).
 
 ## Extra notes for the assistant (not yet elsewhere)
 - Speaker names (`matcha/inference.py`): 0 Kai, 1 Jane, 2 Aria, 3 Bella, 4 Brian, 5 Arthur, 6 Nicole, 7 Emil,
@@ -574,8 +450,6 @@ in"), so listen at the given time in Audacity before editing.
   part" (refuted: ~20%); "carry stress as a vowel feature" (against the user's principle); "the errors form before
   epoch 124 and lock in, so noise from epoch 0 should prevent them" (4/1423 is wrong after epoch 0, and noise did not
   help); "the first v24 run is the baseline for early epochs" (different batch size and loss settings, see above).
-- The alignment cache `/tmp/alignments_789_train.pkl` was pickled from `__main__`; to load it elsewhere set
-  `__main__.AlignedUtterance` to the class from `measure_alignment_by_symbol_class` first. /tmp may be wiped.
 - CPU MAS + Encoder on 2100 files takes ~70 s on 8 threads, safe while training holds the GPU.
 
 ## 15 November: first run with the comma-corrected corpus (speakers 0, 1, 2, 4, 11, 13)
@@ -596,3 +470,61 @@ in"), so listen at the given time in Audacity before editing.
 - Pauses that move words (150 train files per speaker): 13 of 2126. This run gives word-gap silence mostly to the
   separators next to the gap, so the pause tool's on gap / neighbour split is not a quality measure; words moved is.
 - Bella (3) has no commas yet in the CSVs: 180 space-only pauses in 150 files.
+
+## 15 November evening: run 2026-11-15_13-26-57 (commas, Andrei as speaker 7, new Romanian), epochs 4-29
+- Renders and tables for 4/1423, 4/1428, 11/1111 at 004-029: `mas_vs_dp_029/` (project root, untracked).
+- 4/1423, 4/1428, 11/1111: MAS word placement right and stable at every checkpoint 4-29; the pause goes to the comma,
+  the gap, the separator after it and the first frames of "we" (w holds ~90 ms of the 4/1428 pause). DP word lengths
+  within a few frames of MAS (except the final silence, which DP makes shorter).
+- Files with runs of consecutive one-frame symbols (MAS), first 150 train files per speaker (temporary script,
+  deleted): >=4 / >=8: epoch 4 539/31, 19 352/14, 29 307/9 (comma-free 13 Nov run: 19 309/34, 154 107/9; samples
+  not identical). Speaker 11 >=8: 1 (was 19). DP >=4 runs: 0, 1, 8 at 4, 19, 29 (first sign of DP copying MAS).
+- Still broken: 0/0109 (from epoch 4, words after "opinion" placed late, "strong" 1.5 s; silences 3.33-3.78 and an
+  unpunctuated one 4.01-4.18 s; maybe transcript mismatch, user to listen). 7/0035 "trebuie" 12 symbols in 107 ms.
+  Speaker 7 has the most >=8 runs (5/150 at 29).
+  User listened to 0/0109 at 029: the MAS-duration render is bad, the DP-duration render is right. He expects the DP
+  to keep generalizing over this one wrong file. TRACK 0/0109 at later checkpoints (add it to `--track`, render DP).
+- Pauses that move words, epoch 29, 150 files per speaker: 10 (9 by one word, 1 by two).
+
+## 16 November: same run at epoch 134 (checkpoints 004-039, 094, 124, 134 now in `logs/train/v24/`)
+- 4/1423, 4/1428, 11/1111: MAS word placement unchanged and right at 39, 94, 124, 134; DP within a few frames
+  of MAS. Renders: `mas_vs_dp_134/`. Boundary movement per 100 epochs: 29→39 118%, 39→94 22%, 94→124 24%, 124→134 63%.
+- One-frame runs (MAS), 150 train files per speaker, >=4 / >=8: 160 / 5 (epoch 29: 307 / 9). DP >=4 / >=8: 11 / 2,
+  10 / 2 of them speaker 7. Every other speaker: at most 1 DP file.
+- 0/0109: MAS still wrong (from 94 on the pause after "on" goes to the gap, "Terra." still after it). DP partly
+  moving towards it: how 73→39 frames (MAS 19), strong 149→177 (MAS 284), you/know 23/29→17/17 (MAS 7/7).
+- Speaker 7 (Andrei): the runs are mostly "trebuie"/"trebuit" (95 of 2085 train lines). In 7/0035 the audio really
+  is short (t closure ~0.31-0.36 s, word over by ~0.43 s), so MAS squeezes b, u, j, e to 1 frame; DP copies it
+  (7/0035, 7/0070 DP run 8). Real fast reduction, not a misplaced pause; user to listen.
+- Pauses that move words: 9 (7 by one word, 2 by two); at 29: 10.
+
+## 17 November: run "b" (all corpus fixes except speakers 10, 12, 14) against run "a" (only 4 and 11 clean)
+- Run a = `2026-11-15_13-26-57` (`checkpoint_epoch={099a,134a}.ckpt`), run b = `2026-11-16_21-09-01`
+  (`{064b,084b,099b}.ckpt`, still training). Same config except mel stats. Both measured on the CURRENT CSVs and mels
+  (16 Nov 21:05), so run a is measured partly on text it never trained on (new commas, fixes) and maybe on different
+  silence lengths: its Duration Predictor gives the leading silence ~0.05 s, the wavs have ~0.18-0.20 s (run b: 0.19).
+- Numbers (validation 100 files/speaker for collapsed vowels, 50 for the rest; one-frame runs on 150 train/speaker):
+
+  | | 099a | 134a | 064b | 084b | 099b |
+  |---|---|---|---|---|---|
+  | Collapsed vowels (new definition) | 30.9% | 29.8% | 37.2% | 36.4% | 36.1% |
+  | Duration error (log scale) | 0.204 | 0.201 | 0.182 | 0.181 | 0.177 |
+  | Files with ≥4 / ≥8 one-frame symbols, MAS | 154 / 6 | 173 / 6 | 60 / 7 | 60 / 8 | 56 / 7 |
+  | Same, Duration Predictor | 14 / 2 | 10 / 2 | 3 / 0 | 6 / 0 | 7 / 1 |
+  | Pauses that move words | – | 11 | – | – | 7 |
+
+  Boundary movement per 100 epochs: a 99→134 20.9%; b 64→84 22.9%, 84→99 28.4%. One-frame runs per speaker, 134a →
+  099b: Bella (3) 37 → 2, Kai (0) 31 → 13, Michael (12) 23 → 2, Andrei (7) 22 → 23 ("trebuie", real reduction).
+  Pause reference (pause-cut MAS) lands at written punctuation 1165 times in b, 619 in a (2149 pauses).
+- Run b's whole alignment sits LATER than run a's on the same mels: end of each symbol median +69 ms, 79-91% of
+  boundaries later by >10 ms, every speaker; by position in the sentence (tenths) 48, 85, 96, 85, 85, 85, 75, 48, 5,
+  0 ms. b's symbol j ends nearest to a's symbol j+3 (median 16 ms). Sibilants (English speakers, high-minus-low mel
+  bands): run a gives the s sound to s and the separator after it, run b to the separator before s. 4/1423 at the
+  acoustics (s 0.35-0.46, f 0.65-0.76, pause 1.47-1.59): run a's words start on time, run b's start one onset sound late
+  ("some" holds the f) and catch up at the pause. Not judged as an error; the per-symbol metrics (collapsed vowels)
+  change with it. Ears decide: renders in `mas_vs_dp_099b/` (134a and 099b).
+- Tracked files at 099b: 4/1428 right (pause on the comma and gap, "we" at 1.52 s; run a lets "we" start at 1.32
+  inside the pause). 11/1111: pause after "University," on the comma (run a: inside "in"). 4/1423 pause right in
+  both. 0/0109 still wrong in both (MAS: "on" 0.73 s, "Terra." 8 frames, "You", "know" 7 each); run b's Duration
+  Predictor follows MAS more than run a's (Terra 14, You 22, know 32 vs 25, 17, 17).
+- Temporary scripts (deleted): one-frame runs, a-vs-b shift, sibilant placement.

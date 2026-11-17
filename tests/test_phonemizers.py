@@ -413,3 +413,58 @@ def needs_separator(left_id, right_id):
     touches_a_voiced_phoneme = left_id in voiced_phoneme_ids or right_id in voiced_phoneme_ids
     touches_an_annotation = left_id in annotation_ids or right_id in annotation_ids
     return touches_a_voiced_phoneme and not touches_an_annotation
+
+
+class TestCustomRomanianDictionary:
+    """
+    Romanian uses the dictionary in espeak/bin/ro, the other languages the system eSpeak data.
+    MATCHA_ESPEAK_RO_DATA points Romanian to another build of that dictionary.
+    The dictionary is chosen at import time, so each case runs in a fresh interpreter.
+    "abandonatele" is fixed by RoLEX (stem stress), so it tells the two dictionaries apart.
+    """
+
+    REPO_DIR = __import__("pathlib").Path(__file__).resolve().parent.parent
+    SNIPPET = (
+        "from matcha.text.phonemizers import phonemizers as p;"
+        "print(p['ro'].phonemize(['abandonatele'], strip=True)[0]);"
+        "print(p['en-us'].phonemize(['hello'], strip=True)[0])"
+    )
+
+    def _run(self, ro_data, cwd=None):
+        import os, subprocess, sys
+        env = {k: v for k, v in os.environ.items() if k != "MATCHA_ESPEAK_RO_DATA"}
+        if ro_data is not None:
+            env["MATCHA_ESPEAK_RO_DATA"] = ro_data
+        if cwd is None:
+            cwd = self.REPO_DIR
+        # From another working directory, matcha is found through PYTHONPATH, and the NeMo grammar cache
+        # stays in the project, so it is not rebuilt.
+        env["PYTHONPATH"] = str(self.REPO_DIR)
+        env["MATCHA_CACHE_DIR"] = str(self.REPO_DIR / ".cache")
+        result = subprocess.run([sys.executable, "-c", self.SNIPPET], cwd=cwd, env=env,
+                                capture_output=True, text=True)
+        return result
+
+    def test_default_uses_custom_dictionary_for_ro_only(self):
+        result = self._run(None)
+        assert result.returncode == 0, result.stderr
+        ro, en = result.stdout.split("\n")[-3:-1]
+        assert ro == "ˌabandonˈatele"
+        assert en == "həlˈoʊ"
+
+    def test_default_does_not_depend_on_working_directory(self, tmp_path):
+        result = self._run(None, cwd=tmp_path)
+        assert result.returncode == 0, result.stderr
+        ro, en = result.stdout.split("\n")[-3:-1]
+        assert ro == "ˌabandonˈatele"
+
+    def test_variable_points_to_another_build(self):
+        result = self._run(str(self.REPO_DIR / "espeak" / "bin" / "ro"))
+        assert result.returncode == 0, result.stderr
+        ro, en = result.stdout.split("\n")[-3:-1]
+        assert ro == "ˌabandonˈatele"
+
+    def test_missing_dictionary_fails_fast(self, tmp_path):
+        result = self._run(str(tmp_path))
+        assert result.returncode != 0
+        assert "does not contain a compiled ro_dict" in result.stderr

@@ -6,6 +6,9 @@ source .venv/bin/activate
 uv sync --active
 python -c "import torch; print(torch.__version__)"   # expect 2.15.0+cu134
 ```
+Romanian is always phonemized with the custom eSpeak dictionary in `espeak/bin/ro`, nothing needs to be set
+(see "Custom Romanian eSpeak dictionary").
+
 To refresh the lock and install newer allowed versions of the complete dependency set, run:
 ```commandline
 uv lock --upgrade
@@ -40,8 +43,10 @@ python -m matcha.utils.filter_by_wav_duration data/corpus-24k/train.csv 12
 python -m matcha.utils.filter_by_wav_duration data/corpus-24k/validate.csv 12
 ```
 
-Check if the corpus uses any unknown IPA symbol. 
+Phonemize the corpus and check if it uses any unknown IPA symbol.
 eSpeak could generate a symbol we do not have in our symbols.py map.
+The script also writes the phoneme ids into the CSVs named in the yaml (in place), and training reads them from there.
+Run it again after every transcript change, phonemization change or Romanian dictionary rebuild. It takes about 11 minutes.
 ```
 python -m matcha.utils.validate_corpus_ipa -i configs/data/corpus-24k.yaml
 ```
@@ -96,7 +101,7 @@ You can compare the reconstituted files to the original input wav, to assess the
 
 ### Train
 ```
-python -m matcha.train +experiment=v21
+python -m matcha.train +experiment=v24
 ```   
 
 Monitor training with: 
@@ -150,6 +155,23 @@ The target checkpoint is backed up to `<target>.bak` before modification.
 ```
 python -m matcha.utils.transplant_spk_emb <target.ckpt> <source.ckpt> <spk_id>
 ```
+
+# Custom Romanian eSpeak dictionary
+
+`espeak/bin/ro` is a self-contained eSpeak-ng 1.51 data dir whose Romanian dictionary is extended with
+[RoLEX](https://github.com/adrianastan/rolex) pronunciations (stress and segmental fixes).
+Romanian always uses it; the other languages use the system eSpeak data. The folder is found relative to the code,
+so it works from any working directory. If it is missing, the phonemizer stops at import time instead of falling
+back to the stock dictionary, whose phonemes are different. The Docker image copies it (`docker/Dockerfile`).
+To try another build, point `MATCHA_ESPEAK_RO_DATA` to its folder.
+After rebuilding the dictionary, rerun `validate_corpus_ipa` (see "Check your corpus") and train again.
+
+Sources are in `espeak/src/ro` (`ro_rules`, `ro_list`, `ro_emoji` from espeak-ng 1.51, `ro_listx` generated, `ro_extra` manual).
+- Fix a word: add it to `espeak/src/ro/ro_extra`, then run `espeak/src/compile_ro.sh`.
+- After editing `ro_rules` or `ro_list`: run `espeak/src/build_ro_listx.sh` (regenerates `ro_listx` and the reports in `espeak/src/reports`, then compiles).
+- Check a word: `espeak-ng --path=espeak/bin/ro -v ro -q -x --ipa "cuvânt"`
+
+Only the installed `espeak-ng` binary is needed, no eSpeak checkout. Commit `espeak/bin/ro` after rebuilding.
 
 # PyTorch stuff
 

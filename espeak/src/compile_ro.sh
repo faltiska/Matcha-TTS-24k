@@ -15,7 +15,7 @@
 #   phontab phonindex phondata phondata-manifest intonations   (copied from the system install)
 #   lang/roa/ro                                                (voice file, copied from the system)
 #   ro_dict                                                    (compiled here)
-# Point phonemizer to it with MATCHA_ESPEAK_RO_DATA=espeak/bin/ro (see matcha/text/phonemizers.py).
+# matcha/text/phonemizers.py uses it for Romanian; MATCHA_ESPEAK_RO_DATA points it to another build.
 #
 # The compiled ro_dict and the phoneme tables are tied to the eSpeak-ng version that built
 # them, so the script refuses to run with a version other than ESPEAK_EXPECTED_VERSION.
