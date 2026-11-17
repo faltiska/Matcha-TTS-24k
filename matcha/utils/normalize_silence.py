@@ -322,6 +322,7 @@ def main():
         valid_filelist = None
 
     total = 0
+    changed_count = 0
     leading_added = 0
     leading_trimmed = 0
     trailing_added = 0
@@ -349,13 +350,15 @@ def main():
 
             total += 1
 
-            _, _, _, lead_delta, tail_delta = normalize_silence(
+            changed, _, _, lead_delta, tail_delta = normalize_silence(
                 wav_path,
                 wav_path,
                 args.target_leading_silence,
                 args.target_trailing_silence,
                 args.threshold_db,
             )
+            if changed:
+                changed_count += 1
             if lead_delta > 0:
                 leading_added += 1
             elif lead_delta < 0:
@@ -367,7 +370,7 @@ def main():
 
             if total % 100 == 0:
                 print(
-                    f"Processed {total} files — "
+                    f"Checked {total} files, changed {changed_count} — "
                     f"leading: +{leading_added}/-{leading_trimmed}   "
                     f"trailing: +{trailing_added}/-{trailing_trimmed}",
                     end="\r",
@@ -375,9 +378,10 @@ def main():
                 )
 
     print(
-        f"\nDone. {total} files processed. "
-        f"Leading: {leading_added} padded, {leading_trimmed} trimmed. "
-        f"Trailing: {trailing_added} padded, {trailing_trimmed} trimmed."
+        f"\nDone. {total} files checked: {changed_count} changed, "
+        f"{total - changed_count} already normalized (left untouched).\n"
+        f"  Leading:  {leading_added} padded, {leading_trimmed} trimmed\n"
+        f"  Trailing: {trailing_added} padded, {trailing_trimmed} trimmed"
     )
 
 

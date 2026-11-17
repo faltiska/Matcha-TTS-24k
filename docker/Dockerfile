@@ -27,6 +27,8 @@ RUN --mount=type=cache,target=/uv-cache,uid=1001 \
     uv sync --locked --no-default-groups --no-install-project
 
 COPY --chown=appuser:appuser matcha ./matcha
+# Romanian is phonemized with this dictionary; the server refuses to start without it.
+COPY --chown=appuser:appuser espeak/bin/ro ./espeak/bin/ro
 COPY --chown=appuser:appuser docker/checkpoint.ckpt ./models/checkpoint.ckpt
 
 ARG IMAGE_VERSION=unknown

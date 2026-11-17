@@ -94,7 +94,6 @@ model:
   alignment_jitter: true
 
   # One vote per phoneme in the prior loss instead of one per frame. Keep false until durations are learned.
-  # Turn on at epoch 789
   prior_loss_per_phoneme: false
   
   encoder:
