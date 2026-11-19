@@ -26,7 +26,12 @@ pre_annotations = "ˈˌ"
 post_annotations = "ːˑ‿ʰʱʲʷˠˤ˞ⁿˡʼʴ\u0329\u032f\u0303\u031a\u032a"
 ipa_symbols = vowels + consonants + pre_annotations + post_annotations
 
-symbols = [separator] + list(_punctuation) + list(ipa_symbols)
+# Mark the start and the end of every utterance, and appear nowhere else. The alignment gives them the leading and
+# the trailing silence of the recording, so no phoneme, separator or punctuation has to hold it.
+utterance_start = "‹"
+utterance_end = "›"
+
+symbols = [separator] + list(_punctuation) + list(ipa_symbols) + [utterance_start, utterance_end]
 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 voiced_phoneme_ids = {symbol_to_id[s] for s in vowels + consonants if s in symbol_to_id}

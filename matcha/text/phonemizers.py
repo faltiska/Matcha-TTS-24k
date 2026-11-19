@@ -21,7 +21,9 @@ cache_dir.mkdir(parents=True, exist_ok=True)
 from nemo_text_processing.text_normalization.normalize import Normalizer
 import phonemizer
 from phonemizer.backend.espeak.wrapper import EspeakWrapper
-from matcha.text.symbols import SEPARATOR_ID, annotation_ids, symbol_to_id, symbols, voiced_phoneme_ids
+from matcha.text.symbols import (
+    SEPARATOR_ID, annotation_ids, symbol_to_id, symbols, utterance_end, utterance_start, voiced_phoneme_ids
+)
 
 logging.basicConfig()
 logger = logging.getLogger("phonemizer")
@@ -117,7 +119,10 @@ def multilingual_phonemizer(text, language):
     # I finally went back this version, that has a single leading space. This fixed duration prediction.
     # I also changed the audio silence a bit, 100ms leading, 400ms trailing, but I am confident the leading / trailing
     # symbols is what fixed it, not the amount of silence, because that is what I had in v19, when worked fine. 
-    phonemes = " " + phonemizer.phonemize([text])[0].rstrip()
+    # The single leading space is now a single start symbol, and a single end symbol follows the final punctuation.
+    # Neither appears anywhere else, so the alignment gives them the leading and the trailing silence.
+    # This claim was verified by Claude on thousands of utterances. See KAN-161 for details.
+    phonemes = utterance_start + phonemizer.phonemize([text])[0].rstrip() + utterance_end
 
     # Each phoneme sound has transitional sections at the start, where the previous sound morphs into it, and at the
     # end, where it morphs into the next one. The Encoder must find the middle section where each phoneme sounds
@@ -139,7 +144,7 @@ def multilingual_phonemizer(text, language):
     #
     # The alignment gives every symbol at least one mel frame, so every separator adds to the shortest possible
     # length of a word. Placing exactly one transition symbol between two phonemes keeps short consonants short.
-    # Example: eSpeak's " ɪn sˌʌm fˈɔːm." becomes " |ɪ|n| |sˌʌ|m| |fˈɔːm|."
+    # Example: eSpeak's "ɪn sˌʌm fˈɔːm." becomes "‹|ɪ|n| |sˌʌ|m| |fˈɔːm|.›"
     espeak_ids = [symbol_to_id[phoneme] for phoneme in phonemes]
     ids = insert_separators(espeak_ids)
     displayed_phonemes = "".join(symbols[phoneme_id] for phoneme_id in ids)

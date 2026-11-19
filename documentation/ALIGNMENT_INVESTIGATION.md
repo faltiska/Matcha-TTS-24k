@@ -598,3 +598,17 @@ with the shell; the IDE file reader hung on that drive once.
   barely above it, costs 6.4% speed. Tracked files 4/1423, 4/1428, 0/0109, 0/2649, 0/0255 place every word the
   same in all three. 0/0109 still wrong ("Terra. You know how" squeezed); 0/2649 "have you got" squeezed
   (0.29-0.43 s).
+
+## 19 November: utterance start and end symbols ("‹" replaces the leading space, "›" follows the final punctuation)
+- Run `logs/train/v24/runs/2026-11-19_09-32-47` (149 symbols; the CPU tools now load only this scheme), compared
+  with `2026-11-18_17-57-39` (leading space, no end symbol), same CSV texts, both with the fp32 alignment.
+- Epoch 4: validation duration loss 0.0387 vs 0.0885, prior 0.578 vs 0.618; median duration error 0.144 vs 0.170.
+  "‹" and "›" take the edge silences in 750 of 750 files from epoch 4 on.
+- The old run catches up between 14 and 19 (its duration loss drops 0.083 → 0.031, when its trailing silence settles
+  on the punctuation). At 29: validation duration 0.0286 vs 0.0293, prior 0.4843 vs 0.4824, Decoder 0.0788 vs
+  0.0819; CPU (50 validation files per speaker): duration error 0.1481 vs 0.1504, collapsed vowels 27.3% vs 25.7%,
+  files with >=4 / >=8 one-frame symbols, alignment 87/7 vs 69/6, Duration Predictor 0/0 vs 3/0; trailing silence
+  predicted 158 frames (alignment 146). Boundaries moved >2 frames 19 → 29: 46% per 100 epochs (old run 96%).
+- Word tables from the tools now include the edge silences in the first and the last word ("In 0.00-0.34"), because
+  "‹" is not a word gap.
+- 0/0109 changed: "Terra." 3.66-3.82 s (old run 3.76-3.81), "on" still runs into the pause. Not listened to yet.

@@ -30,6 +30,8 @@ from matcha.text.symbols import (
     annotation_ids,
     symbol_to_id,
     symbols,
+    utterance_end,
+    utterance_start,
     voiced_phoneme_ids,
 )
 
@@ -267,6 +269,15 @@ class TestPhonemeIds:
         phonemes, ids = multilingual_phonemizer("Hello world.", "en-us")
         assert phonemes == "".join(symbols[token_id] for token_id in ids)
 
+    @pytest.mark.parametrize("text", ["Hello world.", "Hello, world. Didn't you?", "Hello world!"])
+    def test_utterance_start_and_end_appear_once_at_the_edges(self, text):
+        phonemes, _ = multilingual_phonemizer(text, "en-us")
+        assert phonemes[0] == utterance_start and phonemes.count(utterance_start) == 1
+        assert phonemes[-1] == utterance_end and phonemes.count(utterance_end) == 1
+        # A separator follows the start symbol, the end symbol follows the punctuation directly.
+        assert phonemes[1] == "|"
+        assert phonemes[-2] in ".?!"
+
 
 def with_separators(espeak_output):
     """Runs the separator rules on an eSpeak output string and returns the result as a string."""
@@ -276,7 +287,8 @@ def with_separators(espeak_output):
 
 class TestInsertSeparators:
     """
-    One case per situation. Inputs are eSpeak outputs, with the leading space the phonemizer adds. A few are short
+    One case per situation. Inputs are eSpeak outputs with a leading space, as at the start of every word after the
+    first. A few are short
     fragments built around annotation contexts found in the training corpus (stress between two vowels, Italian
     length mark before stress, Romanian palatalization around secondary stress).
     In the expected strings, "|" is the separator and " " is the word gap.
@@ -389,7 +401,7 @@ class TestSeparatorRulesOnEspeakOutput:
 
         language_code = language.split("-")[0]
         espeak_input = cleanup_text(normalize_text(language_code, text))
-        espeak_output = " " + phonemizers[language].phonemize([espeak_input])[0].rstrip()
+        espeak_output = utterance_start + phonemizers[language].phonemize([espeak_input])[0].rstrip() + utterance_end
         assert espeak_ids == [symbol_to_id[symbol] for symbol in espeak_output]
 
         is_separator = [token_id == SEPARATOR_ID for token_id in ids]
