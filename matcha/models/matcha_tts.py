@@ -331,7 +331,15 @@ class MatchaTTS(BaseLightningClass):  # 🍵
     def find_alignment(self, attn_mask_fine, mu_x, y_fine):
         # Use MAS to find most likely alignment `attn` between text and fine mel-spectrogram
         # It computes the distance between every text token and ground truth mel frame. 
-        with torch.no_grad():
+        # Autocast is switched off here, so the score is computed in fp32 even when training runs in bf16.
+        # Claude found bf16 is too coarse for this score. The scores are in the hundreds, and at that size bf16 rounds them to
+        # whole or even numbers: 300.6 and 300.9 both become 300. But a frame often matches its own symbol only about
+        # 0.3 better than the neighboring symbol, so bf16 rounds that difference away. In bf16, rounding, instead of
+        # the audio, decided about a quarter of the durations.
+        # mu_x comes out of the Encoder already rounded to bf16, but that rounding is too small to matter here.
+        with torch.no_grad(), torch.autocast(device_type=mu_x.device.type, enabled=False):
+            mu_x = mu_x.float()
+            y_fine = y_fine.float()
             # Original code was using a factor defined as a tensor:
             #   factor = -0.5 * torch.ones(mu_x.shape, dtype=mu_x.dtype, device=mu_x.device)
             # but it is equivalent to multiplying by -0.5 directly.

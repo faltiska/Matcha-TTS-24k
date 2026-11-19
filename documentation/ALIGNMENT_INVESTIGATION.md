@@ -528,3 +528,73 @@ with the shell; the IDE file reader hung on that drive once.
   both. 0/0109 still wrong in both (MAS: "on" 0.73 s, "Terra." 8 frames, "You", "know" 7 each); run b's Duration
   Predictor follows MAS more than run a's (Terra 14, You 22, know 32 vs 25, 17, 17).
 - Temporary scripts (deleted): one-frame runs, a-vs-b shift, sibilant placement.
+
+## 18 November: run b at 264-309, the rising 100th percentile of the duration error
+- The chart is the training-set largest duration error per batch (log scale), averaged over the epoch. Values: epoch 4
+  3.04, 179 2.981, 249 3.001, 274 2.984, 309 2.996. It has been about 3.0 since epoch 4; the rise is 0.5%, within its
+  usual wobble. Every other percentile keeps falling.
+- The largest error in every batch is the trailing silence (0.77 s, about 144 frames): it is assigned to one of the last
+  three symbols (last consonant, separator, final punctuation), and the Duration Predictor gives each of them ~3.7
+  frames at every checkpoint (64 to 309). log(148) - log(7.7) = 2.96.
+- Word alignment is not moving: 4/1423, 4/1428, 11/1111, 0/0109 identical at 264, 279, 294, 309 (0/0109 still wrong);
+  boundaries moved >2 frames per 100 epochs 16.0%, 14.0%, 16.1% (64-134 was 20-28%); collapsed vowels 35.2% → 34.9%.
+- Why the Duration Predictor never learns the trailing silence: in a training step MAS runs on the Encoder output with
+  dropout on. Over 5 dropout draws on 300 train files (309, GPU kernel, bf16 autocast as in training) the silence
+  went to the 3rd-last / 2nd-last / last symbol 40% / 31% / 29% of the time, and changed owner in 296 of 300 files. No
+  symbol holds it more than half the time, and the Huber loss is in its linear region there (median-like), so the
+  best prediction for each is "short". Trained alone on fixed (eval-mode) MAS targets, the Duration Predictor learns
+  it within 100 steps (CPU test, fp32 and bf16 alike), so the model can learn it.
+- Dropout during MAS is also a hidden alignment noise: between two draws 52% of the symbol durations change, 5.3% of
+  the boundaries by >2 frames (about VITS2 noise scale 0.003-0.01, see the noise table). It has been in every run.
+- bf16 autocast alone (the score's matmul runs in bf16) changes 26% of the symbol durations against fp32, mostly by
+  one frame. So "CPU MAS identical to the GPU kernel" holds in fp32 and eval mode only; the diagnostic tools show the
+  eval-mode alignment, not what a training step sees.
+- Temporary scripts (deleted): largest-error symbols, last-symbol durations, Duration Predictor learnability test,
+  GPU vs CPU MAS, dropout draws.
+- Correction: the rise in the chart is a real trend (minimum ~2.981 around steps 100-180k, back to ~3.0 by 225k), not
+  wobble. It is still the trailing silence's error; its exact cause is not measured.
+- fp32 restored in `MatchaTTS.find_alignment` (the user's block from commit e4d9a5e, removed in bb34f3e on 1 Aug):
+  autocast off, Encoder output and mel cast to fp32. With the Encoder output rounded to bf16 as in training, the
+  durations now differ from pure fp32 for 0.6% of the symbols (was 26%). Dropout noise unchanged: 47.5% of the
+  durations change between draws, 3.9% of the boundaries by >2 frames; the trailing silence still changes owner in
+  288 of 300 files. Not yet trained with.
+- Test runs, 18 Nov (all 5 epochs, `logs/train/v24/runs/`): A `2026-11-18_14-30-24` from 0, alignment without dropout;
+  B `2026-11-18_15-12-39` from 0, fp32 only; C `2026-11-18_15-57-58` resume 309, both; D `2026-11-18_16-45-18`
+  resume 309, fp32 only. A worse than B at epoch 4 (val prior 0.660 vs 0.609, collapsed 36.7% vs 31.3%); C broke at
+  epoch 312 (train prior 0.39 → 1.07, never recovered); D stable and better than run b at 314 (train duration loss
+  0.0393 vs 0.0434, val prior 0.468 vs 0.470). B at epoch 4 beats run b (bf16) at 4: val duration 0.057 vs 0.070.
+  The user keeps dropout (it gives variation, like the duration jitter); alignment without dropout is dropped.
+- fp32 history: MAS fp32 added 5ae33d2 (Dec 2025), removed b0adceb; re-added e4d9a5e (Apr 2026, "prior loss shoots
+  up, duration loss +60% after ~100 epochs"), removed 23a013c (4 Jun, compilation move), comment deleted bb34f3e.
+  Encoder in bf16 vs fp32 (eval, 314D): mel guess differs by 0.0017 on average (values ~0.63); the fp32 alignment on
+  it differs for 2.9% of the durations, 0.46% of boundaries >2 frames. Duration Predictor: 0.0049 log, 0.056 frames.
+- Who takes the edge silences (309, eval, fp32, 100 train files per speaker): leading silence always the first symbol
+  (the space). Trailing: final punctuation 79%, separator before it 15%, last phoneme 5%; the owner takes all ~144
+  frames, the other two 1 each. Worst: Aria (2) separator 62%, Brian (4) last phoneme 24%, Marcello (14) separator
+  35%. The same text goes to different owners for different speakers (Harvard "...sentences.": 2 punctuation side, 4
+  on z). Between 124 and 154 the majority owner moved from the separator to the punctuation.
+
+## 18-19 November: new run from scratch with the alignment in fp32, and the Encoder precision test
+- Run `logs/train/v24/runs/2026-11-18_17-57-39`: from epoch 0, alignment score in fp32, Encoder in bf16. At epoch 29
+  against run b (bf16 alignment) at 29: validation duration loss 0.0293 vs 0.0585, prior 0.482 vs 0.502, Decoder
+  0.082 vs 0.081. The Duration Predictor now predicts the trailing silence (~164 frames; run b ~4).
+- Encoder precision test, all three from that run's checkpoint 19 to 29: the original run (Encoder bf16), a repeat
+  `2026-11-18_22-49-14` (Encoder bf16, the noise reference), `2026-11-18_21-25-23` (Encoder fp32, option
+  `model.encoder_fp32=true`). CPU numbers on 50 validation files per speaker.
+
+  | Epoch 29 | bf16 original | bf16 repeat | Encoder fp32 |
+  |---|---|---|---|
+  | Validation prior loss | 0.4824 | 0.4780 | 0.4753 |
+  | Validation duration loss | 0.0293 | 0.0295 | 0.0290 |
+  | Validation Decoder loss | 0.0819 | 0.0829 | 0.0804 |
+  | Duration error (CPU, log scale) | 0.1504 | 0.1524 | 0.1496 |
+  | Collapsed vowels | 25.7% | 25.8% | 26.7% |
+  | Files with >=4 / >=8 one-frame symbols, alignment | 69 / 6 | 77 / 9 | 70 / 5 |
+  | Same, Duration Predictor | 3 / 0 | 12 / 0 | 3 / 0 |
+  | Boundaries moved >2 frames, 19 to 29, per 100 epochs | 96% | 89% | 80% |
+  | Seconds per epoch (no validation) | 392 | 391 | 417 |
+
+  The two bf16 runs differ by 0.9% in prior loss; fp32 is 0.6% better than the better of them. Within noise or
+  barely above it, costs 6.4% speed. Tracked files 4/1423, 4/1428, 0/0109, 0/2649, 0/0255 place every word the
+  same in all three. 0/0109 still wrong ("Terra. You know how" squeezed); 0/2649 "have you got" squeezed
+  (0.29-0.43 s).
